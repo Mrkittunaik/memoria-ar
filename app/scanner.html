@@ -567,10 +567,23 @@ const TARGETS_CONFIG = [
 async function beginMindAR(){
   if(!window.MINDAR || !window.THREE){
     console.error('MindAR or Three.js not loaded. Add the script tags above beginMindAR.');
+    document.getElementById('loading').innerHTML=`
+      <div style="text-align:center;padding:40px">
+        <div style="font-size:32px;margin-bottom:16px">⚠️</div>
+        <h3 style="color:#fff;margin-bottom:8px">Script failed to load</h3>
+        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6">MindAR or Three.js could not be loaded. Check your internet connection and try again.</p>
+        <button onclick="location.reload()" style="margin-top:20px;padding:12px 24px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">Retry</button>
+      </div>`;
     return;
   }
   if(!TARGETS_CONFIG.length){
     console.warn('TARGETS_CONFIG is empty — add target entries to enable AR tracking.');
+    document.getElementById('loading').innerHTML=`
+      <div style="text-align:center;padding:40px">
+        <div style="font-size:32px;margin-bottom:16px">⚙️</div>
+        <h3 style="color:#fff;margin-bottom:8px">Not configured yet</h3>
+        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6">Add your <code style="color:var(--gold)">.mind</code> file URL and target entries to <code style="color:var(--gold)">TARGETS_CONFIG</code> to enable AR scanning.</p>
+      </div>`;
     return;
   }
 
