@@ -36,20 +36,28 @@ html,body{
   pointer-events:none;
 }
 
-/* VIDEO OVERLAY — anchored by MindAR onto the target */
+/* VIDEO OVERLAY — anchored by MindAR onto the target, sits smoothly inside the photo frame */
 #ar-video-wrapper{
   position:absolute;
   top:0;left:0;
   transform-origin:top left;
   display:none;
+  cursor:pointer;
+  will-change:transform;
 }
+#ar-video-wrapper.visible{
+  display:block;
+  animation:arFadeIn .35s ease both;
+}
+@keyframes arFadeIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
 #ar-video{
   width:100%;height:100%;
   object-fit:cover;
   border-radius:2px;
+  display:block;
 }
 
-/* SCANNING UI */
+/* CLEAN CAMERA UI — plain viewfinder, no frame/brackets/scanline */
 #scan-ui{
   position:fixed;inset:0;pointer-events:none;
   display:flex;flex-direction:column;
@@ -78,43 +86,14 @@ html,body{
 }
 .scan-close:hover{background:rgba(0,0,0,.7)}
 
-/* FINDER FRAME */
+/* Empty spacer keeps top bar / status pill layout balanced without a finder frame */
 .finder{
-  flex:1;display:flex;align-items:center;justify-content:center;
+  flex:1;
   width:100%;
-}
-.finder-inner{
-  position:relative;
-  width:min(85vw,320px);
-  aspect-ratio:4/3;
-}
-.finder-corner{
-  position:absolute;width:24px;height:24px;
-}
-.finder-corner.tl{top:0;left:0;border-top:2px solid #fff;border-left:2px solid #fff}
-.finder-corner.tr{top:0;right:0;border-top:2px solid #fff;border-right:2px solid #fff}
-.finder-corner.bl{bottom:0;left:0;border-bottom:2px solid #fff;border-left:2px solid #fff}
-.finder-corner.br{bottom:0;right:0;border-bottom:2px solid #fff;border-right:2px solid #fff}
-.scan-line{
-  position:absolute;left:0;right:0;height:1.5px;
-  background:linear-gradient(90deg,transparent,var(--gold),transparent);
-  top:0;animation:scanMove 2.5s ease-in-out infinite;
-  display:none;
-}
-.scan-line.active{display:block}
-@keyframes scanMove{
-  0%{top:0;opacity:0}
-  10%{opacity:1}
-  90%{opacity:1}
-  100%{top:100%;opacity:0}
-}
-.finder-hint{
-  position:absolute;bottom:-44px;left:50%;transform:translateX(-50%);
-  white-space:nowrap;font-size:13px;color:rgba(255,255,255,.7);
-  text-shadow:0 1px 4px rgba(0,0,0,.6);
+  pointer-events:none;
 }
 
-/* STATUS PILLS */
+/* STATUS PILL — small, unobtrusive, fades out once a memory is found */
 .status-area{
   display:flex;flex-direction:column;align-items:center;gap:10px;
   padding-bottom:32px;pointer-events:all;
@@ -125,7 +104,7 @@ html,body{
   border:0.5px solid rgba(255,255,255,.15);
   border-radius:10px;padding:10px 18px;
   color:#fff;font-size:13px;font-weight:500;
-  transition:all .3s;
+  transition:opacity .35s,transform .35s;
 }
 .status-pill .dot{
   width:7px;height:7px;border-radius:50%;background:#999;
@@ -135,6 +114,7 @@ html,body{
 .status-pill.found .dot{background:#4CAF50}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 .status-pill.found{background:rgba(30,30,30,.7);border-color:rgba(76,175,80,.4)}
+.status-pill.fade-out{opacity:0;transform:translateY(6px);}
 
 .bottom-actions{
   display:flex;gap:16px;align-items:center;
@@ -175,25 +155,170 @@ html,body{
 #loading p{font-size:14px;color:rgba(255,255,255,.5)}
 #loading h3{font-size:17px;color:#fff;font-weight:500}
 
-/* FULLSCREEN VIDEO MODAL */
+/* FULLSCREEN VIDEO PLAYER — Netflix/Hotstar style */
 #fullscreen-player{
   display:none;position:fixed;inset:0;z-index:200;
-  background:#000;flex-direction:column;
+  background:#000;
   align-items:center;justify-content:center;
+  overflow:hidden;
 }
 #fullscreen-player.open{display:flex}
 #fs-video{
-  max-width:100%;max-height:100vh;
-  width:100%;
+  width:100%;height:100%;
+  object-fit:contain;
+  background:#000;
 }
-#fs-close{
-  position:absolute;top:env(safe-area-inset-top,16px);right:20px;
+
+/* Tap anywhere on the video to show/hide controls */
+#fs-tap-zone{
+  position:absolute;inset:0;z-index:1;
+}
+
+/* Top + bottom gradient scrims so controls stay legible over any footage */
+.fs-scrim-top, .fs-scrim-bottom{
+  position:absolute;left:0;right:0;
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.fs-scrim-top{
+  top:0;height:140px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);
+}
+.fs-scrim-bottom{
+  bottom:0;height:180px;
+  background:linear-gradient(to top,rgba(0,0,0,.75),transparent);
+}
+
+/* Controls layer fades in/out together, doesn't pause autohide while scrubbing */
+#fs-controls{
+  position:absolute;inset:0;z-index:2;
+  opacity:1;transition:opacity .25s ease;
+  pointer-events:none;
+}
+#fs-controls.hidden{opacity:0}
+#fs-controls.hidden .fs-hit{pointer-events:none}
+#fs-controls:not(.hidden) .fs-hit{pointer-events:all}
+
+.fs-top-row{
+  position:absolute;top:env(safe-area-inset-top,16px);left:16px;right:16px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.fs-icon-btn{
   width:40px;height:40px;border-radius:50%;
-  background:rgba(255,255,255,.15);backdrop-filter:blur(8px);
-  border:0.5px solid rgba(255,255,255,.2);
+  background:rgba(255,255,255,.12);backdrop-filter:blur(10px);
+  border:0.5px solid rgba(255,255,255,.18);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;cursor:pointer;flex-shrink:0;
+  transition:background .15s;
+}
+.fs-icon-btn:hover{background:rgba(255,255,255,.22)}
+.fs-icon-btn:active{transform:scale(.92)}
+.fs-top-actions{display:flex;gap:10px;align-items:center;position:relative}
+
+/* Center play/pause shown only while paused, or briefly on tap */
+.fs-center-play{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:72px;height:72px;border-radius:50%;
+  background:rgba(0,0,0,.4);backdrop-filter:blur(6px);
+  border:0.5px solid rgba(255,255,255,.25);
   display:flex;align-items:center;justify-content:center;
   color:#fff;cursor:pointer;
 }
+.fs-center-play:active{transform:translate(-50%,-50%) scale(.92)}
+
+.fs-bottom{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:0 18px env(safe-area-inset-bottom,18px);
+  display:flex;flex-direction:column;gap:8px;
+}
+
+/* Scrubber / timeline */
+.fs-scrub-row{
+  display:flex;align-items:center;gap:10px;
+  width:100%;
+}
+.fs-time{
+  font-size:12px;color:rgba(255,255,255,.85);
+  font-variant-numeric:tabular-nums;
+  min-width:38px;text-align:center;
+  text-shadow:0 1px 3px rgba(0,0,0,.6);
+}
+.fs-scrub-track{
+  position:relative;flex:1;height:18px;
+  display:flex;align-items:center;cursor:pointer;
+  touch-action:none;
+}
+.fs-scrub-track::before{
+  content:'';position:absolute;left:0;right:0;height:3px;
+  background:rgba(255,255,255,.25);border-radius:2px;
+}
+.fs-scrub-fill{
+  position:absolute;left:0;height:3px;border-radius:2px;
+  background:var(--gold);width:0%;
+  pointer-events:none;
+}
+.fs-scrub-buffer{
+  position:absolute;left:0;height:3px;border-radius:2px;
+  background:rgba(255,255,255,.4);width:0%;
+  pointer-events:none;
+}
+.fs-scrub-handle{
+  position:absolute;width:13px;height:13px;border-radius:50%;
+  background:var(--gold);left:0%;
+  transform:translateX(-50%);
+  box-shadow:0 1px 4px rgba(0,0,0,.5);
+  pointer-events:none;
+  transition:transform .1s;
+}
+.fs-scrub-track:active .fs-scrub-handle{transform:translateX(-50%) scale(1.25)}
+
+/* Bottom control row */
+.fs-controls-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-bottom:4px;
+}
+.fs-controls-left, .fs-controls-right{display:flex;align-items:center;gap:18px}
+.fs-ctrl-btn{
+  color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  background:none;border:none;padding:4px;
+}
+.fs-ctrl-btn:active{transform:scale(.9)}
+
+/* 3-dot overflow menu */
+.fs-menu{
+  position:absolute;top:48px;right:0;
+  background:rgba(28,26,24,.96);backdrop-filter:blur(14px);
+  border:0.5px solid rgba(255,255,255,.14);
+  border-radius:14px;
+  min-width:180px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);
+  overflow:hidden;
+  display:none;
+  pointer-events:all;
+}
+.fs-menu.open{display:block;animation:fsMenuIn .15s ease both}
+@keyframes fsMenuIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.fs-menu-item{
+  display:flex;align-items:center;gap:12px;
+  padding:13px 16px;color:#fff;font-size:14px;font-weight:500;
+  cursor:pointer;transition:background .15s;
+  white-space:nowrap;
+}
+.fs-menu-item:hover{background:rgba(255,255,255,.08)}
+.fs-menu-item svg{flex-shrink:0;color:var(--gold)}
+
+/* Tiny toast feedback (e.g. "Saved to Photos") */
+#fs-toast{
+  position:absolute;bottom:110px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:rgba(20,18,16,.92);backdrop-filter:blur(10px);
+  border:0.5px solid rgba(255,255,255,.14);
+  color:#fff;font-size:13px;font-weight:500;
+  padding:10px 18px;border-radius:30px;
+  opacity:0;pointer-events:none;
+  transition:opacity .25s,transform .25s;
+  z-index:5;white-space:nowrap;
+}
+#fs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* DEMO OVERLAY - shows when no real AR target loaded */
 #demo-overlay{
@@ -266,16 +391,7 @@ html,body{
     </a>
   </div>
 
-  <div class="finder">
-    <div class="finder-inner" id="finderBox">
-      <div class="finder-corner tl"></div>
-      <div class="finder-corner tr"></div>
-      <div class="finder-corner bl"></div>
-      <div class="finder-corner br"></div>
-      <div class="scan-line active" id="scanLine"></div>
-      <div class="finder-hint" id="finderHint">Point at a Memoria photo</div>
-    </div>
-  </div>
+  <div class="finder"></div>
 
   <div class="status-area">
     <div class="status-pill ready" id="statusPill">
@@ -298,10 +414,62 @@ html,body{
 
 <!-- FULLSCREEN VIDEO PLAYER -->
 <div id="fullscreen-player">
-  <button id="fs-close" onclick="closeFullscreen()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-  </button>
-  <video id="fs-video" controls playsinline></video>
+  <video id="fs-video" playsinline></video>
+
+  <div class="fs-scrim-top" id="fsScrimTop"></div>
+  <div class="fs-scrim-bottom" id="fsScrimBottom"></div>
+
+  <!-- tap video to toggle controls -->
+  <div id="fs-tap-zone" onclick="onFsTap(event)"></div>
+
+  <div id="fs-controls">
+    <div class="fs-top-row fs-hit">
+      <button class="fs-icon-btn" onclick="closeFullscreen(event)" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="fs-top-actions">
+        <button class="fs-icon-btn" onclick="toggleFsMenu(event)" aria-label="More options">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+        </button>
+        <div class="fs-menu" id="fsMenu">
+          <div class="fs-menu-item" onclick="downloadCurrentVideo(event)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download video
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="fs-center-play fs-hit" id="fsCenterPlay" onclick="toggleFsPlay(event)" aria-label="Play">
+      <svg id="fsCenterIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+
+    <div class="fs-bottom fs-hit">
+      <div class="fs-scrub-row">
+        <span class="fs-time" id="fsTimeCurrent">0:00</span>
+        <div class="fs-scrub-track" id="fsScrubTrack">
+          <div class="fs-scrub-buffer" id="fsScrubBuffer"></div>
+          <div class="fs-scrub-fill" id="fsScrubFill"></div>
+          <div class="fs-scrub-handle" id="fsScrubHandle"></div>
+        </div>
+        <span class="fs-time" id="fsTimeDuration">0:00</span>
+      </div>
+      <div class="fs-controls-row">
+        <div class="fs-controls-left">
+          <button class="fs-ctrl-btn" onclick="toggleFsPlay(event)" id="fsPlayBtn" aria-label="Play/pause">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        </div>
+        <div class="fs-controls-right">
+          <button class="fs-ctrl-btn" onclick="toggleFsMute(event)" id="fsMuteBtn" aria-label="Mute/unmute">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="fs-toast"></div>
 </div>
 
 <!-- DEMO INTRO OVERLAY -->
@@ -329,8 +497,51 @@ html,body{
 </div>
 
 <script>
-let stream=null;let facingMode='environment';let torchOn=false;
-let detected=false;let demoActive=false;
+/* ============================================================
+   STATE
+============================================================ */
+let stream=null;
+let facingMode='environment';
+let torchOn=false;
+let detected=false;
+let demoActive=false;
+let currentVideoSrc=''; // production: Cloudinary URL for the matched memory's video
+
+/* ============================================================
+   PERMISSION-AWARE STARTUP
+   Camera permission is only ever requested once. After the
+   browser grants it, we remember that and skip straight past
+   the "open camera" prompt on every future visit — no repeat
+   permission dialogs, no repeat intro screen.
+============================================================ */
+const PERM_KEY='memoria_camera_granted';
+
+async function initScanner(){
+  // 1) Browser-level check (works in Chrome/Edge/Android; Safari lacks
+  //    the Permissions API for camera, so we fall back to our own flag)
+  let alreadyGranted = localStorage.getItem(PERM_KEY) === 'true';
+
+  if (navigator.permissions && navigator.permissions.query) {
+    try{
+      const status = await navigator.permissions.query({name:'camera'});
+      if (status.state === 'granted') alreadyGranted = true;
+      if (status.state === 'denied') alreadyGranted = false;
+      // Keep our stored flag in sync if the user revoked access in settings
+      status.onchange = () => {
+        if (status.state === 'granted') localStorage.setItem(PERM_KEY,'true');
+        if (status.state === 'denied') localStorage.removeItem(PERM_KEY);
+      };
+    }catch(e){ /* permissions API not supported for camera — ignore */ }
+  }
+
+  if (alreadyGranted){
+    // Skip the intro card entirely — go straight to a live camera view
+    document.getElementById('demo-overlay').classList.add('hidden');
+    startScanner();
+  }
+  // else: leave the intro card showing; startScanner() runs on tap
+  // and the browser shows its native permission dialog exactly once.
+}
 
 async function startScanner(){
   document.getElementById('demo-overlay').classList.add('hidden');
@@ -339,14 +550,18 @@ async function startScanner(){
       video:{facingMode,width:{ideal:1920},height:{ideal:1080}},
       audio:false
     });
+    localStorage.setItem(PERM_KEY,'true'); // remember: don't ask again
+
     const video=document.getElementById('camera-video');
     video.srcObject=stream;
     await video.play();
     setTimeout(()=>{
       document.getElementById('loading').classList.add('hidden');
       beginMindAR();
-    },800);
+    },500);
   }catch(err){
+    localStorage.removeItem(PERM_KEY);
+    document.getElementById('loading').classList.remove('hidden');
     document.getElementById('loading').innerHTML=`
       <div style="text-align:center;padding:40px">
         <div style="font-size:32px;margin-bottom:16px">📷</div>
@@ -357,34 +572,34 @@ async function startScanner(){
   }
 }
 
+/* ============================================================
+   AR TRACKING
+============================================================ */
 function beginMindAR(){
   /*
    * PRODUCTION IMPLEMENTATION:
-   * 
+   *
    * import * as MINDAR from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js'
-   * 
+   *
    * const mindarThree = new MindARThree({
    *   container: document.getElementById('ar-container'),
    *   imageTargetSrc: '/api/targets/{memoryId}.mind',  // fetched from Cloudinary
    * });
-   * 
+   *
    * const { renderer, scene, camera } = mindarThree;
-   * 
+   *
    * const anchor = mindarThree.addAnchor(0);
    * anchor.onTargetFound = () => onPhotoDetected();
    * anchor.onTargetLost = () => onPhotoLost();
-   * 
-   * // Add video plane anchored to the target
-   * const geometry = new THREE.PlaneGeometry(1, 0.5625);
-   * const videoTexture = new THREE.VideoTexture(document.getElementById('ar-video'));
-   * const material = new THREE.MeshBasicMaterial({ map: videoTexture });
-   * const plane = new THREE.Mesh(geometry, material);
-   * anchor.group.add(plane);
-   * 
+   *
+   * // The #ar-video-wrapper element is positioned every frame to match
+   * // the tracked photo's screen-space corners (computed from the
+   * // anchor's model-view-projection matrix), so the clip plays
+   * // smoothly inside the printed photo with no extra UI chrome.
+   * anchor.onUpdate = (modelViewMatrix) => positionArVideoToTarget(modelViewMatrix);
+   *
    * await mindarThree.start();
-   * renderer.setAnimationLoop(() => {
-   *   renderer.render(scene, camera);
-   * });
+   * renderer.setAnimationLoop(() => renderer.render(scene, camera));
    *
    * The .mind file is pre-compiled from the uploaded photo using:
    * const compiler = new MINDAR.Compiler();
@@ -392,136 +607,74 @@ function beginMindAR(){
    * const exportedBuffer = await compiler.exportData();
    * // Upload exportedBuffer to Cloudinary and save URL to MongoDB
    */
-
-  // DEMO: simulate scanning behaviour with canvas overlay
-  simulateScanningAnimation();
 }
 
-function simulateScanningAnimation(){
-  const canvas=document.getElementById('ar-canvas');
-  const ctx=canvas.getContext('2d');
-  function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
-  resize();window.addEventListener('resize',resize);
-  let alpha=0;let dir=1;
-  function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    requestAnimationFrame(draw);
-  }
-  draw();
-}
-
-function onPhotoDetected(){
+function onPhotoDetected(videoUrl){
   detected=true;
+  currentVideoSrc = videoUrl || currentVideoSrc;
   const pill=document.getElementById('statusPill');
   const text=document.getElementById('statusText');
-  const hint=document.getElementById('finderHint');
-  const scanLine=document.getElementById('scanLine');
   pill.className='status-pill found';
-  text.textContent='Memory found — playing video';
-  hint.textContent='Tap video to watch fullscreen';
-  scanLine.classList.remove('active');
-  document.getElementById('ar-video').play();
-  document.getElementById('ar-video-wrapper').style.display='block';
+  text.textContent='Memory found';
+  // Fade the status pill away after a moment — clean full camera view, no clutter
+  clearTimeout(window._pillTimer);
+  window._pillTimer=setTimeout(()=>pill.classList.add('fade-out'),1800);
+
+  const arVideo=document.getElementById('ar-video');
+  const wrapper=document.getElementById('ar-video-wrapper');
+  if(currentVideoSrc) arVideo.src=currentVideoSrc;
+  arVideo.play().catch(()=>{});
+  wrapper.classList.add('visible');
 }
 
 function onPhotoLost(){
   detected=false;
   const pill=document.getElementById('statusPill');
   const text=document.getElementById('statusText');
-  const scanLine=document.getElementById('scanLine');
+  pill.classList.remove('fade-out');
   pill.className='status-pill ready';
   text.textContent='Scanning for photo…';
-  scanLine.classList.add('active');
   document.getElementById('ar-video').pause();
-  document.getElementById('ar-video-wrapper').style.display='none';
+  document.getElementById('ar-video-wrapper').classList.remove('visible');
 }
 
-// DEMO SIMULATE DETECTION
+/* DEMO: simulate detection so this page is testable without a real target.
+   Positions the AR video smoothly over the centre of the viewport with no
+   tracking-frame artwork — just the live, playable video clip. */
 function demoDetect(){
   if(!demoActive){
     demoActive=true;
-    onPhotoDetected();
-    // Show a fake video frame on the canvas to simulate AR
-    showDemoVideoFrame();
+    positionDemoArVideo();
+    onPhotoDetected('https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4');
   }else{
     demoActive=false;
     onPhotoLost();
-    clearDemoFrame();
   }
 }
 
-function showDemoVideoFrame(){
-  const canvas=document.getElementById('ar-canvas');
-  const ctx=canvas.getContext('2d');
-  const cx=canvas.width/2;const cy=canvas.height*0.45;
-  const w=canvas.width*0.55;const h=w*0.5625;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // Gold border tracking frame
-  ctx.strokeStyle='rgba(201,147,58,0.9)';
-  ctx.lineWidth=2;
-  ctx.shadowColor='rgba(201,147,58,0.4)';ctx.shadowBlur=8;
-  roundRect(ctx,cx-w/2,cy-h/2,w,h,4);
-  ctx.stroke();
-  ctx.shadowBlur=0;
-
-  // Simulated video content inside
-  ctx.fillStyle='rgba(20,18,16,0.85)';
-  roundRectFill(ctx,cx-w/2,cy-h/2,w,h,4);
-
-  // Play icon center
-  ctx.fillStyle='rgba(201,147,58,0.9)';
-  ctx.beginPath();
-  ctx.arc(cx,cy,28,0,Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle='#fff';
-  ctx.beginPath();
-  ctx.moveTo(cx-10,cy-12);ctx.lineTo(cx+16,cy);ctx.lineTo(cx-10,cy+12);
-  ctx.closePath();ctx.fill();
-
-  // Corner trackers
-  const corners=[[cx-w/2,cy-h/2],[cx+w/2,cy-h/2],[cx+w/2,cy+h/2],[cx-w/2,cy+h/2]];
-  ctx.strokeStyle='#fff';ctx.lineWidth=1.5;
-  corners.forEach(([x,y],i)=>{
-    const dx=i<2?1:-1;const dy=i%3===0?1:-1;
-    ctx.beginPath();
-    ctx.moveTo(x,y+dy*20);ctx.lineTo(x,y);ctx.lineTo(x+dx*20,y);
-    ctx.stroke();
-  });
-
-  // Label
-  ctx.fillStyle='rgba(201,147,58,1)';
-  ctx.font='500 12px -apple-system,sans-serif';
-  ctx.textAlign='center';
-  ctx.fillText('AR VIDEO PLAYING · TAP TO FULLSCREEN',cx,cy+h/2+18);
+function positionDemoArVideo(){
+  const wrapper=document.getElementById('ar-video-wrapper');
+  const w=Math.min(window.innerWidth*0.78, 420);
+  const h=w*0.5625;
+  wrapper.style.width=w+'px';
+  wrapper.style.height=h+'px';
+  wrapper.style.left=((window.innerWidth-w)/2)+'px';
+  wrapper.style.top=((window.innerHeight-h)/2)+'px';
 }
+window.addEventListener('resize',()=>{ if(demoActive) positionDemoArVideo(); });
 
-function clearDemoFrame(){
-  const canvas=document.getElementById('ar-canvas');
-  const ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-}
-
-function roundRect(ctx,x,y,w,h,r){
-  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);
-  ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);
-  ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
-  ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);
-  ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
-}
-function roundRectFill(ctx,x,y,w,h,r){roundRect(ctx,x,y,w,h,r);ctx.fill()}
-
-// TORCH
+/* ============================================================
+   CAMERA CONTROLS
+============================================================ */
 async function toggleTorch(){
   if(!stream)return;
   const track=stream.getVideoTracks()[0];
-  if(!track.getCapabilities().torch)return;
+  if(!track.getCapabilities || !track.getCapabilities().torch)return;
   torchOn=!torchOn;
   await track.applyConstraints({advanced:[{torch:torchOn}]});
   document.getElementById('torchBtn').style.color=torchOn?'var(--gold)':'#fff';
 }
 
-// SWITCH CAMERA
 async function switchCamera(){
   if(stream){stream.getTracks().forEach(t=>t.stop())}
   facingMode=facingMode==='environment'?'user':'environment';
@@ -531,35 +684,210 @@ async function switchCamera(){
   }catch(e){console.error(e)}
 }
 
-// FULLSCREEN VIDEO
-document.getElementById('ar-canvas').addEventListener('click',()=>{
+/* ============================================================
+   TAP THE LIVE AR VIDEO -> OPEN BIG FULLSCREEN PLAYER
+============================================================ */
+document.getElementById('ar-video-wrapper').addEventListener('click',()=>{
   if(detected||demoActive)openFullscreen();
 });
 
+/* ============================================================
+   FULLSCREEN PLAYER — Netflix / Hotstar style
+============================================================ */
+const fsVideo = document.getElementById('fs-video');
+let fsControlsTimer=null;
+let fsWasMuted=false;
+let fsScrubbing=false;
+
 function openFullscreen(){
   const fsPlayer=document.getElementById('fullscreen-player');
-  const fsVideo=document.getElementById('fs-video');
-  fsVideo.src=''; // In production: same video URL from Cloudinary
+  fsVideo.src = currentVideoSrc || document.getElementById('ar-video').currentSrc || '';
+  fsVideo.muted = false;
+  fsVideo.currentTime = 0;
   fsPlayer.classList.add('open');
-  // pause AR video
   document.getElementById('ar-video').pause();
+
+  fsVideo.play().catch(()=>{ fsVideo.muted=true; fsVideo.play().catch(()=>{}); });
+  updateFsMuteIcon();
+  showFsControls(true);
 }
-function closeFullscreen(){
+
+function closeFullscreen(e){
+  if(e) e.stopPropagation();
   document.getElementById('fullscreen-player').classList.remove('open');
-  if(detected||demoActive)document.getElementById('ar-video').play();
+  document.getElementById('fsMenu').classList.remove('open');
+  fsVideo.pause();
+  if(detected||demoActive)document.getElementById('ar-video').play().catch(()=>{});
 }
 
-// Auto-hide loading after fallback
-setTimeout(()=>document.getElementById('loading').classList.add('hidden'),3500);
+function onFsTap(e){
+  // ignore taps that originated on a control (those stopPropagation themselves)
+  const controls=document.getElementById('fs-controls');
+  if(controls.classList.contains('hidden')){
+    showFsControls(true);
+  }else{
+    showFsControls(false);
+  }
+}
 
-// Resize canvas on load
-window.addEventListener('resize',()=>{
-  const c=document.getElementById('ar-canvas');
-  c.width=window.innerWidth;c.height=window.innerHeight;
-  if(demoActive)showDemoVideoFrame();
+function showFsControls(visible){
+  const controls=document.getElementById('fs-controls');
+  clearTimeout(fsControlsTimer);
+  if(visible){
+    controls.classList.remove('hidden');
+    if(!fsVideo.paused){
+      fsControlsTimer=setTimeout(()=>controls.classList.add('hidden'),3200);
+    }
+  }else{
+    controls.classList.add('hidden');
+    document.getElementById('fsMenu').classList.remove('open');
+  }
+}
+
+function toggleFsPlay(e){
+  if(e) e.stopPropagation();
+  if(fsVideo.paused){
+    fsVideo.play();
+  }else{
+    fsVideo.pause();
+  }
+}
+
+fsVideo.addEventListener('play',()=>{
+  document.getElementById('fsCenterIcon').innerHTML='<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+  document.querySelector('#fsPlayBtn svg').innerHTML='<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+  showFsControls(true);
 });
-document.getElementById('ar-canvas').width=window.innerWidth;
-document.getElementById('ar-canvas').height=window.innerHeight;
+fsVideo.addEventListener('pause',()=>{
+  document.getElementById('fsCenterIcon').innerHTML='<path d="M8 5v14l11-7z"/>';
+  document.querySelector('#fsPlayBtn svg').innerHTML='<path d="M8 5v14l11-7z"/>';
+  showFsControls(true);
+  clearTimeout(fsControlsTimer);
+});
+
+function toggleFsMute(e){
+  if(e) e.stopPropagation();
+  fsVideo.muted=!fsVideo.muted;
+  updateFsMuteIcon();
+}
+function updateFsMuteIcon(){
+  const btn=document.getElementById('fsMuteBtn');
+  btn.innerHTML = fsVideo.muted
+    ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+    : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>';
+}
+
+/* --- timeline / scrubber --- */
+function fmtTime(t){
+  if(!isFinite(t)||t<0) t=0;
+  const m=Math.floor(t/60), s=Math.floor(t%60);
+  return m+':'+String(s).padStart(2,'0');
+}
+fsVideo.addEventListener('loadedmetadata',()=>{
+  document.getElementById('fsTimeDuration').textContent=fmtTime(fsVideo.duration);
+});
+fsVideo.addEventListener('timeupdate',()=>{
+  if(fsScrubbing) return;
+  const pct = fsVideo.duration ? (fsVideo.currentTime/fsVideo.duration)*100 : 0;
+  document.getElementById('fsScrubFill').style.width=pct+'%';
+  document.getElementById('fsScrubHandle').style.left=pct+'%';
+  document.getElementById('fsTimeCurrent').textContent=fmtTime(fsVideo.currentTime);
+});
+fsVideo.addEventListener('progress',()=>{
+  if(fsVideo.buffered.length && fsVideo.duration){
+    const end=fsVideo.buffered.end(fsVideo.buffered.length-1);
+    document.getElementById('fsScrubBuffer').style.width=((end/fsVideo.duration)*100)+'%';
+  }
+});
+fsVideo.addEventListener('ended',()=>{
+  document.getElementById('fsCenterIcon').innerHTML='<path d="M8 5v14l11-7z"/>';
+  document.querySelector('#fsPlayBtn svg').innerHTML='<path d="M8 5v14l11-7z"/>';
+  showFsControls(true);
+});
+
+const scrubTrack=document.getElementById('fsScrubTrack');
+function scrubToClientX(clientX){
+  const rect=scrubTrack.getBoundingClientRect();
+  let pct=(clientX-rect.left)/rect.width;
+  pct=Math.max(0,Math.min(1,pct));
+  if(fsVideo.duration) fsVideo.currentTime=pct*fsVideo.duration;
+  document.getElementById('fsScrubFill').style.width=(pct*100)+'%';
+  document.getElementById('fsScrubHandle').style.left=(pct*100)+'%';
+  document.getElementById('fsTimeCurrent').textContent=fmtTime(pct*(fsVideo.duration||0));
+}
+function scrubStart(e){
+  e.stopPropagation();
+  fsScrubbing=true;
+  clearTimeout(fsControlsTimer);
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  scrubToClientX(x);
+}
+function scrubMove(e){
+  if(!fsScrubbing) return;
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  scrubToClientX(x);
+}
+function scrubEnd(){
+  if(!fsScrubbing) return;
+  fsScrubbing=false;
+  showFsControls(true);
+}
+scrubTrack.addEventListener('mousedown',scrubStart);
+scrubTrack.addEventListener('touchstart',scrubStart,{passive:true});
+window.addEventListener('mousemove',scrubMove);
+window.addEventListener('touchmove',scrubMove,{passive:true});
+window.addEventListener('mouseup',scrubEnd);
+window.addEventListener('touchend',scrubEnd);
+
+/* --- 3-dot menu + download --- */
+function toggleFsMenu(e){
+  e.stopPropagation();
+  document.getElementById('fsMenu').classList.toggle('open');
+}
+document.addEventListener('click',(e)=>{
+  const menu=document.getElementById('fsMenu');
+  if(menu.classList.contains('open') && !menu.contains(e.target)){
+    menu.classList.remove('open');
+  }
+});
+
+async function downloadCurrentVideo(e){
+  e.stopPropagation();
+  document.getElementById('fsMenu').classList.remove('open');
+  const url = currentVideoSrc || fsVideo.currentSrc;
+  if(!url) return;
+  try{
+    const res=await fetch(url);
+    const blob=await res.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='memoria-video.mp4';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showFsToast('Downloading video…');
+  }catch(err){
+    // Fallback for cross-origin sources that block fetch — open directly
+    const a=document.createElement('a');
+    a.href=url; a.download='memoria-video.mp4'; a.target='_blank';
+    document.body.appendChild(a); a.click(); a.remove();
+    showFsToast('Downloading video…');
+  }
+}
+
+function showFsToast(msg){
+  const toast=document.getElementById('fs-toast');
+  toast.textContent=msg;
+  toast.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer=setTimeout(()=>toast.classList.remove('show'),2200);
+}
+
+/* ============================================================
+   BOOT
+============================================================ */
+setTimeout(()=>document.getElementById('loading').classList.add('hidden'),3500);
+initScanner();
 </script>
 </body>
 </html>
