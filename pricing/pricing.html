@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pricing — Memoria</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230D0B0A'/%3E%3Ctext x='32' y='42' font-family='Georgia,serif' font-size='30' font-weight='600' fill='%23E8C97A' text-anchor='middle'%3EM%3C/text%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="preconnect" href="https://images.unsplash.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0D0B0A;
+  --ink-muted:#6B6560;
+  --surface:#FDFAF7;
+  --gold:#C9933A;
+  --gold-light:#E8C97A;
+  --border:#E8E0D4;
+  --dark:#0D0B0A;
+  --dark2:#080604;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--dark);color:var(--surface);
+  font-family:'DM Sans',system-ui,sans-serif;
+  font-size:16px;line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 5%;height:56px;
+  background:rgba(8,6,4,0.88);
+  backdrop-filter:blur(14px);
+  border-bottom:0.5px solid rgba(255,255,255,.08);
+}
+.nav-logo{display:flex;align-items:baseline;text-decoration:none}
+.nav-logo-bold{font-family:'Cormorant Garamond',Georgia,serif;font-size:25px;font-weight:600;color:#fff;line-height:1}
+.nav-logo-italic{font-family:'Cormorant Garamond',Georgia,serif;font-size:25px;font-weight:300;font-style:italic;color:var(--gold);line-height:1}
+.nav-back{font-size:13px;color:rgba(255,255,255,.55);text-decoration:none;display:flex;align-items:center;gap:6px;transition:color .18s}
+.nav-back:hover{color:#fff}
+.btn-nav{
+  background:var(--gold);color:#1a1006;
+  border:none;padding:8px 20px;border-radius:9px;
+  font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;
+  text-decoration:none;transition:opacity .18s;
+}
+.btn-nav:hover{opacity:.86}
+
+/* ── HEADER ── */
+.pricing-head{padding:128px 5% 16px;text-align:center}
+.section-eyebrow{
+  font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:14px;
+}
+.pricing-head h1{
+  font-family:'Cormorant Garamond',Georgia,serif;
+  font-size:clamp(34px,5vw,56px);
+  line-height:1.06;letter-spacing:-0.02em;font-weight:500;color:#fff;margin-bottom:12px;
+}
+.pricing-head p{color:rgba(255,255,255,.4);font-size:15px;font-weight:300;max-width:340px;margin:0 auto}
+
+/* ── TOGGLE ── */
+.billing-toggle{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  margin:32px auto 8px;
+}
+.toggle-track{
+  position:relative;width:46px;height:26px;border-radius:14px;
+  background:rgba(255,255,255,.1);border:0.5px solid rgba(255,255,255,.15);
+  cursor:pointer;flex-shrink:0;
+}
+.toggle-thumb{
+  position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;
+  background:var(--gold);transition:transform .2s ease;
+}
+.billing-toggle.yearly .toggle-thumb{transform:translateX(20px)}
+.toggle-label{font-size:13px;color:rgba(255,255,255,.5);cursor:pointer;user-select:none}
+.toggle-label.active{color:#fff}
+.save-badge{
+  font-size:10px;color:var(--gold-light);background:rgba(201,147,58,.14);
+  border:0.5px solid rgba(201,147,58,.3);padding:2px 8px;border-radius:6px;
+  margin-left:2px;
+}
+
+/* ── PLANS ── */
+.pricing-section{padding:48px 5% 96px}
+.plan-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:18px;max-width:980px;margin:0 auto;
+}
+.plan{
+  position:relative;border-radius:18px;overflow:hidden;
+  aspect-ratio:1/1.08;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  text-align:left;
+  border:0.5px solid rgba(255,255,255,.07);
+  background-color:#15110c;
+  transition:transform .3s cubic-bezier(.22,.68,0,1.2),box-shadow .3s;
+}
+.plan:hover{transform:translateY(-6px);box-shadow:0 30px 72px rgba(0,0,0,.45)}
+.plan-bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.plan-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(4,2,1,.97) 0%,rgba(4,2,1,.72) 38%,rgba(4,2,1,.12) 100%);
+}
+.plan.featured .plan-overlay{
+  background:linear-gradient(to top,rgba(55,30,2,.98) 0%,rgba(35,18,0,.78) 42%,rgba(15,7,0,.15) 100%);
+}
+.plan.featured{border:1.5px solid rgba(201,147,58,.45)}
+.plan-badge{
+  position:absolute;top:14px;left:14px;
+  background:var(--gold);color:#1a1006;
+  font-size:9.5px;font-weight:600;padding:4px 11px;border-radius:7px;
+  letter-spacing:0.05em;text-transform:uppercase;
+}
+.plan-body{position:relative;padding:24px}
+.plan-name{font-size:10.5px;font-weight:500;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.09em;margin-bottom:6px}
+.plan-price{
+  font-family:'Cormorant Garamond',Georgia,serif;
+  font-size:56px;font-weight:600;line-height:1;letter-spacing:-0.03em;
+  color:#fff;margin-bottom:6px;
+}
+.plan-price sub{font-size:14px;font-family:'DM Sans',sans-serif;font-weight:400;color:rgba(255,255,255,.4);vertical-align:baseline;margin-left:2px}
+.plan-desc{font-size:12px;color:rgba(255,255,255,.35);margin-bottom:18px;line-height:1.5}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:7px;margin-bottom:20px}
+.plan-features li{font-size:12px;color:rgba(255,255,255,.65);display:flex;align-items:center;gap:8px}
+.plan-features li::before{
+  content:'';width:14px;height:14px;border-radius:50%;flex-shrink:0;
+  background:rgba(201,147,58,.14);border:0.5px solid rgba(201,147,58,.38);
+  background-image:url("data:image/svg+xml,%3Csvg width='8' height='7' viewBox='0 0 8 7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 3.5L3 5.5L7 1' stroke='%23C9933A' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:center;
+}
+.btn-plan{
+  display:block;width:100%;text-align:center;
+  border:0.5px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);
+  backdrop-filter:blur(6px);color:#fff;padding:11px;border-radius:9px;
+  font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;
+  text-decoration:none;transition:all .18s;
+}
+.btn-plan:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.32)}
+.plan.featured .btn-plan{background:var(--gold);border-color:var(--gold);color:#1a1006;font-weight:600}
+.plan.featured .btn-plan:hover{opacity:.88}
+.fine-print{text-align:center;margin-top:36px;font-size:11.5px;color:rgba(255,255,255,.28)}
+.fine-print a{color:rgba(255,255,255,.45);text-decoration:underline}
+
+/* ── MINIMAL FOOTER ── */
+footer{
+  border-top:0.5px solid rgba(255,255,255,.08);
+  padding:28px 5%;
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+}
+footer .footer-logo-bold{font-family:'Cormorant Garamond',Georgia,serif;font-size:17px;font-weight:600;color:#fff}
+footer .footer-logo-italic{font-family:'Cormorant Garamond',Georgia,serif;font-size:17px;font-weight:300;font-style:italic;color:var(--gold)}
+footer p{font-size:11px;color:rgba(255,255,255,.25)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:960px){
+  .plan-grid{grid-template-columns:1fr 1fr}
+  .plan{aspect-ratio:auto;min-height:420px}
+  .plan:last-child{grid-column:1/-1;aspect-ratio:auto;min-height:0}
+  .plan:last-child .plan-body{display:flex;flex-wrap:wrap;align-items:flex-end;gap:20px 32px;padding:24px 28px}
+  .plan:last-child .plan-features{margin-bottom:0;flex-direction:row;flex-wrap:wrap;gap:6px 18px}
+  .plan:last-child .btn-plan{width:auto;padding:11px 26px;margin-left:auto}
+}
+@media(max-width:640px){
+  nav{padding:0 4%}
+  .nav-logo-bold,.nav-logo-italic{font-size:21px}
+  .nav-back span{display:none}
+  .pricing-head{padding:104px 6% 12px}
+  .pricing-section{padding:40px 6% 64px}
+  .plan-grid{grid-template-columns:1fr;gap:14px;max-width:380px}
+  .plan{aspect-ratio:auto;min-height:0}
+  .plan-body{padding:22px 20px}
+  .plan-price{font-size:46px}
+  footer{flex-direction:column;text-align:center}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="../index.html" class="nav-logo">
+    <span class="nav-logo-bold">Memo</span><span class="nav-logo-italic">ria</span>
+  </a>
+  <a href="../index.html" class="nav-back">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    <span>Back to home</span>
+  </a>
+  <a href="../app/dashboard.html" class="btn-nav">Get started</a>
+</nav>
+
+<!-- HEADER -->
+<div class="pricing-head">
+  <div class="section-eyebrow">Pricing</div>
+  <h1>Start free, scale<br/>as you grow</h1>
+  <p>No credit card required to start.</p>
+</div>
+
+<!-- PLANS -->
+<section class="pricing-section">
+  <div class="plan-grid">
+    <div class="plan">
+      <div class="plan-bg" style="background-image:url('https://images.unsplash.com/photo-1519741497674-611481863552?w=800&q=75')"></div>
+      <div class="plan-overlay"></div>
+      <div class="plan-body">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">₹0<sub>/mo</sub></div>
+        <p class="plan-desc">For trying it out</p>
+        <ul class="plan-features">
+          <li>3 memories</li>
+          <li>720p video</li>
+          <li>Unlimited scans</li>
+          <li>Basic analytics</li>
+        </ul>
+        <a href="../app/dashboard.html" class="btn-plan">Get started</a>
+      </div>
+    </div>
+    <div class="plan featured">
+      <div class="plan-bg" style="background-image:url('https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=800&q=75')"></div>
+      <div class="plan-overlay"></div>
+      <div class="plan-badge">Most popular</div>
+      <div class="plan-body">
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">₹499<sub>/mo</sub></div>
+        <p class="plan-desc">For individuals and families</p>
+        <ul class="plan-features">
+          <li>Unlimited memories</li>
+          <li>4K video</li>
+          <li>Multiple videos per photo</li>
+          <li>Private + PIN-protected</li>
+          <li>Detailed analytics</li>
+        </ul>
+        <a href="../app/dashboard.html" class="btn-plan">Start free trial</a>
+      </div>
+    </div>
+    <div class="plan">
+      <div class="plan-bg" style="background-image:url('https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=800&q=75')"></div>
+      <div class="plan-overlay"></div>
+      <div class="plan-body">
+        <div class="plan-name">Business</div>
+        <div class="plan-price">₹2,499<sub>/mo</sub></div>
+        <p class="plan-desc">For studios, hotels, events</p>
+        <ul class="plan-features">
+          <li>Everything in Pro</li>
+          <li>Custom domain</li>
+          <li>White-label scanner</li>
+          <li>Team accounts</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="#" class="btn-plan">Contact sales</a>
+      </div>
+    </div>
+  </div>
+  <p class="fine-print">Prices in INR. Cancel anytime. See <a href="#">terms</a> for details.</p>
+</section>
+
+<!-- MINIMAL FOOTER -->
+<footer>
+  <div>
+    <span class="footer-logo-bold">Memo</span><span class="footer-logo-italic">ria</span>
+  </div>
+  <p>© 2025 Memoria. All rights reserved.</p>
+</footer>
+
+</body>
+</html>

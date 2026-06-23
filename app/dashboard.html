@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dashboard — Memoria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0D0B0A;--ink-muted:#6B6560;--ink-faint:#B0AAA4;
+  --surface:#FDFAF7;--surface-warm:#F5EFE6;--surface-card:#FFFCF9;
+  --gold:#C9933A;--gold-light:#F0D99A;--gold-bg:#FBF5E6;
+  --border:#E8E0D4;--green:#2E7D52;--green-bg:#EAF5EF;
+  --red:#C94040;--red-bg:#FDEEEE;
+  --sidebar-w:240px;
+}
+body{
+  background:var(--surface);color:var(--ink);
+  font-family:'DM Sans',system-ui,sans-serif;font-size:14px;
+  line-height:1.5;-webkit-font-smoothing:antialiased;
+  display:flex;min-height:100vh;
+}
+
+/* SIDEBAR */
+.sidebar{
+  width:var(--sidebar-w);min-height:100vh;
+  background:var(--surface-card);
+  border-right:0.5px solid var(--border);
+  display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;bottom:0;
+  z-index:50;
+}
+.sidebar-logo{
+  padding:20px 20px 0;
+  font-family:'Instrument Serif',Georgia,serif;
+  font-size:20px;letter-spacing:-0.02em;
+  color:var(--ink);text-decoration:none;display:block;
+}
+.sidebar-logo span{color:var(--gold)}
+.sidebar-plan{
+  margin:12px 20px 20px;
+  background:var(--gold-bg);border:0.5px solid var(--gold-light);
+  border-radius:8px;padding:8px 12px;
+  font-size:12px;color:var(--gold);font-weight:500;
+}
+.sidebar-divider{height:0.5px;background:var(--border);margin:0 0 8px}
+.sidebar-section{
+  padding:0 12px;margin-bottom:4px;
+  font-size:11px;font-weight:500;color:var(--ink-faint);
+  letter-spacing:.06em;text-transform:uppercase;
+  padding-top:16px;padding-bottom:6px;padding-left:20px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px 9px 16px;border-radius:8px;margin:1px 8px;
+  color:var(--ink-muted);text-decoration:none;font-size:13.5px;
+  transition:background .15s,color .15s;cursor:pointer;border:none;background:none;font-family:inherit;width:calc(100% - 16px);text-align:left;
+}
+.nav-item:hover{background:var(--surface-warm);color:var(--ink)}
+.nav-item.active{background:var(--gold-bg);color:var(--gold);font-weight:500}
+.nav-item svg{flex-shrink:0;opacity:.7}
+.nav-item.active svg{opacity:1}
+.sidebar-footer{
+  margin-top:auto;padding:16px;border-top:0.5px solid var(--border);
+}
+.user-chip{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;border-radius:8px;
+  background:var(--surface-warm);
+}
+.user-avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--gold-bg);border:0.5px solid var(--gold-light);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:500;color:var(--gold);flex-shrink:0;
+}
+.user-name{font-size:13px;font-weight:500;color:var(--ink)}
+.user-email{font-size:11px;color:var(--ink-faint);margin-top:1px}
+
+/* MAIN */
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column}
+.topbar{
+  height:60px;border-bottom:0.5px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;background:var(--surface-card);position:sticky;top:0;z-index:40;
+}
+.topbar-title{font-size:15px;font-weight:500;color:var(--ink)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.btn-sm{
+  display:flex;align-items:center;gap:7px;
+  padding:8px 16px;border-radius:8px;font-size:13px;font-family:inherit;font-weight:500;
+  cursor:pointer;border:0.5px solid var(--border);background:var(--surface-card);
+  color:var(--ink);text-decoration:none;transition:all .15s;
+}
+.btn-sm:hover{border-color:var(--ink-muted);background:var(--surface-warm)}
+.btn-primary{
+  background:var(--ink);color:var(--surface);border-color:var(--ink);
+}
+.btn-primary:hover{opacity:.85;background:var(--ink)}
+
+.content{padding:28px;flex:1}
+
+/* STATS ROW */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+.stat-card{
+  background:var(--surface-card);border:0.5px solid var(--border);
+  border-radius:12px;padding:20px;
+}
+.stat-label{font-size:12px;color:var(--ink-muted);margin-bottom:8px;font-weight:500}
+.stat-value{font-family:'DM Sans',sans-serif;font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--ink);line-height:1}
+.stat-sub{font-size:12px;color:var(--green);margin-top:6px;display:flex;align-items:center;gap:4px}
+.stat-sub.neutral{color:var(--ink-muted)}
+
+/* MEMORIES GRID */
+.section-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+.section-title{font-size:15px;font-weight:500;color:var(--ink)}
+.filter-pills{display:flex;gap:8px}
+.pill{
+  padding:6px 14px;border-radius:10px;
+  border:0.5px solid var(--border);
+  font-size:12px;color:var(--ink-muted);
+  cursor:pointer;background:var(--surface-card);
+  transition:all .15s;
+}
+.pill.active{
+  background:var(--ink);color:var(--surface);border-color:var(--ink);
+}
+.memories-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.memory-card{
+  background:var(--surface-card);border:0.5px solid var(--border);
+  border-radius:14px;overflow:hidden;
+  transition:transform .2s,border-color .2s;cursor:pointer;
+}
+.memory-card:hover{transform:translateY(-2px);border-color:var(--gold-light)}
+.memory-thumb{
+  width:100%;height:160px;object-fit:cover;
+  background:var(--surface-warm);display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.memory-thumb-placeholder{
+  width:100%;height:160px;
+  background:linear-gradient(135deg,var(--surface-warm),var(--gold-bg));
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  color:var(--ink-faint);font-size:12px;
+}
+.memory-thumb-overlay{
+  position:absolute;inset:0;
+  background:rgba(13,11,10,.35);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .2s;
+}
+.memory-card:hover .memory-thumb-overlay{opacity:1}
+.play-btn{
+  width:44px;height:44px;border-radius:50%;
+  background:var(--gold);display:flex;align-items:center;justify-content:center;
+}
+.memory-info{padding:14px 16px 16px}
+.memory-title{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.memory-date{font-size:12px;color:var(--ink-faint);margin-bottom:10px}
+.memory-meta{display:flex;align-items:center;justify-content:space-between}
+.scan-badge{
+  display:flex;align-items:center;gap:5px;
+  font-size:12px;color:var(--ink-muted);
+}
+.status-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;
+}
+.status-dot.processing{background:var(--gold);animation:pulse2 1.5s ease-in-out infinite}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:.4}}
+.memory-actions{display:flex;gap:6px}
+.icon-btn{
+  width:28px;height:28px;border-radius:6px;
+  border:0.5px solid var(--border);background:var(--surface-warm);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:all .15s;color:var(--ink-muted);
+}
+.icon-btn:hover{border-color:var(--ink-muted);color:var(--ink)}
+.icon-btn.danger:hover{border-color:var(--red);color:var(--red);background:var(--red-bg)}
+
+/* EMPTY STATE */
+.empty-state{
+  border:1.5px dashed var(--border);border-radius:16px;
+  padding:60px 40px;text-align:center;margin-top:8px;
+}
+.empty-icon{
+  width:56px;height:56px;border-radius:14px;
+  background:var(--gold-bg);display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+}
+.empty-state h3{font-size:16px;font-weight:500;margin-bottom:8px}
+.empty-state p{font-size:14px;color:var(--ink-muted);max-width:340px;margin:0 auto 24px;line-height:1.6}
+
+/* MODAL */
+.modal-bg{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(13,11,10,.5);
+  align-items:center;justify-content:center;
+}
+.modal-bg.open{display:flex}
+.modal{
+  background:var(--surface-card);border-radius:20px;
+  border:0.5px solid var(--border);
+  width:560px;max-width:96vw;max-height:90vh;overflow-y:auto;
+}
+.modal-header{
+  padding:24px 24px 0;display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:20px;
+}
+.modal-header h2{font-size:18px;font-weight:500;letter-spacing:-0.01em}
+.modal-close{
+  width:32px;height:32px;border-radius:8px;
+  border:0.5px solid var(--border);background:var(--surface-warm);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:var(--ink-muted);
+}
+.modal-close:hover{color:var(--ink)}
+.modal-body{padding:0 24px 24px}
+.upload-zone{
+  border:1.5px dashed var(--border);border-radius:12px;
+  padding:32px 24px;text-align:center;cursor:pointer;
+  transition:border-color .2s,background .2s;margin-bottom:16px;
+}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--gold);background:var(--gold-bg)}
+.upload-zone.has-file{border-color:var(--green);background:var(--green-bg);border-style:solid}
+.upload-icon{
+  width:44px;height:44px;border-radius:10px;
+  background:var(--gold-bg);display:flex;align-items:center;justify-content:center;
+  margin:0 auto 12px;
+}
+.upload-zone p{font-size:14px;color:var(--ink-muted)}
+.upload-zone strong{color:var(--ink);font-weight:500}
+.upload-zone small{font-size:12px;color:var(--ink-faint)}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--ink-muted)}
+.form-group input,.form-group textarea{
+  width:100%;border:0.5px solid var(--border);
+  border-radius:8px;padding:10px 14px;
+  font-size:14px;font-family:inherit;color:var(--ink);
+  background:var(--surface);transition:border-color .2s;outline:none;
+}
+.form-group input:focus,.form-group textarea:focus{border-color:var(--gold)}
+.form-group textarea{resize:none;height:72px;line-height:1.5}
+.progress-bar{
+  height:4px;border-radius:10px;background:var(--surface-warm);
+  margin-top:8px;overflow:hidden;display:none;
+}
+.progress-bar.show{display:block}
+.progress-fill{
+  height:100%;background:var(--gold);border-radius:10px;
+  width:0%;transition:width .4s ease;
+}
+.modal-footer{
+  display:flex;justify-content:flex-end;gap:10px;
+  padding:20px 24px;border-top:0.5px solid var(--border);
+}
+.target-status{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;border-radius:10px;
+  background:var(--gold-bg);border:0.5px solid var(--gold-light);
+  font-size:13px;color:var(--gold);margin-bottom:16px;
+}
+
+/* ANALYTICS PANEL */
+.analytics-row{
+  display:grid;grid-template-columns:2fr 1fr;gap:16px;
+  margin-top:28px;
+}
+.chart-card{
+  background:var(--surface-card);border:0.5px solid var(--border);
+  border-radius:14px;padding:20px;
+}
+.chart-title{font-size:13px;font-weight:500;margin-bottom:16px;color:var(--ink)}
+.bar-chart{display:flex;align-items:flex-end;gap:6px;height:80px}
+.bar{flex:1;border-radius:4px 4px 0 0;background:var(--gold-light);position:relative;min-height:4px;transition:background .2s}
+.bar:hover{background:var(--gold)}
+.bar-label{
+  position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);
+  font-size:10px;color:var(--ink-faint);white-space:nowrap;
+}
+.top-memories{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.top-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:8px;background:var(--surface-warm);
+}
+.top-thumb{
+  width:36px;height:36px;border-radius:6px;
+  background:var(--gold-bg);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;
+}
+.top-name{font-size:13px;font-weight:500;color:var(--ink)}
+.top-scans{font-size:12px;color:var(--ink-muted)}
+
+/* MOBILE TOGGLE */
+.mobile-toggle{
+  display:none;position:fixed;bottom:20px;right:20px;z-index:300;
+  width:50px;height:50px;border-radius:50%;
+  background:var(--ink);border:none;cursor:pointer;
+  align-items:center;justify-content:center;color:var(--surface);
+}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);transition:transform .25s}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .analytics-row{grid-template-columns:1fr}
+  .mobile-toggle{display:flex}
+  .topbar{padding:0 16px}
+  .content{padding:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <a href="../index.html" class="sidebar-logo">Memo<span>ria</span></a>
+  <div class="sidebar-plan">✦ Free plan · 2/3 memories used</div>
+  <div class="sidebar-divider"></div>
+
+  <span class="sidebar-section">Main</span>
+  <button class="nav-item active" onclick="setView('memories')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    My Memories
+  </button>
+  <button class="nav-item" onclick="setView('analytics')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+    Analytics
+  </button>
+  <a href="scanner.html" class="nav-item">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    Open Scanner
+  </a>
+
+  <span class="sidebar-section">Account</span>
+  <button class="nav-item" onclick="setView('settings')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>
+    Settings
+  </button>
+  <button class="nav-item">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+    Upgrade to Pro
+  </button>
+
+  <div class="sidebar-footer">
+    <div class="user-chip">
+      <div class="user-avatar">K</div>
+      <div>
+        <div class="user-name">Kittu</div>
+        <div class="user-email">kittu@example.com</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">My Memories</div>
+    <div class="topbar-right">
+      <a href="scanner.html" class="btn-sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        Scanner
+      </a>
+      <button class="btn-sm btn-primary" onclick="openUploadModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New memory
+      </button>
+    </div>
+  </div>
+
+  <div class="content" id="content">
+
+    <!-- STATS -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total memories</div>
+        <div class="stat-value">2</div>
+        <div class="stat-sub neutral">of 3 on free plan</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total scans</div>
+        <div class="stat-value">47</div>
+        <div class="stat-sub">↑ 12 this week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Most scanned</div>
+        <div class="stat-value" style="font-size:18px">Wedding day</div>
+        <div class="stat-sub">34 scans</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg detection speed</div>
+        <div class="stat-value">310<span style="font-size:14px;color:var(--ink-muted)">ms</span></div>
+        <div class="stat-sub">↑ Fast</div>
+      </div>
+    </div>
+
+    <!-- MEMORIES -->
+    <div id="view-memories">
+      <div class="section-header">
+        <div class="section-title">Your memories</div>
+        <div class="filter-pills">
+          <div class="pill active">All</div>
+          <div class="pill">Active</div>
+          <div class="pill">Processing</div>
+        </div>
+      </div>
+
+      <div class="memories-grid">
+        <!-- Card 1 -->
+        <div class="memory-card">
+          <div class="memory-thumb-placeholder" style="background:linear-gradient(135deg,#FBF0E2,#F5E4C0)">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C9933A" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span style="font-size:11px;color:#C9933A;font-weight:500">Wedding Day</span>
+            <div class="memory-thumb-overlay">
+              <div class="play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+            </div>
+          </div>
+          <div class="memory-info">
+            <div class="memory-title">Wedding day at Taj Palace</div>
+            <div class="memory-date">Added 12 Jan 2025 · 2:34 video</div>
+            <div class="memory-meta">
+              <div class="scan-badge">
+                <span class="status-dot"></span>
+                34 scans
+              </div>
+              <div class="memory-actions">
+                <div class="icon-btn" title="Share link">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                </div>
+                <div class="icon-btn" title="Edit">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </div>
+                <div class="icon-btn danger" title="Delete">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="memory-card">
+          <div class="memory-thumb-placeholder" style="background:linear-gradient(135deg,#EAF2FE,#D4E8FB)">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4A90D9" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            <span style="font-size:11px;color:#4A90D9;font-weight:500">Graduation</span>
+            <div class="memory-thumb-overlay">
+              <div class="play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+            </div>
+          </div>
+          <div class="memory-info">
+            <div class="memory-title">IIIT Nagpur Graduation 2024</div>
+            <div class="memory-date">Added 3 Mar 2025 · 1:12 video</div>
+            <div class="memory-meta">
+              <div class="scan-badge">
+                <span class="status-dot"></span>
+                13 scans
+              </div>
+              <div class="memory-actions">
+                <div class="icon-btn" title="Share link">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                </div>
+                <div class="icon-btn" title="Edit">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </div>
+                <div class="icon-btn danger" title="Delete">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- New memory slot -->
+        <div class="memory-card" style="border-style:dashed;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:240px" onclick="openUploadModal()">
+          <div style="text-align:center;color:var(--ink-faint)">
+            <div style="width:44px;height:44px;border-radius:10px;background:var(--gold-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink-muted)">Add memory</div>
+            <div style="font-size:12px;color:var(--ink-faint);margin-top:4px">1 slot remaining</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ANALYTICS SECTION -->
+      <div class="analytics-row">
+        <div class="chart-card">
+          <div class="chart-title">Scans over the last 7 days</div>
+          <div class="bar-chart" id="bar-chart"></div>
+          <div style="height:24px"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Top memories</div>
+          <div class="top-memories">
+            <div class="top-item">
+              <div class="top-thumb">💍</div>
+              <div>
+                <div class="top-name">Wedding day</div>
+                <div class="top-scans">34 scans · most popular</div>
+              </div>
+            </div>
+            <div class="top-item">
+              <div class="top-thumb">🎓</div>
+              <div>
+                <div class="top-name">Graduation 2024</div>
+                <div class="top-scans">13 scans</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- UPLOAD MODAL -->
+<div class="modal-bg" id="uploadModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>New memory</h2>
+      <button class="modal-close" onclick="closeUploadModal()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Memory title</label>
+        <input type="text" placeholder="e.g. Wedding day at Taj Palace"/>
+      </div>
+
+      <div class="form-group">
+        <label>Upload photo <span style="color:var(--ink-faint)">(the one you've printed or will print)</span></label>
+        <div class="upload-zone" id="photoZone" onclick="triggerPhotoUpload()">
+          <div class="upload-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <p><strong>Click to upload</strong> or drag and drop</p>
+          <small>JPG, PNG — max 20MB · higher resolution = faster recognition</small>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)"/>
+        <div class="target-status" id="targetStatus" style="display:none">
+          <div class="status-dot processing"></div>
+          Generating AR image target from your photo…
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Upload video <span style="color:var(--ink-faint)">(the moment this photo comes from)</span></label>
+        <div class="upload-zone" id="videoZone" onclick="triggerVideoUpload()">
+          <div class="upload-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          </div>
+          <p><strong>Click to upload</strong> or drag and drop</p>
+          <small>MP4, MOV, WebM — max 500MB</small>
+        </div>
+        <input type="file" id="videoInput" accept="video/*" style="display:none" onchange="handleVideoSelect(this)"/>
+        <div class="progress-bar" id="videoProgress">
+          <div class="progress-fill" id="videoFill"></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Description <span style="color:var(--ink-faint)">(optional)</span></label>
+        <textarea placeholder="Add a note about this memory…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-sm" onclick="closeUploadModal()">Cancel</button>
+      <button class="btn-sm btn-primary" onclick="fakeUpload()">Upload & generate AR target</button>
+    </div>
+  </div>
+</div>
+
+<button class="mobile-toggle" onclick="toggleSidebar()">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+
+<script>
+const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const vals=[4,8,3,11,6,9,6];
+const max=Math.max(...vals);
+const chart=document.getElementById('bar-chart');
+days.forEach((d,i)=>{
+  const bar=document.createElement('div');
+  bar.className='bar';
+  bar.style.height=(vals[i]/max*100)+'%';
+  bar.innerHTML=`<span class="bar-label">${d}</span>`;
+  chart.appendChild(bar);
+});
+
+function openUploadModal(){document.getElementById('uploadModal').classList.add('open')}
+function closeUploadModal(){document.getElementById('uploadModal').classList.remove('open')}
+document.getElementById('uploadModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeUploadModal()});
+
+function triggerPhotoUpload(){document.getElementById('photoInput').click()}
+function triggerVideoUpload(){document.getElementById('videoInput').click()}
+
+function handlePhotoSelect(input){
+  if(!input.files.length)return;
+  const zone=document.getElementById('photoZone');
+  zone.classList.add('has-file');
+  zone.innerHTML=`<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><p><strong>${input.files[0].name}</strong></p><small>${(input.files[0].size/1024/1024).toFixed(1)}MB</small>`;
+  const status=document.getElementById('targetStatus');
+  status.style.display='flex';
+  setTimeout(()=>{
+    status.innerHTML='<div class="status-dot"></div><span style="color:var(--green)">AR image target generated ✓</span>';
+    status.style.background='var(--green-bg)';status.style.borderColor='rgba(46,125,82,.25)';
+  },2200);
+}
+
+function handleVideoSelect(input){
+  if(!input.files.length)return;
+  const zone=document.getElementById('videoZone');
+  zone.classList.add('has-file');
+  zone.innerHTML=`<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><p><strong>${input.files[0].name}</strong></p><small>${(input.files[0].size/1024/1024).toFixed(1)}MB · uploading...</small>`;
+  const progress=document.getElementById('videoProgress');
+  const fill=document.getElementById('videoFill');
+  progress.classList.add('show');
+  let pct=0;
+  const timer=setInterval(()=>{
+    pct=Math.min(pct+Math.random()*15,100);
+    fill.style.width=pct+'%';
+    if(pct>=100){clearInterval(timer);zone.querySelector('small').textContent=`${(input.files[0].size/1024/1024).toFixed(1)}MB · uploaded ✓`;}
+  },180);
+}
+
+function fakeUpload(){
+  alert('In production: this would call POST /api/memories with photo + video + .mind target, then redirect to the new memory\'s detail page.');
+  closeUploadModal();
+}
+
+function setView(v){
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('topbar-title').textContent=v==='memories'?'My Memories':v==='analytics'?'Analytics':'Settings';
+}
+
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open')}
+</script>
+</body>
+</html>
