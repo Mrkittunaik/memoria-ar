@@ -36,26 +36,50 @@ html,body{
   pointer-events:none;
 }
 
-/* VIDEO OVERLAY — anchored by MindAR onto the target, sits smoothly inside the photo frame */
-#ar-video-wrapper{
+/* VIDEO OVERLAY — anchored by MindAR onto the target, sits smoothly inside the photo frame.
+   #ar-layer holds N of these at once — one per simultaneously-detected poster. Each wrapper
+   is sized/positioned every tracking frame to exactly match its poster's on-screen rectangle,
+   so the clip is "fitted" to that poster only: same width, height, rotation and perspective. */
+#ar-layer{
+  position:absolute;inset:0;
+  pointer-events:none;
+}
+.ar-video-wrapper{
   position:absolute;
   top:0;left:0;
   transform-origin:top left;
   display:none;
   cursor:pointer;
+  pointer-events:all;
   will-change:transform;
+  overflow:hidden;
+  border-radius:2px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06);
 }
-#ar-video-wrapper.visible{
+.ar-video-wrapper.visible{
   display:block;
   animation:arFadeIn .35s ease both;
 }
+.ar-video-wrapper.losing{
+  animation:arFadeOut .25s ease both;
+}
 @keyframes arFadeIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
-#ar-video{
+@keyframes arFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.96)}}
+.ar-video{
   width:100%;height:100%;
   object-fit:cover;
-  border-radius:2px;
   display:block;
+  pointer-events:none;
 }
+/* Thin gold corner ticks while a poster is actively tracked — confirms lock without a boxy frame */
+.ar-video-wrapper::before,.ar-video-wrapper::after{
+  content:'';position:absolute;width:14px;height:14px;
+  border:2px solid var(--gold-light);opacity:0;
+  transition:opacity .25s;pointer-events:none;
+}
+.ar-video-wrapper.tracking::before,.ar-video-wrapper.tracking::after{opacity:.85}
+.ar-video-wrapper::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.ar-video-wrapper::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
 
 /* CLEAN CAMERA UI — plain viewfinder, no frame/brackets/scanline */
 #scan-ui{
@@ -127,15 +151,7 @@ html,body{
   cursor:pointer;color:#fff;transition:background .2s;
 }
 .fab:hover{background:rgba(0,0,0,.75)}
-.fab-main{
-  width:72px;height:72px;
-  background:var(--gold);border:none;
-  border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;color:#fff;
-  transition:transform .2s;box-shadow:0 4px 20px rgba(201,147,58,.4);
-}
-.fab-main:hover{transform:scale(.95)}
+
 
 /* LOADING STATE */
 #loading{
@@ -377,9 +393,8 @@ html,body{
 <div id="ar-container">
   <video id="camera-video" autoplay playsinline muted></video>
   <canvas id="ar-canvas"></canvas>
-  <div id="ar-video-wrapper">
-    <video id="ar-video" autoplay loop playsinline></video>
-  </div>
+  <!-- One .ar-video-wrapper is created per detected poster — see spawnArTarget() -->
+  <div id="ar-layer"></div>
 </div>
 
 <!-- SCAN UI -->
@@ -402,9 +417,6 @@ html,body{
       <div class="fab" onclick="toggleTorch()" id="torchBtn" title="Torch">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
       </div>
-      <button class="fab-main" onclick="demoDetect()" title="Simulate detection (demo)">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-      </button>
       <div class="fab" onclick="switchCamera()" title="Flip camera">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3l-4-4-4 4"/><path d="M8 3h8"/></svg>
       </div>
@@ -480,15 +492,15 @@ html,body{
     <div class="demo-steps">
       <div class="demo-step">
         <div class="step-num-circle">1</div>
-        <p>Camera opens and continuously analyses the live feed using MindAR's feature-based tracker</p>
+        <p>Camera opens and continuously analyses the live feed — no scan button, fully automatic</p>
       </div>
       <div class="demo-step">
         <div class="step-num-circle">2</div>
-        <p>When the registered photo is detected, its video plays live, anchored inside the photo frame</p>
+        <p>Every registered photo in view gets its own video, fitted exactly to that photo and tracking its position, size and angle</p>
       </div>
       <div class="demo-step">
         <div class="step-num-circle">3</div>
-        <p>Tap the video to open it fullscreen with audio. Tracking resumes when you close it</p>
+        <p>Tap any playing video to open it fullscreen with audio. Tracking resumes when you close it</p>
       </div>
     </div>
     <button class="btn-demo-start" onclick="startScanner()">Open camera & scan</button>
@@ -503,9 +515,12 @@ html,body{
 let stream=null;
 let facingMode='environment';
 let torchOn=false;
-let detected=false;
 let demoActive=false;
-let currentVideoSrc=''; // production: Cloudinary URL for the matched memory's video
+
+/* Registry of every currently-tracked poster: key -> {wrapper, video, lastSeen}
+   Multiple posters can be live at once, each with its own independent video,
+   sized/rotated to exactly match that poster's own on-screen rectangle. */
+const arTargets=new Map();
 
 /* ============================================================
    PERMISSION-AWARE STARTUP
@@ -583,85 +598,171 @@ function beginMindAR(){
    *
    * const mindarThree = new MindARThree({
    *   container: document.getElementById('ar-container'),
-   *   imageTargetSrc: '/api/targets/{memoryId}.mind',  // fetched from Cloudinary
+   *   imageTargetSrc: '/api/targets/{userId}.mind',   // ONE compiled file can hold MANY targets
    * });
    *
    * const { renderer, scene, camera } = mindarThree;
    *
-   * const anchor = mindarThree.addAnchor(0);
-   * anchor.onTargetFound = () => onPhotoDetected();
-   * anchor.onTargetLost = () => onPhotoLost();
-   *
-   * // The #ar-video-wrapper element is positioned every frame to match
-   * // the tracked photo's screen-space corners (computed from the
-   * // anchor's model-view-projection matrix), so the clip plays
-   * // smoothly inside the printed photo with no extra UI chrome.
-   * anchor.onUpdate = (modelViewMatrix) => positionArVideoToTarget(modelViewMatrix);
+   * // One addAnchor() call per registered photo — supports many simultaneous targets,
+   * // each tracked completely independently every frame.
+   * targets.forEach((target, i) => {
+   *   const anchor = mindarThree.addAnchor(i);
+   *   anchor.onTargetFound = () => spawnArTarget(target.id, target.videoUrl);
+   *   anchor.onTargetLost  = () => removeArTarget(target.id);
+   *   anchor.onUpdate = (modelViewMatrix) => updateArTarget(target.id, modelViewMatrix);
+   * });
    *
    * await mindarThree.start();
    * renderer.setAnimationLoop(() => renderer.render(scene, camera));
    *
-   * The .mind file is pre-compiled from the uploaded photo using:
-   * const compiler = new MINDAR.Compiler();
-   * await compiler.compileImageTargets([photoImage], (progress) => console.log(progress));
-   * const exportedBuffer = await compiler.exportData();
-   * // Upload exportedBuffer to Cloudinary and save URL to MongoDB
+   * updateArTarget() projects the tracked photo's 4 corners from 3D model space into
+   * 2D screen pixels using the anchor's model-view-projection matrix, then sets that
+   * target's wrapper width/height/rotation/transform to match exactly — so the video
+   * is always pinned to, and sized to, that one poster only, however near, far, or
+   * tilted it is. No two posters ever share a wrapper.
    */
+
+  // Until the real MindAR + backend wiring lands, this auto-running stand-in shows the
+  // intended UX: the camera watches itself, and as soon as a poster-shaped rectangle
+  // would be "found", a video auto-spawns fitted exactly inside it — zero buttons.
+  runAutoDemo();
 }
 
-function onPhotoDetected(videoUrl){
-  detected=true;
-  currentVideoSrc = videoUrl || currentVideoSrc;
+/* ============================================================
+   PER-TARGET AR VIDEO — create / update / remove
+============================================================ */
+function spawnArTarget(id, videoUrl, rect){
+  if(arTargets.has(id)) return updateArTarget(id, rect);
+
+  const wrapper=document.createElement('div');
+  wrapper.className='ar-video-wrapper';
+  wrapper.dataset.targetId=id;
+
+  const video=document.createElement('video');
+  video.className='ar-video';
+  video.autoplay=true; video.loop=true; video.playsInline=true; video.muted=true;
+  video.src=videoUrl;
+  wrapper.appendChild(video);
+
+  wrapper.addEventListener('click',()=>openFullscreen(id));
+  document.getElementById('ar-layer').appendChild(wrapper);
+
+  const entry={wrapper,video,lastSeen:performance.now()};
+  arTargets.set(id,entry);
+
+  applyRect(wrapper,rect);
+  requestAnimationFrame(()=>{
+    wrapper.classList.add('visible','tracking');
+    video.play().catch(()=>{});
+  });
+
+  refreshStatusPill();
+}
+
+function updateArTarget(id, rect){
+  const entry=arTargets.get(id);
+  if(!entry) return;
+  entry.lastSeen=performance.now();
+  applyRect(entry.wrapper,rect);
+}
+
+function applyRect(wrapper, rect){
+  if(!rect) return;
+  // rect: {x,y,width,height,rotation} in screen pixels — exactly the poster's own
+  // on-screen bounds this frame, so the video auto zooms in/out and resizes with it.
+  wrapper.style.width=rect.width+'px';
+  wrapper.style.height=rect.height+'px';
+  wrapper.style.transform=`translate(${rect.x}px, ${rect.y}px) rotate(${rect.rotation||0}deg)`;
+}
+
+function removeArTarget(id){
+  const entry=arTargets.get(id);
+  if(!entry) return;
+  entry.wrapper.classList.remove('tracking');
+  entry.wrapper.classList.add('losing');
+  entry.video.pause();
+  setTimeout(()=>{ entry.wrapper.remove(); },250);
+  arTargets.delete(id);
+  refreshStatusPill();
+}
+
+function refreshStatusPill(){
   const pill=document.getElementById('statusPill');
   const text=document.getElementById('statusText');
-  pill.className='status-pill found';
-  text.textContent='Memory found';
-  // Fade the status pill away after a moment — clean full camera view, no clutter
   clearTimeout(window._pillTimer);
-  window._pillTimer=setTimeout(()=>pill.classList.add('fade-out'),1800);
-
-  const arVideo=document.getElementById('ar-video');
-  const wrapper=document.getElementById('ar-video-wrapper');
-  if(currentVideoSrc) arVideo.src=currentVideoSrc;
-  arVideo.play().catch(()=>{});
-  wrapper.classList.add('visible');
-}
-
-function onPhotoLost(){
-  detected=false;
-  const pill=document.getElementById('statusPill');
-  const text=document.getElementById('statusText');
-  pill.classList.remove('fade-out');
-  pill.className='status-pill ready';
-  text.textContent='Scanning for photo…';
-  document.getElementById('ar-video').pause();
-  document.getElementById('ar-video-wrapper').classList.remove('visible');
-}
-
-/* DEMO: simulate detection so this page is testable without a real target.
-   Positions the AR video smoothly over the centre of the viewport with no
-   tracking-frame artwork — just the live, playable video clip. */
-function demoDetect(){
-  if(!demoActive){
-    demoActive=true;
-    positionDemoArVideo();
-    onPhotoDetected('https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4');
+  if(arTargets.size>0){
+    pill.classList.remove('fade-out');
+    pill.className='status-pill found';
+    text.textContent = arTargets.size===1 ? 'Memory found' : arTargets.size+' memories found';
+    window._pillTimer=setTimeout(()=>pill.classList.add('fade-out'),1800);
   }else{
-    demoActive=false;
-    onPhotoLost();
+    pill.classList.remove('fade-out');
+    pill.className='status-pill ready';
+    text.textContent='Scanning for photos…';
   }
 }
 
-function positionDemoArVideo(){
-  const wrapper=document.getElementById('ar-video-wrapper');
-  const w=Math.min(window.innerWidth*0.78, 420);
-  const h=w*0.5625;
-  wrapper.style.width=w+'px';
-  wrapper.style.height=h+'px';
-  wrapper.style.left=((window.innerWidth-w)/2)+'px';
-  wrapper.style.top=((window.innerHeight-h)/2)+'px';
+/* ============================================================
+   AUTO-RUNNING STAND-IN (no backend / no MindAR wired up yet)
+   Spawns 1-2 demo posters with auto-fitted, auto-zooming videos on a timer so the
+   finished UX can be reviewed end-to-end. Swap this call for real MindAR callbacks
+   (anchor.onTargetFound / onUpdate / onTargetLost above) once both are ready.
+============================================================ */
+const DEMO_CLIPS=[
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4'
+];
+let demoRectsTimer=null, demoSpawnTimer=null, demoTick=0;
+
+function runAutoDemo(){
+  if(demoActive) return;
+  demoActive=true;
+  demoTick=0;
+
+  // Poster A appears almost immediately
+  demoSpawnTimer=setTimeout(()=>{
+    spawnArTarget('demo-a', DEMO_CLIPS[0], demoRectFor('demo-a',0));
+  },600);
+  // Poster B joins a moment later — proves multiple targets track independently at once
+  demoSpawnTimer=setTimeout(()=>{
+    spawnArTarget('demo-b', DEMO_CLIPS[1], demoRectFor('demo-b',0));
+  },2600);
+
+  demoRectsTimer=setInterval(()=>{
+    demoTick++;
+    if(arTargets.has('demo-a')) updateArTarget('demo-a', demoRectFor('demo-a',demoTick));
+    if(arTargets.has('demo-b')) updateArTarget('demo-b', demoRectFor('demo-b',demoTick));
+  },50); // ~20fps, matches real-time tracking update rate
 }
-window.addEventListener('resize',()=>{ if(demoActive) positionDemoArVideo(); });
+
+function stopAutoDemo(){
+  demoActive=false;
+  clearTimeout(demoSpawnTimer);
+  clearInterval(demoRectsTimer);
+  ['demo-a','demo-b'].forEach(removeArTarget);
+}
+
+/* Produces a believable "poster moving toward/away/around camera" rectangle each tick —
+   stands in for MindAR's real per-frame corner projection. Drives home, far/near = bigger/
+   smaller, and gentle drift/rotation = the video staying glued to the poster as it moves. */
+function demoRectFor(id, tick){
+  const t=tick*0.05;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const baseX = id==='demo-a' ? vw*0.30 : vw*0.62;
+  const baseY = vh*0.42;
+  // Slow "breathing" zoom simulates walking closer/farther from the printed photo
+  const zoom = 1 + Math.sin(t*0.6 + (id==='demo-a'?0:1.4))*0.18;
+  const w = Math.min(vw*0.40,260) * zoom;
+  const h = w*0.62;
+  const driftX = Math.sin(t*0.4)*14;
+  const driftY = Math.cos(t*0.35)*10;
+  const rotation = Math.sin(t*0.3)*4; // slight tilt, as if photo/phone isn't perfectly square-on
+  return {
+    x: baseX + driftX - w/2,
+    y: baseY + driftY - h/2,
+    width:w, height:h, rotation
+  };
+}
 
 /* ============================================================
    CAMERA CONTROLS
@@ -684,12 +785,9 @@ async function switchCamera(){
   }catch(e){console.error(e)}
 }
 
-/* ============================================================
-   TAP THE LIVE AR VIDEO -> OPEN BIG FULLSCREEN PLAYER
-============================================================ */
-document.getElementById('ar-video-wrapper').addEventListener('click',()=>{
-  if(detected||demoActive)openFullscreen();
-});
+/* Each AR target's wrapper gets its own click listener at creation time (see
+   spawnArTarget), so tapping any one of several simultaneous videos opens
+   that specific clip fullscreen — not a single shared element. */
 
 /* ============================================================
    FULLSCREEN PLAYER — Netflix / Hotstar style
@@ -698,14 +796,18 @@ const fsVideo = document.getElementById('fs-video');
 let fsControlsTimer=null;
 let fsWasMuted=false;
 let fsScrubbing=false;
+let fsOpenTargetId=null;
 
-function openFullscreen(){
+function openFullscreen(targetId){
+  const entry=arTargets.get(targetId);
+  if(!entry) return;
+  fsOpenTargetId=targetId;
   const fsPlayer=document.getElementById('fullscreen-player');
-  fsVideo.src = currentVideoSrc || document.getElementById('ar-video').currentSrc || '';
+  fsVideo.src = entry.video.currentSrc || entry.video.src || '';
   fsVideo.muted = false;
-  fsVideo.currentTime = 0;
+  fsVideo.currentTime = entry.video.currentTime || 0;
   fsPlayer.classList.add('open');
-  document.getElementById('ar-video').pause();
+  entry.video.pause();
 
   fsVideo.play().catch(()=>{ fsVideo.muted=true; fsVideo.play().catch(()=>{}); });
   updateFsMuteIcon();
@@ -717,7 +819,9 @@ function closeFullscreen(e){
   document.getElementById('fullscreen-player').classList.remove('open');
   document.getElementById('fsMenu').classList.remove('open');
   fsVideo.pause();
-  if(detected||demoActive)document.getElementById('ar-video').play().catch(()=>{});
+  const entry=fsOpenTargetId && arTargets.get(fsOpenTargetId);
+  if(entry) entry.video.play().catch(()=>{});
+  fsOpenTargetId=null;
 }
 
 function onFsTap(e){
@@ -854,7 +958,7 @@ document.addEventListener('click',(e)=>{
 async function downloadCurrentVideo(e){
   e.stopPropagation();
   document.getElementById('fsMenu').classList.remove('open');
-  const url = currentVideoSrc || fsVideo.currentSrc;
+  const url = fsVideo.currentSrc || fsVideo.src;
   if(!url) return;
   try{
     const res=await fetch(url);
