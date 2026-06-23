@@ -8,8 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>Scan — Memoria</title>
 <!-- MindAR image tracking with Three.js integration -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-three.prod.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -344,14 +343,8 @@ html,body{
 </head>
 <body>
 
-<!-- LOADING -->
-<div id="loading">
-  <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
-  <div class="loading-spinner"></div>
-  <div>
-    <h3>Starting camera</h3>
-    <p style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
-  </div>
+<!-- PERMISSION UI (shown only if camera is denied) -->
+<div id="loading" class="hidden">
 </div>
 
 <!-- AR CONTAINER -->
@@ -489,32 +482,8 @@ function getLiveCurrentTime(video, targetIndex){
    the "open camera" prompt on every future visit — no repeat
    permission dialogs, no repeat intro screen.
 ============================================================ */
-const PERM_KEY='memoria_camera_granted';
-
 async function initScanner(){
-  // 1) Browser-level check (works in Chrome/Edge/Android; Safari lacks
-  //    the Permissions API for camera, so we fall back to our own flag)
-  let alreadyGranted = localStorage.getItem(PERM_KEY) === 'true';
-
-  if (navigator.permissions && navigator.permissions.query) {
-    try{
-      const status = await navigator.permissions.query({name:'camera'});
-      if (status.state === 'granted') alreadyGranted = true;
-      if (status.state === 'denied') alreadyGranted = false;
-      // Keep our stored flag in sync if the user revoked access in settings
-      status.onchange = () => {
-        if (status.state === 'granted') localStorage.setItem(PERM_KEY,'true');
-        if (status.state === 'denied') localStorage.removeItem(PERM_KEY);
-      };
-    }catch(e){ /* permissions API not supported for camera — ignore */ }
-  }
-
-  if (alreadyGranted){
-    startScanner();
-  } else {
-    // No prior permission — request it now (browser shows native dialog once)
-    startScanner();
-  }
+  startScanner();
 }
 
 async function startScanner(){
@@ -523,24 +492,19 @@ async function startScanner(){
       video:{facingMode,width:{ideal:1920},height:{ideal:1080}},
       audio:false
     });
-    localStorage.setItem(PERM_KEY,'true'); // remember: don't ask again
-
     const video=document.getElementById('camera-video');
     video.srcObject=stream;
     await video.play();
-    setTimeout(()=>{
-      document.getElementById('loading').classList.add('hidden');
-      beginMindAR();
-    },500);
+    beginMindAR();
   }catch(err){
-    localStorage.removeItem(PERM_KEY);
-    document.getElementById('loading').classList.remove('hidden');
-    document.getElementById('loading').innerHTML=`
+    const loading=document.getElementById('loading');
+    loading.classList.remove('hidden');
+    loading.innerHTML=`
       <div style="text-align:center;padding:40px">
-        <div style="font-size:32px;margin-bottom:16px">📷</div>
-        <h3 style="color:#fff;margin-bottom:8px">Camera access needed</h3>
-        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6">Please allow camera access in your browser settings and reload the page.</p>
-        <button onclick="location.reload()" style="margin-top:20px;padding:12px 24px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">Try again</button>
+        <div style="font-size:48px;margin-bottom:20px">📷</div>
+        <h3 style="color:#fff;font-size:18px;margin-bottom:10px">Camera access needed</h3>
+        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6;max-width:260px;margin:0 auto">Please allow camera access when prompted, then tap below.</p>
+        <button onclick="location.reload()" style="margin-top:24px;padding:13px 28px;border-radius:12px;background:var(--gold);color:#000;border:none;cursor:pointer;font-size:15px;font-weight:600">Allow &amp; Retry</button>
       </div>`;
   }
 }
@@ -565,17 +529,18 @@ const TARGETS_CONFIG = [
 /* ------------------------- */
 
 async function beginMindAR(){
-  if(!window.MINDAR || !window.THREE){
-    console.error('MindAR or Three.js not loaded. Add the script tags above beginMindAR.');
+  if(!window.MINDAR){
+    console.error('MindAR not loaded.');
     document.getElementById('loading').innerHTML=`
       <div style="text-align:center;padding:40px">
         <div style="font-size:32px;margin-bottom:16px">⚠️</div>
         <h3 style="color:#fff;margin-bottom:8px">Script failed to load</h3>
-        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6">MindAR or Three.js could not be loaded. Check your internet connection and try again.</p>
+        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6">MindAR could not be loaded. Check your internet connection and try again.</p>
         <button onclick="location.reload()" style="margin-top:20px;padding:12px 24px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">Retry</button>
       </div>`;
     return;
   }
+  const THREE = window.MINDAR.IMAGE.THREE;
   if(!TARGETS_CONFIG.length){
     console.warn('TARGETS_CONFIG is empty — add target entries to enable AR tracking.');
     document.getElementById('loading').innerHTML=`
