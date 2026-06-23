@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Memoria — Photos That Come Alive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--ink:#0D0B0A;
+--ink-muted:#6B6560;
+--ink-faint:#B0AAA4;
+--surface:#FDFAF7;
+--surface-warm:#F5EFE6;
+--surface-card:#FFFCF9;
+--gold:#C9933A;
+--gold-light:#F0D99A;
+--gold-bg:#FBF5E6;
+--border:#E8E0D4;
+--red:#C94040;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--surface);
+  color:var(--ink);
+  font-family:'DM Sans',system-ui,sans-serif;
+  font-size:16px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* NAV */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 5%;height:58px;
+  background:rgba(253,250,247,0.88);
+  backdrop-filter:blur(12px);
+  border-bottom:0.5px solid var(--border);
+}
+.nav-logo{
+  font-family:'Instrument Serif',Georgia,serif;
+  font-size:20px;letter-spacing:-0.02em;color:var(--ink);
+  text-decoration:none;
+}
+.nav-logo span{color:var(--gold)}
+.nav-links{display:flex;align-items:center;gap:26px}
+.nav-links a{
+  font-size:13px;color:var(--ink-muted);text-decoration:none;
+  transition:color .2s;
+}
+.nav-links a:hover{color:var(--ink)}
+.btn-nav{
+  background:var(--ink);color:var(--surface);
+  border:none;padding:8px 20px;border-radius:9px;
+  font-size:13px;font-family:inherit;cursor:pointer;
+  text-decoration:none;transition:opacity .2s;
+}
+.btn-nav:hover{opacity:.82}
+
+/* HERO */
+.hero{
+  min-height:100svh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:100px 5% 68px;
+  position:relative;overflow:hidden;
+}
+
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.7)}}
+.hero h1{
+  font-family:'Instrument Serif',Georgia,serif;
+  font-size:clamp(40px,6vw,74px);
+  line-height:1.05;letter-spacing:-0.03em;
+  max-width:700px;margin-bottom:24px;
+}
+.hero h1 em{
+  font-style:italic;color:var(--gold);
+}
+.hero-sub{
+  font-size:clamp(14px,1.7vw,16px);
+  color:var(--ink-muted);font-weight:300;
+  max-width:440px;margin-bottom:40px;line-height:1.6;
+}
+.hero-cta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center}
+.btn-primary{
+  background:var(--ink);color:var(--surface);
+  border:none;padding:13px 29px;border-radius:9px;
+  font-size:14px;font-family:inherit;font-weight:500;
+  cursor:pointer;text-decoration:none;
+  transition:transform .2s,opacity .2s;
+}
+.btn-primary:hover{transform:translateY(-1px);opacity:.88}
+.btn-ghost{
+  background:transparent;color:var(--ink);
+  border:0.5px solid var(--border);padding:13px 24px;border-radius:9px;
+  font-size:14px;font-family:inherit;cursor:pointer;
+  text-decoration:none;display:flex;align-items:center;gap:8px;
+  transition:border-color .2s;
+}
+.btn-ghost:hover{border-color:var(--ink-muted)}
+
+/* FLOATING PHOTO DEMO */
+.hero-demo{
+  margin-top:54px;
+  position:relative;display:inline-block;
+}
+.photo-frame{
+  width:238px;height:170px;
+  background:var(--surface-warm);
+  border-radius:10px;border:0.5px solid var(--border);
+  overflow:hidden;position:relative;
+  box-shadow:0 2px 40px rgba(13,11,10,.08);
+}
+.photo-frame img{width:100%;height:100%;object-fit:cover;}
+.photo-placeholder{
+  width:100%;height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;color:var(--ink-faint);
+}
+.photo-placeholder svg{opacity:.4}
+.ar-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(201,147,58,.12),rgba(201,147,58,.04));
+  border:2px solid var(--gold);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  animation:arPulse 3s ease-in-out infinite;
+}
+@keyframes arPulse{0%,100%{border-color:var(--gold);box-shadow:0 0 0 0 rgba(201,147,58,.3)}50%{border-color:#E0A845;box-shadow:0 0 0 8px rgba(201,147,58,0)}}
+.ar-corners span{
+  position:absolute;width:17px;height:17px;border-color:var(--gold);border-style:solid;
+}
+.ar-corners span:nth-child(1){top:7px;left:7px;border-width:2px 0 0 2px}
+.ar-corners span:nth-child(2){top:7px;right:7px;border-width:2px 2px 0 0}
+.ar-corners span:nth-child(3){bottom:7px;left:7px;border-width:0 0 2px 2px}
+.ar-corners span:nth-child(4){bottom:7px;right:7px;border-width:0 2px 2px 0}
+.ar-play{
+  width:44px;height:44px;border-radius:50%;
+  background:var(--gold);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;
+}
+.ar-badge{
+  position:absolute;top:-12px;right:-12px;
+  background:var(--ink);color:var(--surface);
+  font-size:10px;font-weight:500;padding:4px 10px;border-radius:9px;
+  white-space:nowrap;
+}
+
+/* STATS */
+.stats{
+  display:flex;justify-content:center;gap:0;
+  border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);
+  background:var(--surface-card);
+}
+.stat{
+  flex:1;max-width:190px;
+  padding:30px 20px;text-align:center;
+  border-right:0.5px solid var(--border);
+}
+.stat:last-child{border-right:none}
+.stat-num{
+  font-family:'DM Sans',sans-serif;
+  font-size:34px;font-weight:600;line-height:1;letter-spacing:-0.02em;
+  color:var(--ink);margin-bottom:5px;
+}
+.stat-num sup{font-size:17px;font-weight:500;color:var(--ink);top:-0.5em}
+.stat-label{font-size:12px;color:var(--ink-muted)}
+
+/* HOW IT WORKS */
+.section{padding:85px 5%}
+.section-eyebrow{
+  font-size:12px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:16px;
+}
+.section h2{
+  font-family:'Instrument Serif',Georgia,serif;
+  font-size:clamp(28px,3.4vw,44px);
+  line-height:1.12;letter-spacing:-0.025em;
+  margin-bottom:14px;
+}
+.section-sub{
+  font-size:15px;color:var(--ink-muted);font-weight:300;
+  max-width:420px;line-height:1.6;margin-bottom:54px;
+}
+
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0}
+.step{
+  padding:32px;border-right:0.5px solid var(--border);
+  border-bottom:0.5px solid var(--border);
+  position:relative;
+}
+.step:last-child{border-right:none}
+.step-num{
+  font-family:'Instrument Serif',Georgia,serif;
+  font-size:46px;line-height:1;letter-spacing:-0.04em;
+  color:var(--gold-light);margin-bottom:16px;
+  display:block;
+}
+.step h3{
+  font-size:16px;font-weight:500;margin-bottom:8px;
+  letter-spacing:-0.01em;
+}
+.step p{font-size:13px;color:var(--ink-muted);line-height:1.6}
+.step-icon{
+  width:38px;height:38px;border-radius:9px;
+  background:var(--gold-bg);display:flex;align-items:center;justify-content:center;
+  margin-bottom:16px;
+}
+.step-icon svg{color:var(--gold)}
+
+/* FEATURES GRID */
+.features{background:var(--ink);color:var(--surface);padding:85px 5%}
+.features .section-eyebrow{color:var(--gold)}
+.features h2{color:var(--surface)}
+.features .section-sub{color:rgba(253,250,247,.55)}
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1px;background:rgba(255,255,255,.08)}
+.feat{
+  background:var(--ink);padding:30px;
+  transition:background .2s;
+}
+.feat:hover{background:#1A1714}
+.feat-icon{
+  width:34px;height:34px;border-radius:7px;
+  background:rgba(201,147,58,.15);display:flex;align-items:center;justify-content:center;
+  margin-bottom:16px;
+}
+.feat-icon svg{color:var(--gold)}
+.feat h3{font-size:14px;font-weight:500;margin-bottom:6px;color:var(--surface)}
+.feat p{font-size:12px;color:rgba(253,250,247,.5);line-height:1.6}
+
+/* USE CASES */
+.usecases{padding:85px 5%}
+.uc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-top:48px}
+.uc-card{
+  background:var(--surface-card);
+  border:0.5px solid var(--border);
+  border-radius:14px;padding:26px 20px;
+  text-align:center;
+  transition:transform .2s,border-color .2s;
+}
+.uc-card:hover{transform:translateY(-3px);border-color:var(--gold-light)}
+.uc-icon{
+  width:38px;height:38px;border-radius:9px;
+  background:var(--gold-bg);display:flex;align-items:center;justify-content:center;
+  margin:0 auto 14px;
+}
+.uc-icon svg{color:var(--gold)}
+.uc-card h3{font-size:13px;font-weight:500;margin-bottom:5px}
+.uc-card p{font-size:11px;color:var(--ink-muted);line-height:1.5}
+
+/* PRICING */
+.pricing{background:var(--surface-warm);padding:100px 5%;text-align:center}
+.plan-grid{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:56px}
+.plan{
+  background:var(--surface-card);
+  border:0.5px solid var(--border);
+  border-radius:20px;padding:36px 30px;
+  text-align:left;width:300px;min-height:300px;position:relative;
+  display:flex;flex-direction:column;
+}
+.plan.featured{
+  border-color:var(--gold);
+  border-width:1.5px;
+}
+.plan-badge{
+  position:absolute;top:-14px;left:50%;transform:translateX(-50%);
+  background:var(--gold);color:var(--surface-card);
+  font-size:12px;font-weight:500;padding:5px 16px;border-radius:10px;white-space:nowrap;
+}
+.plan-name{font-size:14px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
+.plan-price{
+  font-family:'DM Sans',sans-serif;
+  font-size:46px;font-weight:600;line-height:1;letter-spacing:-0.02em;margin-bottom:6px;
+}
+.plan-price sub{font-size:16px;font-family:'DM Sans',sans-serif;font-weight:300;color:var(--ink-muted)}
+.plan-desc{font-size:14px;color:var(--ink-muted);margin-bottom:26px;padding-bottom:26px;border-bottom:0.5px solid var(--border)}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:12px;margin-bottom:28px;flex-grow:1}
+.plan-features li{
+  font-size:14px;display:flex;align-items:center;gap:10px;
+}
+.plan-features li::before{
+  content:'';width:16px;height:16px;border-radius:50%;
+  background:var(--gold-bg);border:0.5px solid var(--gold-light);
+  flex-shrink:0;
+  background-image:url("data:image/svg+xml,%3Csvg width='10' height='8' viewBox='0 0 10 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4L3.5 6.5L9 1' stroke='%23C9933A' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:center;
+}
+.btn-plan{
+  width:100%;text-align:center;
+  background:transparent;color:var(--ink);
+  border:0.5px solid var(--border);padding:13px;border-radius:10px;
+  font-size:14px;font-family:inherit;font-weight:500;cursor:pointer;
+  text-decoration:none;display:block;transition:all .2s;
+  margin-top:auto;
+}
+.btn-plan:hover{border-color:var(--ink)}
+.plan.featured .btn-plan{
+  background:var(--ink);color:var(--surface);border-color:var(--ink);
+}
+.plan.featured .btn-plan:hover{opacity:.85}
+
+/* FOOTER */
+footer{
+  background:var(--ink);color:var(--surface);
+  padding:54px 5% 34px;
+}
+.footer-top{
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:34px;
+  margin-bottom:48px;padding-bottom:48px;
+  border-bottom:0.5px solid rgba(255,255,255,.1);
+}
+.footer-brand p{font-size:12px;color:rgba(253,250,247,.45);max-width:220px;margin-top:10px;line-height:1.6}
+.footer-links h4{font-size:11px;font-weight:500;margin-bottom:14px;color:rgba(253,250,247,.4);letter-spacing:.04em;text-transform:uppercase}
+.footer-links ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+.footer-links ul a{font-size:12px;color:rgba(253,250,247,.6);text-decoration:none;transition:color .2s}
+.footer-links ul a:hover{color:var(--surface)}
+.footer-bottom{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+.footer-bottom p{font-size:11px;color:rgba(253,250,247,.3)}
+
+/* UTILS */
+.container{max-width:1160px;margin:0 auto}
+@media(max-width:768px){
+  nav .nav-links{display:none}
+  .stats{flex-wrap:wrap}
+  .stat{border-right:none;border-bottom:0.5px solid var(--border);max-width:100%;width:100%}
+  .stat:last-child{border-bottom:none}
+  .steps{grid-template-columns:1fr}
+  .step{border-right:none}
+  .step:last-child{border-bottom:none}
+  .plan-grid{flex-direction:column;align-items:center}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-logo">Memo<span>ria</span></a>
+  <div class="nav-links">
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="dashboard.html">Dashboard</a>
+  </div>
+  <a href="dashboard.html" class="btn-nav">Get started</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <h1>Your photos,<br/><em>alive</em> again.</h1>
+  <p class="hero-sub">Point your phone at any printed photo and watch the original video moment play right inside the frame. No app needed.</p>
+  <div class="hero-cta">
+    <a href="dashboard.html" class="btn-primary">Upload a memory</a>
+    <a href="scanner.html" class="btn-ghost">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      Open scanner
+    </a>
+  </div>
+  <div class="hero-demo">
+    <div class="photo-frame">
+      <div class="photo-placeholder">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span style="font-size:12px;color:var(--ink-faint)">your printed photo</span>
+      </div>
+      <div class="ar-overlay">
+        <div class="ar-corners">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="ar-play">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="ar-badge">✦ Video playing</div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-num"><sup>&lt;</sup>500ms</div>
+    <div class="stat-label">Photo recognition</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">100<sup>%</sup></div>
+    <div class="stat-label">Browser-native, no app</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">∞</div>
+    <div class="stat-label">Times a photo can be scanned</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">4K</div>
+    <div class="stat-label">Video quality supported</div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how">
+  <div class="container">
+    <div class="section-eyebrow">How it works</div>
+    <h2>Three steps to a living memory</h2>
+    <p class="section-sub">No coding, no special hardware. Just a photo, a video, and any camera.</p>
+  </div>
+  <div class="steps" style="border-top:0.5px solid var(--border);border-left:0.5px solid var(--border);max-width:1160px;margin:0 auto;border-radius:0">
+    <div class="step">
+      <span class="step-num">01</span>
+      <div class="step-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <h3>Upload your photo + video</h3>
+      <p>Upload the photo you've already printed — or plan to print — and the video you want to attach to it. We generate the AR target automatically.</p>
+    </div>
+    <div class="step">
+      <span class="step-num">02</span>
+      <div class="step-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      </div>
+      <h3>Print and display the photo</h3>
+      <p>Print it normally — any printer, any size, any paper. Put it in an album, frame it, stick it in a card. The AR link is embedded in the image itself.</p>
+    </div>
+    <div class="step">
+      <span class="step-num">03</span>
+      <div class="step-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      </div>
+      <h3>Scan to watch the memory</h3>
+      <p>Anyone with a phone can open the scanner link, point at the photo, and the video plays live inside the frame — perfectly tracked, no app download needed.</p>
+    </div>
+    <div class="step" style="border-right:0.5px solid var(--border)">
+      <span class="step-num">04</span>
+      <div class="step-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </div>
+      <h3>Relive it forever</h3>
+      <p>Every time someone scans your photo, you see it in your dashboard. No expiry, no link to share — the photo itself is the trigger.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-eyebrow">Features</div>
+    <h2 style="color:var(--surface)">Built for the magic moment</h2>
+    <p class="section-sub">Everything needed to make the experience feel effortless.</p>
+  </div>
+  <div class="feat-grid" style="max-width:1160px;margin:0 auto;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden">
+    <div class="feat">
+      <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+      <h3>Feature-based image tracking</h3>
+      <p>Recognises photos at angles, in low light, partially covered, or rotated — not just head-on pixel matching.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+      <h3>Video anchored in real-time</h3>
+      <p>As you move the phone, the video stays locked perfectly onto the photo — tracking scale, rotation, tilt, and perspective.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg></div>
+      <h3>Mobile-first scanner</h3>
+      <p>Opens camera in fullscreen instantly. No loading screens, no UI clutter. Just point and watch.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></div>
+      <h3>Scan analytics</h3>
+      <p>See when, how often, and from where each memory is being viewed. Track which photos resonate most.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+      <h3>No app to install</h3>
+      <p>Runs entirely in the browser using WebXR and MindAR. Recipients just open a link on any modern phone.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+      <h3>Private memories</h3>
+      <p>Lock memories with a PIN so only intended recipients can view them. Perfect for personal gifts.</p>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section class="usecases" id="usecases">
+  <div class="container">
+    <div class="section-eyebrow">Use cases</div>
+    <h2>Every photo has a story</h2>
+    <p class="section-sub">Weddings, funerals, graduations, birthday cards — any moment worth printing is worth reliving.</p>
+  </div>
+  <div class="uc-grid" style="max-width:1160px;margin:56px auto 0">
+    <div class="uc-card">
+      <div class="uc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="16" r="5"/><circle cx="16" cy="16" r="5"/><path d="M12 4l2.5 5h-5z"/></svg></div>
+      <h3>Wedding albums</h3>
+      <p>Printed album pages that play the ceremony video when scanned</p>
+    </div>
+    <div class="uc-card">
+      <div class="uc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5"/></svg></div>
+      <h3>Graduation cards</h3>
+      <p>Greeting cards that play a personal video message inside</p>
+    </div>
+    <div class="uc-card">
+      <div class="uc-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1.5 2.5 2.5 4 2.5 6a2.5 2.5 0 01-5 0c0-2 1-3.5 2.5-6z"/><rect x="9" y="11" width="6" height="10" rx="1"/></svg></div>
+      <h3>Memorial tributes</h3>
+      <p>Photo prints of loved ones that play their voice or favourite moments</p>
+    </div>
+    <div class="uc-card">
+      <div class="uc-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="12" rx="1"/><path d="M3 13h18"/><path d="M12 9v12"/><path d="M12 9c-1.5 0-3.5-.7-3.5-2.5S10 4 12 6c0-2 2-3 3.5-1.5S13.5 9 12 9z"/></svg></div>
+      <h3>Birthday gifts</h3>
+      <p>Framed photos that surprise the recipient with a surprise video</p>
+    </div>
+    <div class="uc-card">
+      <div class="uc-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><line x1="9" y1="7" x2="9" y2="7"/><line x1="15" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="9" y2="11"/><line x1="15" y1="11" x2="15" y2="11"/><path d="M9 21v-4h6v4"/></svg></div>
+      <h3>Hotel & hospitality</h3>
+      <p>Lobby prints that play destination or event videos for guests</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="container">
+    <div class="section-eyebrow">Pricing</div>
+    <h2>Start free, scale as you grow</h2>
+    <p class="section-sub" style="margin:0 auto 56px">No credit card required to start.</p>
+  </div>
+  <div class="plan-grid">
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">₹0<sub>/mo</sub></div>
+      <p class="plan-desc">For trying it out</p>
+      <ul class="plan-features">
+        <li>3 memories</li>
+        <li>720p video</li>
+        <li>Unlimited scans</li>
+        <li>Basic analytics</li>
+      </ul>
+      <a href="dashboard.html" class="btn-plan">Get started</a>
+    </div>
+    <div class="plan featured">
+      <div class="plan-badge">Most popular</div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">₹499<sub>/mo</sub></div>
+      <p class="plan-desc">For individuals and families</p>
+      <ul class="plan-features">
+        <li>Unlimited memories</li>
+        <li>4K video</li>
+        <li>Multiple videos per photo</li>
+        <li>Private + PIN-protected</li>
+        <li>Detailed analytics</li>
+        <li>PWA + home screen</li>
+      </ul>
+      <a href="dashboard.html" class="btn-plan">Start free trial</a>
+    </div>
+    <div class="plan">
+      <div class="plan-name">Business</div>
+      <div class="plan-price">₹2,499<sub>/mo</sub></div>
+      <p class="plan-desc">For studios, hotels, events</p>
+      <ul class="plan-features">
+        <li>Everything in Pro</li>
+        <li>Custom domain</li>
+        <li>White-label scanner</li>
+        <li>Team accounts</li>
+        <li>Event packages</li>
+        <li>Priority support</li>
+      </ul>
+      <a href="#" class="btn-plan">Contact sales</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <div style="font-family:'Instrument Serif',Georgia,serif;font-size:24px;letter-spacing:-0.02em;color:var(--surface)">Memo<span style="color:var(--gold)">ria</span></div>
+      <p>Photos that come alive. The AR memory platform for moments worth keeping.</p>
+    </div>
+    <div class="footer-links">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="dashboard.html">Dashboard</a></li>
+        <li><a href="scanner.html">Scanner</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#features">Features</a></li>
+      </ul>
+    </div>
+    <div class="footer-links">
+      <h4>Use cases</h4>
+      <ul>
+        <li><a href="#">Weddings</a></li>
+        <li><a href="#">Memorial albums</a></li>
+        <li><a href="#">Birthday cards</a></li>
+        <li><a href="#">Business</a></li>
+      </ul>
+    </div>
+    <div class="footer-links">
+      <h4>Company</h4>
+      <ul>
+        <li><a href="#">About</a></li>
+        <li><a href="#">Blog</a></li>
+        <li><a href="#">Privacy</a></li>
+        <li><a href="#">Terms</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>© 2025 Memoria. All rights reserved.</p>
+    <p style="font-size:13px;color:rgba(253,250,247,.25)">Built with MindAR · Cloudinary · MongoDB</p>
+  </div>
+</footer>
+
+</body>
+</html>
