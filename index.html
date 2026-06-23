@@ -142,11 +142,11 @@ nav{
 .stat{flex:1;max-width:200px;padding:26px 20px;text-align:center;border-right:0.5px solid var(--border)}
 .stat:last-child{border-right:none}
 .stat-num{
-  font-family:'Cormorant Garamond',serif;
-  font-size:36px;font-weight:500;line-height:1;letter-spacing:-0.02em;
+  font-family:'DM Sans',system-ui,sans-serif;
+  font-size:32px;font-weight:600;line-height:1;letter-spacing:-0.02em;
   color:var(--ink);margin-bottom:4px;
 }
-.stat-num sup{font-size:18px;font-weight:400;top:-0.4em}
+.stat-num sup{font-size:16px;font-weight:500;top:-0.4em}
 .stat-label{font-size:11.5px;color:var(--ink-muted)}
 
 /* ── SHARED SECTION STYLES ── */
@@ -338,11 +338,11 @@ nav{
 .plan-body{position:relative;padding:22px}
 .plan-name{font-size:10.5px;font-weight:500;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px}
 .plan-price{
-  font-family:'Cormorant Garamond',Georgia,serif;
-  font-size:50px;font-weight:500;line-height:1;letter-spacing:-0.03em;
-  color:#fff;margin-bottom:4px;
+  font-family:'DM Sans',system-ui,sans-serif;
+  font-size:42px;font-weight:600;line-height:1;letter-spacing:-0.02em;
+  color:#fff;margin-bottom:4px;display:flex;align-items:baseline;gap:3px;
 }
-.plan-price sub{font-size:15px;font-family:'DM Sans',sans-serif;font-weight:300;color:rgba(255,255,255,.38);vertical-align:baseline}
+.plan-price sub{font-size:13px;font-family:'DM Sans',sans-serif;font-weight:400;color:rgba(255,255,255,.4);vertical-align:baseline}
 .plan-desc{font-size:12px;color:rgba(255,255,255,.35);margin-bottom:18px;line-height:1.5}
 .plan-features{list-style:none;display:flex;flex-direction:column;gap:7px;margin-bottom:20px}
 .plan-features li{font-size:12px;color:rgba(255,255,255,.65);display:flex;align-items:center;gap:8px}
@@ -388,8 +388,9 @@ footer{background:var(--ink);color:var(--surface);padding:52px 5% 32px}
   .feat-grid{grid-template-columns:repeat(2,1fr)}
   .uc-grid{grid-template-columns:repeat(3,1fr)}
   .uc-card:nth-child(n+4){display:none}
-  .plan-grid{grid-template-columns:1fr 1fr}
-  .plan:last-child{grid-column:1/-1;aspect-ratio:2.2/1}
+  .plan-grid{grid-template-columns:1fr 1fr;gap:18px}
+  .plan{aspect-ratio:auto;min-height:340px}
+  .plan:last-child{grid-column:1/-1}
 }
 @media(max-width:640px){
   nav .nav-links{display:none}
@@ -402,8 +403,10 @@ footer{background:var(--ink);color:var(--surface);padding:52px 5% 32px}
   .uc-grid{grid-template-columns:repeat(2,1fr)}
   .uc-card:nth-child(n+4){display:flex}
   .uc-card:last-child{grid-column:1/-1;aspect-ratio:16/7}
-  .plan-grid{grid-template-columns:1fr}
-  .plan{aspect-ratio:4/3}
+  .plan-grid{grid-template-columns:1fr;gap:22px}
+  .plan{aspect-ratio:auto;min-height:300px}
+  .plan-overlay{background:linear-gradient(to top,rgba(4,2,1,.99) 0%,rgba(4,2,1,.93) 55%,rgba(4,2,1,.4) 100%)}
+  .plan.featured .plan-overlay{background:linear-gradient(to top,rgba(35,18,0,.99) 0%,rgba(35,18,0,.93) 55%,rgba(35,18,0,.45) 100%)}
   .plan:last-child{grid-column:1}
 }
 </style>
@@ -419,9 +422,9 @@ footer{background:var(--ink);color:var(--surface);padding:52px 5% 32px}
     <a href="#how">How it works</a>
     <a href="#features">Features</a>
     <a href="#pricing">Pricing</a>
-    <a href="dashboard.html">Dashboard</a>
+    <a href="app/dashboard.html">Dashboard</a>
   </div>
-  <a href="dashboard.html" class="btn-nav">Get started</a>
+  <a href="app/dashboard.html" class="btn-nav">Get started</a>
 </nav>
 
 <!-- HERO -->
@@ -429,8 +432,8 @@ footer{background:var(--ink);color:var(--surface);padding:52px 5% 32px}
   <h1>Your photos,<br/><em>alive</em> again.</h1>
   <p class="hero-sub">Point your phone at any printed photo and watch the original video moment play right inside the frame. No app needed.</p>
   <div class="hero-cta">
-    <a href="dashboard.html" class="btn-primary">Upload a memory</a>
-    <a href="scanner.html" class="btn-ghost">
+    <a href="app/dashboard.html" class="btn-primary">Upload a memory</a>
+    <a href="app/scanner.html" class="btn-ghost">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
       Open scanner
     </a>
@@ -687,7 +690,7 @@ footer{background:var(--ink);color:var(--surface);padding:52px 5% 32px}
           <li>Unlimited scans</li>
           <li>Basic analytics</li>
         </ul>
-        <a href="dashboard.html" class="btn-plan">Get started</a>
+        <a href="app/dashboard.html" class="btn-plan">Get started</a>
       </div>
     </div>
     <div class="plan featured">
@@ -705,7 +708,7 @@ footer{background:var(--ink);color:var(--surface);padding:52px 5% 32px}
           <li>Private + PIN-protected</li>
           <li>Detailed analytics</li>
         </ul>
-        <a href="dashboard.html" class="btn-plan">Start free trial</a>
+        <a href="app/dashboard.html" class="btn-plan">Start free trial</a>
       </div>
     </div>
     <div class="plan">
@@ -740,8 +743,8 @@ footer{background:var(--ink);color:var(--surface);padding:52px 5% 32px}
     <div class="footer-links">
       <h4>Product</h4>
       <ul>
-        <li><a href="dashboard.html">Dashboard</a></li>
-        <li><a href="scanner.html">Scanner</a></li>
+        <li><a href="app/dashboard.html">Dashboard</a></li>
+        <li><a href="app/scanner.html">Scanner</a></li>
         <li><a href="#pricing">Pricing</a></li>
         <li><a href="#features">Features</a></li>
       </ul>
