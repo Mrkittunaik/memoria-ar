@@ -2,1165 +2,1149 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Dashboard — Memoria</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>Scan — Memoria</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --ink:#0D0B0A;--ink-muted:#6B6560;--ink-faint:#B0AAA4;
-  --surface:#FDFAF7;--surface-warm:#F5EFE6;--surface-card:#FFFCF9;
-  --gold:#C9933A;--gold-light:#F0D99A;--gold-bg:#FBF5E6;
-  --border:#E8E0D4;--green:#2E7D52;--green-bg:#EAF5EF;
-  --red:#C94040;--red-bg:#FDEEEE;
-  --sidebar-w:240px;
+  --gold:#C9933A;
+  --gold-light:rgba(201,147,58,.9);
 }
-body{
-  background:var(--surface);color:var(--ink);
-  font-family:'DM Sans',system-ui,sans-serif;font-size:14px;
-  line-height:1.5;-webkit-font-smoothing:antialiased;
-  display:flex;min-height:100vh;
+html,body{
+  width:100%;height:100%;overflow:hidden;
+  background:#000;
+  font-family:-apple-system,'DM Sans',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
 }
-.sidebar{
-  width:var(--sidebar-w);min-height:100vh;
-  background:var(--surface-card);
-  border-right:0.5px solid var(--border);
-  display:flex;flex-direction:column;
-  position:fixed;top:0;left:0;bottom:0;z-index:50;
-}
-.sidebar-logo{
-  padding:20px 20px 0;
-  font-family:'Instrument Serif',Georgia,serif;
-  font-size:20px;letter-spacing:-0.02em;
-  color:var(--ink);text-decoration:none;display:block;
-}
-.sidebar-logo span{color:var(--gold)}
-.sidebar-plan{
-  margin:12px 20px 20px;
-  background:var(--gold-bg);border:0.5px solid var(--gold-light);
-  border-radius:8px;padding:8px 12px;
-  font-size:12px;color:var(--gold);font-weight:500;
-}
-.sidebar-divider{height:0.5px;background:var(--border);margin:0 0 8px}
-.sidebar-section{
-  padding:0 12px;margin-bottom:4px;
-  font-size:11px;font-weight:500;color:var(--ink-faint);
-  letter-spacing:.06em;text-transform:uppercase;
-  padding-top:16px;padding-bottom:6px;padding-left:20px;
-}
-.nav-item{
-  display:flex;align-items:center;gap:10px;
-  padding:9px 12px 9px 16px;border-radius:8px;margin:1px 8px;
-  color:var(--ink-muted);text-decoration:none;font-size:13.5px;
-  transition:background .15s,color .15s;cursor:pointer;border:none;background:none;font-family:inherit;width:calc(100% - 16px);text-align:left;
-}
-.nav-item:hover{background:var(--surface-warm);color:var(--ink)}
-.nav-item.active{background:var(--gold-bg);color:var(--gold);font-weight:500}
-.nav-item svg{flex-shrink:0;opacity:.7}
-.nav-item.active svg{opacity:1}
-.sidebar-footer{margin-top:auto;padding:16px;border-top:0.5px solid var(--border);}
-.user-chip{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:var(--surface-warm);}
-.user-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold-bg);border:0.5px solid var(--gold-light);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:var(--gold);flex-shrink:0;}
-.user-name{font-size:13px;font-weight:500;color:var(--ink)}
-.user-email{font-size:11px;color:var(--ink-faint);margin-top:1px}
-.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column}
-.topbar{height:60px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:var(--surface-card);position:sticky;top:0;z-index:40;}
-.topbar-title{font-size:15px;font-weight:500;color:var(--ink)}
-.topbar-right{display:flex;align-items:center;gap:12px}
-.btn-sm{display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;border:0.5px solid var(--border);background:var(--surface-card);color:var(--ink);text-decoration:none;transition:all .15s;}
-.btn-sm:hover{border-color:var(--ink-muted);background:var(--surface-warm)}
-.btn-primary{background:var(--ink);color:var(--surface);border-color:var(--ink);}
-.btn-primary:hover{opacity:.85;background:var(--ink)}
-.content{padding:28px;flex:1}
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
-.stat-card{background:var(--surface-card);border:0.5px solid var(--border);border-radius:12px;padding:20px;}
-.stat-label{font-size:12px;color:var(--ink-muted);margin-bottom:8px;font-weight:500}
-.stat-value{font-family:'DM Sans',sans-serif;font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--ink);line-height:1}
-.stat-sub{font-size:12px;color:var(--green);margin-top:6px;display:flex;align-items:center;gap:4px}
-.stat-sub.neutral{color:var(--ink-muted)}
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
-.section-title{font-size:15px;font-weight:500;color:var(--ink)}
-.memories-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
-.memory-card{background:var(--surface-card);border:0.5px solid var(--border);border-radius:14px;overflow:hidden;transition:transform .2s,border-color .2s;cursor:pointer;}
-.memory-card:hover{transform:translateY(-2px);border-color:var(--gold-light)}
-.memory-thumb-placeholder{width:100%;height:160px;background:linear-gradient(135deg,var(--surface-warm),var(--gold-bg));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--ink-faint);font-size:12px;position:relative;overflow:hidden;}
-.memory-thumb-img{width:100%;height:160px;object-fit:cover;display:block;}
-.memory-thumb-overlay{position:absolute;inset:0;background:rgba(13,11,10,.35);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;}
-.memory-card:hover .memory-thumb-overlay{opacity:1}
-.play-btn{width:44px;height:44px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;}
-.memory-info{padding:14px 16px 16px}
-.memory-title{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.memory-date{font-size:12px;color:var(--ink-faint);margin-bottom:10px}
-.memory-meta{display:flex;align-items:center;justify-content:space-between}
-.scan-badge{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-muted);}
-.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;}
-.memory-actions{display:flex;gap:6px}
-.icon-btn{width:28px;height:28px;border-radius:6px;border:0.5px solid var(--border);background:var(--surface-warm);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;color:var(--ink-muted);}
-.icon-btn:hover{border-color:var(--ink-muted);color:var(--ink)}
-.icon-btn.danger:hover{border-color:var(--red);color:var(--red);background:var(--red-bg)}
-.empty-state{border:1.5px dashed var(--border);border-radius:16px;padding:60px 40px;text-align:center;margin-top:8px;}
-.empty-icon{width:56px;height:56px;border-radius:14px;background:var(--gold-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;}
-.empty-state h3{font-size:16px;font-weight:500;margin-bottom:8px}
-.empty-state p{font-size:14px;color:var(--ink-muted);max-width:340px;margin:0 auto 24px;line-height:1.6}
-.modal-bg{display:none;position:fixed;inset:0;z-index:200;background:rgba(13,11,10,.5);align-items:center;justify-content:center;}
-.modal-bg.open{display:flex}
-.modal{background:var(--surface-card);border-radius:20px;border:0.5px solid var(--border);width:560px;max-width:96vw;max-height:90vh;overflow-y:auto;}
-.modal-header{padding:24px 24px 0;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
-.modal-header h2{font-size:18px;font-weight:500;letter-spacing:-0.01em}
-.modal-close{width:32px;height:32px;border-radius:8px;border:0.5px solid var(--border);background:var(--surface-warm);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-muted);}
-.modal-close:hover{color:var(--ink)}
-.modal-body{padding:0 24px 24px}
-.upload-zone{border:1.5px dashed var(--border);border-radius:12px;padding:32px 24px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:16px;}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--gold);background:var(--gold-bg)}
-.upload-zone.has-file{border-color:var(--green);background:var(--green-bg);border-style:solid}
-.upload-icon{width:44px;height:44px;border-radius:10px;background:var(--gold-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;}
-.upload-zone p{font-size:14px;color:var(--ink-muted)}
-.upload-zone strong{color:var(--ink);font-weight:500}
-.upload-zone small{font-size:12px;color:var(--ink-faint)}
-.form-group{margin-bottom:16px}
-.form-group label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--ink-muted)}
-.form-group input,.form-group textarea{width:100%;border:0.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;font-family:inherit;color:var(--ink);background:var(--surface);transition:border-color .2s;outline:none;}
-.form-group input:focus,.form-group textarea:focus{border-color:var(--gold)}
-.form-group textarea{resize:none;height:72px;line-height:1.5}
-.progress-bar{height:4px;border-radius:10px;background:var(--surface-warm);margin-top:8px;overflow:hidden;display:none;}
-.progress-bar.show{display:block}
-.progress-fill{height:100%;background:var(--gold);border-radius:10px;width:0%;transition:width .3s ease;}
-.upload-stats-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--ink-faint);}
-.upload-stats-row .resuming{color:var(--gold);font-weight:500;}
 
-/* ── POSITION EDITOR (drag/resize video box over the photo) ──────────── */
-.pos-editor-stage{
-  position:relative;width:100%;height:380px;border-radius:12px;overflow:hidden;
-  background:#000;margin-bottom:14px;
+/* CAMERA CONTAINER */
+#ar-container{
+  position:fixed;inset:0;
+  background:#000;
+}
+#camera-video{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+}
+#ar-canvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  pointer-events:none;
+}
+
+/* VIDEO OVERLAY — anchored by MindAR onto the target, sits smoothly inside the photo frame.
+   #ar-layer holds N of these at once — one per simultaneously-detected poster. Each wrapper
+   is sized/positioned every tracking frame to exactly match its poster's on-screen rectangle,
+   so the clip is "fitted" to that poster only: same width, height, rotation and perspective. */
+#ar-layer{
+  position:absolute;inset:0;
+  pointer-events:none;
+}
+.ar-video-wrapper{
+  position:absolute;
+  top:0;left:0;
+  transform-origin:top left;
+  display:none;
+  cursor:pointer;
+  pointer-events:all;
+  will-change:transform;
+  overflow:hidden;
+  border-radius:2px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06);
+}
+.ar-video-wrapper.visible{
+  display:block;
+  animation:arFadeIn .35s ease both;
+}
+.ar-video-wrapper.losing{
+  animation:arFadeOut .25s ease both;
+}
+@keyframes arFadeIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+@keyframes arFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.96)}}
+.ar-video{
+  width:100%;height:100%;
+  object-fit:cover;
+  display:block;
+  pointer-events:none;
+}
+/* Thin gold corner ticks while a poster is actively tracked — confirms lock without a boxy frame */
+.ar-video-wrapper::before,.ar-video-wrapper::after{
+  content:'';position:absolute;width:14px;height:14px;
+  border:2px solid var(--gold-light);opacity:0;
+  transition:opacity .25s;pointer-events:none;
+}
+.ar-video-wrapper.tracking::before,.ar-video-wrapper.tracking::after{opacity:.85}
+.ar-video-wrapper::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.ar-video-wrapper::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+
+/* CLEAN CAMERA UI — plain viewfinder, no frame/brackets/scanline */
+#scan-ui{
+  position:fixed;inset:0;pointer-events:none;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:space-between;
+  padding:env(safe-area-inset-top,20px) 0 env(safe-area-inset-bottom,20px);
+}
+
+/* TOP BAR */
+.scan-topbar{
+  width:100%;display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;
+  pointer-events:all;
+}
+.scan-logo{
+  font-family:'Georgia',serif;font-size:18px;
+  color:#fff;letter-spacing:-0.02em;text-shadow:0 1px 4px rgba(0,0,0,.5);
+}
+.scan-logo span{color:var(--gold)}
+.scan-close{
+  width:40px;height:40px;border-radius:50%;
+  background:rgba(0,0,0,.45);backdrop-filter:blur(8px);
+  border:0.5px solid rgba(255,255,255,.2);
   display:flex;align-items:center;justify-content:center;
+  color:#fff;cursor:pointer;text-decoration:none;
+  transition:background .2s;
+}
+.scan-close:hover{background:rgba(0,0,0,.7)}
+
+/* Empty spacer keeps top bar / status pill layout balanced without a finder frame */
+.finder{
+  flex:1;
+  width:100%;
+  pointer-events:none;
+}
+
+/* STATUS PILL — small, unobtrusive, fades out once a memory is found */
+.status-area{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding-bottom:32px;pointer-events:all;
+}
+.status-pill{
+  display:flex;align-items:center;gap:8px;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(10px);
+  border:0.5px solid rgba(255,255,255,.15);
+  border-radius:10px;padding:10px 18px;
+  color:#fff;font-size:13px;font-weight:500;
+  transition:opacity .35s,transform .35s;
+}
+.status-pill .dot{
+  width:7px;height:7px;border-radius:50%;background:#999;
+  flex-shrink:0;
+}
+.status-pill.ready .dot{background:var(--gold);animation:blink 1.5s ease-in-out infinite}
+.status-pill.found .dot{background:#4CAF50}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.status-pill.found{background:rgba(30,30,30,.7);border-color:rgba(76,175,80,.4)}
+.status-pill.fade-out{opacity:0;transform:translateY(6px);}
+
+.bottom-actions{
+  display:flex;gap:16px;align-items:center;
+}
+.fab{
+  width:56px;height:56px;border-radius:50%;
+  background:rgba(0,0,0,.5);backdrop-filter:blur(8px);
+  border:0.5px solid rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:#fff;transition:background .2s;
+}
+.fab:hover{background:rgba(0,0,0,.75)}
+
+
+/* LOADING STATE */
+#loading{
+  position:fixed;inset:0;background:#000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:20px;z-index:100;
+  transition:opacity .5s;
+}
+#loading.hidden{opacity:0;pointer-events:none}
+.loading-spinner{
+  width:44px;height:44px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.1);
+  border-top-color:var(--gold);
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{font-size:14px;color:rgba(255,255,255,.5)}
+#loading h3{font-size:17px;color:#fff;font-weight:500}
+#loading-counter{font-size:13px;color:var(--gold);margin-top:6px;min-height:18px}
+
+/* FULLSCREEN VIDEO PLAYER — Netflix/Hotstar style */
+#fullscreen-player{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:#000;
+  align-items:center;justify-content:center;
+  overflow:hidden;
+}
+#fullscreen-player.open{display:flex}
+#fs-video{
+  width:100%;height:100%;
+  object-fit:contain;
+  background:#000;
+}
+
+/* Tap anywhere on the video to show/hide controls */
+#fs-tap-zone{
+  position:absolute;inset:0;z-index:1;
+}
+
+/* Top + bottom gradient scrims so controls stay legible over any footage */
+.fs-scrim-top, .fs-scrim-bottom{
+  position:absolute;left:0;right:0;
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.fs-scrim-top{
+  top:0;height:140px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);
+}
+.fs-scrim-bottom{
+  bottom:0;height:180px;
+  background:linear-gradient(to top,rgba(0,0,0,.75),transparent);
+}
+
+/* Controls layer fades in/out together, doesn't pause autohide while scrubbing */
+#fs-controls{
+  position:absolute;inset:0;z-index:2;
+  opacity:1;transition:opacity .25s ease;
+  pointer-events:none;
+}
+#fs-controls.hidden{opacity:0}
+#fs-controls.hidden .fs-hit{pointer-events:none}
+#fs-controls:not(.hidden) .fs-hit{pointer-events:all}
+
+.fs-top-row{
+  position:absolute;top:env(safe-area-inset-top,16px);left:16px;right:16px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.fs-icon-btn{
+  width:40px;height:40px;border-radius:50%;
+  background:rgba(255,255,255,.12);backdrop-filter:blur(10px);
+  border:0.5px solid rgba(255,255,255,.18);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;cursor:pointer;flex-shrink:0;
+  transition:background .15s;
+}
+.fs-icon-btn:hover{background:rgba(255,255,255,.22)}
+.fs-icon-btn:active{transform:scale(.92)}
+.fs-top-actions{display:flex;gap:10px;align-items:center;position:relative}
+
+/* Center play/pause shown only while paused, or briefly on tap */
+.fs-center-play{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:72px;height:72px;border-radius:50%;
+  background:rgba(0,0,0,.4);backdrop-filter:blur(6px);
+  border:0.5px solid rgba(255,255,255,.25);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;cursor:pointer;
+}
+.fs-center-play:active{transform:translate(-50%,-50%) scale(.92)}
+
+.fs-bottom{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:0 18px env(safe-area-inset-bottom,18px);
+  display:flex;flex-direction:column;gap:8px;
+}
+
+/* Scrubber / timeline */
+.fs-scrub-row{
+  display:flex;align-items:center;gap:10px;
+  width:100%;
+}
+.fs-time{
+  font-size:12px;color:rgba(255,255,255,.85);
+  font-variant-numeric:tabular-nums;
+  min-width:38px;text-align:center;
+  text-shadow:0 1px 3px rgba(0,0,0,.6);
+}
+.fs-scrub-track{
+  position:relative;flex:1;height:18px;
+  display:flex;align-items:center;cursor:pointer;
   touch-action:none;
 }
-.pos-editor-stage img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none;}
-.pos-box{
-  position:absolute;border:2px solid var(--gold);border-radius:6px;
-  background:rgba(201,147,58,.16);cursor:move;
-  box-shadow:0 0 0 9999px rgba(0,0,0,.38);
+.fs-scrub-track::before{
+  content:'';position:absolute;left:0;right:0;height:3px;
+  background:rgba(255,255,255,.25);border-radius:2px;
 }
-.pos-box::after{
-  content:'';position:absolute;inset:0;border-radius:6px;
-  background:repeating-linear-gradient(0deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33%)),
-             repeating-linear-gradient(90deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33%));
-  pointer-events:none;opacity:.7;
+.fs-scrub-fill{
+  position:absolute;left:0;height:3px;border-radius:2px;
+  background:var(--gold);width:0%;
+  pointer-events:none;
 }
-.pos-handle{
-  position:absolute;width:18px;height:18px;background:var(--gold);
-  border:2px solid #fff;border-radius:50%;
-  box-shadow:0 1px 4px rgba(0,0,0,.3);
+.fs-scrub-buffer{
+  position:absolute;left:0;height:3px;border-radius:2px;
+  background:rgba(255,255,255,.4);width:0%;
+  pointer-events:none;
 }
-.pos-handle.br{right:-10px;bottom:-10px;cursor:nwse-resize;}
-.ratio-chips{display:flex;gap:8px;margin-bottom:12px;}
-.ratio-chip{
-  flex:1;padding:9px 0;text-align:center;border-radius:8px;
-  border:0.5px solid var(--border);background:var(--surface-warm);
-  font-size:13px;color:var(--ink-muted);cursor:pointer;transition:all .15s;
+.fs-scrub-handle{
+  position:absolute;width:13px;height:13px;border-radius:50%;
+  background:var(--gold);left:0%;
+  transform:translateX(-50%);
+  box-shadow:0 1px 4px rgba(0,0,0,.5);
+  pointer-events:none;
+  transition:transform .1s;
 }
-.ratio-chip:hover{border-color:var(--gold-light)}
-.ratio-chip.active{background:var(--gold-bg);border-color:var(--gold);color:var(--gold);font-weight:500;}
-.pos-editor-hint{font-size:12px;color:var(--ink-faint);margin-bottom:14px;text-align:center;}
+.fs-scrub-track:active .fs-scrub-handle{transform:translateX(-50%) scale(1.25)}
 
-.icon-btn.editing{border-color:var(--gold);color:var(--gold)}
+/* Bottom control row */
+.fs-controls-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-bottom:4px;
+}
+.fs-controls-left, .fs-controls-right{display:flex;align-items:center;gap:18px}
+.fs-ctrl-btn{
+  color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  background:none;border:none;padding:4px;
+}
+.fs-ctrl-btn:active{transform:scale(.9)}
 
-.modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:20px 24px;border-top:0.5px solid var(--border);}
-.target-status{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;background:var(--gold-bg);border:0.5px solid var(--gold-light);font-size:13px;color:var(--gold);margin-bottom:16px;}
-.analytics-row{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:28px;}
-.chart-card{background:var(--surface-card);border:0.5px solid var(--border);border-radius:14px;padding:20px;}
-.chart-title{font-size:13px;font-weight:500;margin-bottom:16px;color:var(--ink)}
-.bar-chart{display:flex;align-items:flex-end;gap:6px;height:80px}
-.bar{flex:1;border-radius:4px 4px 0 0;background:var(--gold-light);position:relative;min-height:4px;transition:background .2s}
-.bar:hover{background:var(--gold)}
-.bar-label{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--ink-faint);white-space:nowrap;}
-.top-memories{display:flex;flex-direction:column;gap:10px;margin-top:4px}
-.top-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:var(--surface-warm);}
-.top-thumb{width:36px;height:36px;border-radius:6px;background:var(--gold-bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;overflow:hidden;}
-.top-thumb img{width:100%;height:100%;object-fit:cover;}
-.top-name{font-size:13px;font-weight:500;color:var(--ink)}
-.top-scans{font-size:12px;color:var(--ink-muted)}
-.mobile-toggle{display:none;position:fixed;bottom:20px;right:20px;z-index:300;width:50px;height:50px;border-radius:50%;background:var(--ink);border:none;cursor:pointer;align-items:center;justify-content:center;color:var(--surface);}
-/* Toast */
-#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);background:rgba(13,11,10,.92);color:#fff;font-size:13px;padding:10px 20px;border-radius:30px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:999;}
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-/* Delete confirm */
-.confirm-bg{display:none;position:fixed;inset:0;z-index:300;background:rgba(13,11,10,.5);align-items:center;justify-content:center;}
-.confirm-bg.open{display:flex}
-.confirm-box{background:var(--surface-card);border-radius:16px;border:0.5px solid var(--border);padding:28px;max-width:340px;width:90%;text-align:center;}
-.confirm-box h3{font-size:16px;font-weight:500;margin-bottom:8px}
-.confirm-box p{font-size:13px;color:var(--ink-muted);margin-bottom:20px;line-height:1.6}
-.confirm-actions{display:flex;gap:10px;justify-content:center;}
-@media(max-width:768px){
-  .sidebar{transform:translateX(-100%);transition:transform .25s}
-  .sidebar.open{transform:translateX(0)}
-  .main{margin-left:0}
-  .stats-row{grid-template-columns:repeat(2,1fr)}
-  .analytics-row{grid-template-columns:1fr}
-  .mobile-toggle{display:flex}
-  .topbar{padding:0 16px}
-  .content{padding:16px}
+/* 3-dot overflow menu */
+.fs-menu{
+  position:absolute;top:48px;right:0;
+  background:rgba(28,26,24,.96);backdrop-filter:blur(14px);
+  border:0.5px solid rgba(255,255,255,.14);
+  border-radius:14px;
+  min-width:180px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);
+  overflow:hidden;
+  display:none;
+  pointer-events:all;
+}
+.fs-menu.open{display:block;animation:fsMenuIn .15s ease both}
+@keyframes fsMenuIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.fs-menu-item{
+  display:flex;align-items:center;gap:12px;
+  padding:13px 16px;color:#fff;font-size:14px;font-weight:500;
+  cursor:pointer;transition:background .15s;
+  white-space:nowrap;
+}
+.fs-menu-item:hover{background:rgba(255,255,255,.08)}
+.fs-menu-item svg{flex-shrink:0;color:var(--gold)}
+
+/* Tiny toast feedback (e.g. "Saved to Photos") */
+#fs-toast{
+  position:absolute;bottom:110px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:rgba(20,18,16,.92);backdrop-filter:blur(10px);
+  border:0.5px solid rgba(255,255,255,.14);
+  color:#fff;font-size:13px;font-weight:500;
+  padding:10px 18px;border-radius:30px;
+  opacity:0;pointer-events:none;
+  transition:opacity .25s,transform .25s;
+  z-index:5;white-space:nowrap;
+}
+#fs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* DEMO OVERLAY - shows when no real AR target loaded */
+#demo-overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(4px);
+  z-index:90;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;padding:40px;
+  text-align:center;
+}
+#demo-overlay.hidden{display:none}
+.demo-card{
+  background:rgba(30,28,26,.9);
+  border:0.5px solid rgba(255,255,255,.12);
+  border-radius:20px;padding:32px;
+  max-width:340px;width:100%;
+}
+.demo-card h2{font-size:20px;font-weight:500;color:#fff;margin-bottom:8px}
+.demo-card p{font-size:14px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:24px}
+.demo-steps{text-align:left;display:flex;flex-direction:column;gap:12px;margin-bottom:24px}
+.demo-step{display:flex;gap:12px;align-items:flex-start}
+.step-num-circle{
+  width:24px;height:24px;border-radius:50%;
+  background:rgba(201,147,58,.2);border:0.5px solid rgba(201,147,58,.4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:500;color:var(--gold);flex-shrink:0;margin-top:1px;
+}
+.demo-step p{font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin:0}
+.btn-demo-start{
+  width:100%;padding:14px;border-radius:10px;
+  background:var(--gold);color:#fff;font-size:15px;font-weight:500;
+  border:none;cursor:pointer;font-family:inherit;
+  transition:opacity .2s;
+}
+.btn-demo-start:hover{opacity:.88}
+.btn-demo-close{
+  background:transparent;border:0.5px solid rgba(255,255,255,.2);
+  color:rgba(255,255,255,.5);padding:10px 20px;border-radius:10px;
+  font-size:13px;cursor:pointer;font-family:inherit;
 }
 </style>
+<!-- Image tracking handled via canvas frame capture -->
 </head>
 <body>
 
-<aside class="sidebar" id="sidebar">
-  <a href="../index.html" class="sidebar-logo">Memo<span>ria</span></a>
-  <div class="sidebar-plan" id="planBadge">✦ Free plan · loading…</div>
-  <div class="sidebar-divider"></div>
-  <span class="sidebar-section">Main</span>
-  <button class="nav-item active" onclick="setView('memories',this)">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-    My Memories
-  </button>
-  <button class="nav-item" onclick="setView('analytics',this)">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
-    Analytics
-  </button>
-  <a href="scanner.html" class="nav-item">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-    Open Scanner
-  </a>
-  <div class="sidebar-footer">
-    <div class="user-chip">
-      <div class="user-avatar">K</div>
-      <div>
-        <div class="user-name">Kittu</div>
-        <div class="user-email">kittu@example.com</div>
+<!-- LOADING -->
+<div id="loading">
+  <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
+  <div class="loading-spinner"></div>
+  <div id="loading-text">
+    <h3 id="loading-title">Starting camera</h3>
+    <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
+    <p id="loading-counter" style="text-align:center"></p>
+  </div>
+</div>
+
+<!-- AR CONTAINER -->
+<div id="ar-container">
+  <video id="camera-video" autoplay playsinline muted></video>
+  <canvas id="ar-canvas"></canvas>
+  <!-- One .ar-video-wrapper is created per detected poster — see spawnArTarget() -->
+  <div id="ar-layer"></div>
+</div>
+
+<!-- SCAN UI -->
+<div id="scan-ui">
+  <div class="scan-topbar">
+    <div class="scan-logo">Memo<span>ria</span></div>
+    <a href="dashboard.html" class="scan-close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </a>
+  </div>
+
+  <div class="finder"></div>
+
+  <div class="status-area">
+    <div class="status-pill ready" id="statusPill">
+      <div class="dot"></div>
+      <span id="statusText">Scanning for photo…</span>
+    </div>
+    <div class="bottom-actions">
+      <div class="fab" onclick="toggleTorch()" id="torchBtn" title="Torch">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div class="fab" onclick="switchCamera()" title="Flip camera">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3l-4-4-4 4"/><path d="M8 3h8"/></svg>
       </div>
     </div>
   </div>
-</aside>
+</div>
 
-<div class="main">
-  <div class="topbar">
-    <div class="topbar-title" id="topbar-title">My Memories</div>
-    <div class="topbar-right">
-      <a href="scanner.html" class="btn-sm">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        Scanner
-      </a>
-      <button class="btn-sm btn-primary" onclick="openUploadModal()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New memory
+<!-- FULLSCREEN VIDEO PLAYER -->
+<div id="fullscreen-player">
+  <video id="fs-video" playsinline></video>
+
+  <div class="fs-scrim-top" id="fsScrimTop"></div>
+  <div class="fs-scrim-bottom" id="fsScrimBottom"></div>
+
+  <!-- tap video to toggle controls -->
+  <div id="fs-tap-zone" onclick="onFsTap(event)"></div>
+
+  <div id="fs-controls">
+    <div class="fs-top-row fs-hit">
+      <button class="fs-icon-btn" onclick="closeFullscreen(event)" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-    </div>
-  </div>
-
-  <div class="content">
-    <!-- STATS -->
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">Total memories</div>
-        <div class="stat-value" id="statTotal">—</div>
-        <div class="stat-sub neutral" id="statTotalSub">loading…</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total scans</div>
-        <div class="stat-value" id="statScans">—</div>
-        <div class="stat-sub" id="statScansSub">loading…</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Most scanned</div>
-        <div class="stat-value" id="statMost" style="font-size:18px">—</div>
-        <div class="stat-sub" id="statMostSub">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Scans today</div>
-        <div class="stat-value" id="statToday">—</div>
-        <div class="stat-sub neutral">today</div>
-      </div>
-    </div>
-
-    <!-- MEMORIES VIEW -->
-    <div id="view-memories">
-      <div class="section-header">
-        <div class="section-title">Your memories</div>
-      </div>
-      <div class="memories-grid" id="memoriesGrid">
-        <div style="color:var(--ink-faint);font-size:13px;padding:20px 0">Loading memories…</div>
-      </div>
-
-      <!-- ANALYTICS -->
-      <div class="analytics-row">
-        <div class="chart-card">
-          <div class="chart-title">Scans over the last 7 days</div>
-          <div class="bar-chart" id="bar-chart"></div>
-          <div style="height:24px"></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Top memories</div>
-          <div class="top-memories" id="topMemories">
-            <div style="color:var(--ink-faint);font-size:13px">Loading…</div>
+      <div class="fs-top-actions">
+        <button class="fs-icon-btn" onclick="toggleFsMenu(event)" aria-label="More options">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+        </button>
+        <div class="fs-menu" id="fsMenu">
+          <div class="fs-menu-item" onclick="downloadCurrentVideo(event)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download video
           </div>
         </div>
       </div>
     </div>
 
-  </div>
-</div>
+    <button class="fs-center-play fs-hit" id="fsCenterPlay" onclick="toggleFsPlay(event)" aria-label="Play">
+      <svg id="fsCenterIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
 
-<!-- UPLOAD MODAL -->
-<div class="modal-bg" id="uploadModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 id="uploadModalTitle">New memory</h2>
-      <button class="modal-close" onclick="closeUploadModal()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-
-    <!-- STEP 1 — file selection -->
-    <div class="modal-body" id="uploadStep1">
-      <div class="form-group">
-        <label>Memory title *</label>
-        <input type="text" id="memTitle" placeholder="e.g. Wedding day at Taj Palace" maxlength="100"/>
-      </div>
-      <div class="form-group">
-        <label>Upload photo <span style="color:var(--ink-faint)">(the one you've printed or will print)</span></label>
-        <div class="upload-zone" id="photoZone" onclick="document.getElementById('photoInput').click()">
-          <div class="upload-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          </div>
-          <p><strong>Click to upload</strong> or drag and drop</p>
-          <small>JPG, PNG — max 20MB</small>
+    <div class="fs-bottom fs-hit">
+      <div class="fs-scrub-row">
+        <span class="fs-time" id="fsTimeCurrent">0:00</span>
+        <div class="fs-scrub-track" id="fsScrubTrack">
+          <div class="fs-scrub-buffer" id="fsScrubBuffer"></div>
+          <div class="fs-scrub-fill" id="fsScrubFill"></div>
+          <div class="fs-scrub-handle" id="fsScrubHandle"></div>
         </div>
-        <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)"/>
+        <span class="fs-time" id="fsTimeDuration">0:00</span>
       </div>
-      <div class="form-group">
-        <label>Upload video <span style="color:var(--ink-faint)">(the moment this photo comes from)</span></label>
-        <div class="upload-zone" id="videoZone" onclick="document.getElementById('videoInput').click()">
-          <div class="upload-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-          </div>
-          <p><strong>Click to upload</strong> or drag and drop</p>
-          <small>MP4, MOV, WebM — max 500MB</small>
+      <div class="fs-controls-row">
+        <div class="fs-controls-left">
+          <button class="fs-ctrl-btn" onclick="toggleFsPlay(event)" id="fsPlayBtn" aria-label="Play/pause">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
         </div>
-        <input type="file" id="videoInput" accept="video/*" style="display:none" onchange="handleVideoSelect(this)"/>
-      </div>
-      <div class="form-group">
-        <label>Description <span style="color:var(--ink-faint)">(optional)</span></label>
-        <textarea id="memDesc" placeholder="Add a note about this memory…"></textarea>
-      </div>
-      <div id="uploadError" style="display:none;color:var(--red);font-size:13px;margin-top:8px;padding:10px 14px;background:var(--red-bg);border-radius:8px;"></div>
-    </div>
-
-    <!-- STEP 2 — position editor (drag/resize video box on the photo) -->
-    <div class="modal-body" id="uploadStep2" style="display:none">
-      <div class="ratio-chips" id="ratioChips">
-        <div class="ratio-chip active" data-ratio="9:16" onclick="setRatio('9:16')">9:16 <span style="opacity:.6">Reel</span></div>
-        <div class="ratio-chip" data-ratio="1:1" onclick="setRatio('1:1')">1:1 <span style="opacity:.6">Square</span></div>
-        <div class="ratio-chip" data-ratio="4:5" onclick="setRatio('4:5')">4:5 <span style="opacity:.6">Post</span></div>
-      </div>
-      <div class="pos-editor-stage" id="posStage">
-        <img id="posStageImg" src="" alt="photo preview"/>
-        <div class="pos-box" id="posBox">
-          <div class="pos-handle br" id="posHandleResize"></div>
+        <div class="fs-controls-right">
+          <button class="fs-ctrl-btn" onclick="toggleFsMute(event)" id="fsMuteBtn" aria-label="Mute/unmute">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>
+          </button>
         </div>
       </div>
-      <div class="pos-editor-hint">Drag to move where the video plays on your photo · drag corner to resize</div>
-      <div id="uploadError2" style="display:none;color:var(--red);font-size:13px;margin-top:4px;padding:10px 14px;background:var(--red-bg);border-radius:8px;"></div>
-      <div class="progress-bar" id="videoProgress"><div class="progress-fill" id="videoFill"></div></div>
-      <div class="upload-stats-row" id="uploadSizeLabel" style="display:none">
-        <span id="uploadStatsText"></span>
-        <span id="uploadSpeedText"></span>
-      </div>
-    </div>
-
-    <div class="modal-footer" id="footerStep1">
-      <button class="btn-sm" onclick="closeUploadModal()" id="cancelBtn">Cancel</button>
-      <button class="btn-sm btn-primary" onclick="goToPositionStep()" id="nextBtn">Next: position video</button>
-    </div>
-    <div class="modal-footer" id="footerStep2" style="display:none">
-      <button class="btn-sm" onclick="backToStep1()" id="backBtn">Back</button>
-      <button class="btn-sm btn-primary" onclick="doUpload()" id="uploadBtn">Upload & generate AR target</button>
     </div>
   </div>
+
+  <div id="fs-toast"></div>
 </div>
 
-<!-- EDIT POSITION MODAL (existing memory — metadata-only save, no re-upload) -->
-<div class="modal-bg" id="positionEditModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h2>Edit video position</h2>
-      <button class="modal-close" onclick="closePositionEditModal()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="ratio-chips" id="ratioChipsEdit">
-        <div class="ratio-chip" data-ratio="9:16" onclick="setRatioEdit('9:16')">9:16 <span style="opacity:.6">Reel</span></div>
-        <div class="ratio-chip" data-ratio="1:1" onclick="setRatioEdit('1:1')">1:1 <span style="opacity:.6">Square</span></div>
-        <div class="ratio-chip" data-ratio="4:5" onclick="setRatioEdit('4:5')">4:5 <span style="opacity:.6">Post</span></div>
+<!-- DEMO INTRO OVERLAY -->
+<div id="demo-overlay">
+  <div class="demo-card">
+    <h2>AR Scanner</h2>
+    <p>This is the scanner your recipients open when they receive a Memoria photo. Here's how it works in production:</p>
+    <div class="demo-steps">
+      <div class="demo-step">
+        <div class="step-num-circle">1</div>
+        <p>Camera opens and continuously analyses the live feed — no scan button, fully automatic</p>
       </div>
-      <div class="pos-editor-stage" id="posStageEdit">
-        <img id="posStageImgEdit" src="" alt="photo preview"/>
-        <div class="pos-box" id="posBoxEdit">
-          <div class="pos-handle br" id="posHandleResizeEdit"></div>
-        </div>
+      <div class="demo-step">
+        <div class="step-num-circle">2</div>
+        <p>Every registered photo in view gets its own video, fitted exactly to that photo and tracking its position, size and angle</p>
       </div>
-      <div class="pos-editor-hint">Drag to move where the video plays on this photo · drag corner to resize</div>
-      <div id="positionEditError" style="display:none;color:var(--red);font-size:13px;margin-top:4px;padding:10px 14px;background:var(--red-bg);border-radius:8px;"></div>
+      <div class="demo-step">
+        <div class="step-num-circle">3</div>
+        <p>Tap any playing video to open it fullscreen with audio. Tracking resumes when you close it</p>
+      </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn-sm" onclick="closePositionEditModal()" id="positionEditCancelBtn">Cancel</button>
-      <button class="btn-sm btn-primary" onclick="savePositionEdit()" id="positionEditSaveBtn">Save</button>
-    </div>
+    <button class="btn-demo-start" onclick="startScanner()">Open camera & scan</button>
   </div>
+  <button class="btn-demo-close" onclick="document.getElementById('demo-overlay').classList.add('hidden')">Skip intro</button>
 </div>
-
-<!-- DELETE CONFIRM -->
-<div class="confirm-bg" id="confirmModal">
-  <div class="confirm-box">
-    <h3>Delete memory?</h3>
-    <p>This will permanently delete the photo, video, and all scan data. This cannot be undone.</p>
-    <div class="confirm-actions">
-      <button class="btn-sm" onclick="closeConfirm()">Cancel</button>
-      <button class="btn-sm btn-primary" style="background:var(--red);border-color:var(--red)" onclick="confirmDelete()" id="confirmDeleteBtn">Delete</button>
-    </div>
-  </div>
-</div>
-
-<div id="toast"></div>
-
-<button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-</button>
 
 <script>
-/* ── CONFIG ────────────────────────────────────────────────── */
-const API = 'https://memoria-ar-backend.onrender.com';
+/* ============================================================
+   STATE
+============================================================ */
+const BACKEND_URL = 'https://memoria-ar-backend.onrender.com';
 
-/* ── STATE ─────────────────────────────────────────────────── */
-let memories = [];
-let deleteTargetId = null;
-let photoFile = null;
-let videoFile = null;
+let stream=null;
+let facingMode='environment';
+let torchOn=false;
 
-/* ── BOOT ──────────────────────────────────────────────────── */
-loadAll();
+/* Registry of every currently-tracked poster: key -> {wrapper, video, lastSeen}
+   Multiple posters can be live at once, each with its own independent video,
+   sized/rotated to exactly match that poster's own on-screen rectangle. */
+const arTargets=new Map();
 
-async function loadAll() {
-  await Promise.all([loadMemories(), loadStats()]);
+/* ============================================================
+   PERMISSION-AWARE STARTUP
+   Flow: camera permission (once, remembered) → live feed →
+   wake backend if cold → begin AR. Never overlap.
+============================================================ */
+const PERM_KEY = 'memoria_camera_granted';
+let _backendReady = false;
+
+function setLoadingState(title, sub, counter) {
+  document.getElementById('loading-title').textContent = title;
+  document.getElementById('loading-sub').textContent = sub;
+  document.getElementById('loading-counter').textContent = counter || '';
 }
 
-/* ── LOAD MEMORIES ─────────────────────────────────────────── */
-async function loadMemories() {
+async function wakeBackend() {
+  if (_backendReady) return;
+  setLoadingState('Waking up backend…', 'Free Render instances sleep after inactivity. This takes 30–60s.', '');
+  let secs = 0;
+  const timer = setInterval(() => {
+    secs++;
+    document.getElementById('loading-counter').textContent = secs + 's elapsed…';
+  }, 1000);
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) { _backendReady = true; break; }
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  clearInterval(timer);
+}
+
+async function initScanner() {
+  let alreadyGranted = localStorage.getItem(PERM_KEY) === 'true';
+  if (navigator.permissions && navigator.permissions.query) {
+    try {
+      const status = await navigator.permissions.query({ name: 'camera' });
+      if (status.state === 'granted') alreadyGranted = true;
+      if (status.state === 'denied')  alreadyGranted = false;
+      status.onchange = () => {
+        if (status.state === 'granted') localStorage.setItem(PERM_KEY, 'true');
+        if (status.state === 'denied')  localStorage.removeItem(PERM_KEY);
+      };
+    } catch (_) {}
+  }
+  if (alreadyGranted) {
+    document.getElementById('demo-overlay').classList.add('hidden');
+    startScanner();
+  }
+  // else: show intro card; user taps 'Open camera & scan'
+}
+
+async function startScanner() {
+  document.getElementById('demo-overlay').classList.add('hidden');
+  setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
+  document.getElementById('loading').classList.remove('hidden');
   try {
-    const res = await fetch(`${API}/api/memories`);
-    const json = await res.json();
-    memories = json.data || [];
-    renderMemories();
-    updateStatCards();
-  } catch(e) {
-    document.getElementById('memoriesGrid').innerHTML =
-      '<div style="color:var(--red);font-size:13px;padding:20px 0">Failed to load memories. Is the backend running?</div>';
-  }
-}
-
-/* ── LOAD SCAN STATS ───────────────────────────────────────── */
-async function loadStats() {
-  try {
-    const res = await fetch(`${API}/api/scan/stats`);
-    const json = await res.json();
-    const { totals, perMemory } = json.data;
-
-    document.getElementById('statScans').textContent = totals.allTime;
-    document.getElementById('statScansSub').textContent = `↑ ${totals.week} this week`;
-    document.getElementById('statToday').textContent = totals.today;
-
-    // Bar chart — last 7 days from perMemory aggregate (use totals.week as reference)
-    renderBarChart(perMemory);
-
-    // Top memories list
-    renderTopMemories(perMemory);
-  } catch(e) { /* stats non-critical */ }
-}
-
-/* ── UPDATE STAT CARDS FROM MEMORIES ──────────────────────── */
-function updateStatCards() {
-  document.getElementById('statTotal').textContent = memories.length;
-  document.getElementById('statTotalSub').textContent = `of 50 on free plan`;
-  document.getElementById('planBadge').textContent = `✦ Free plan · ${memories.length} memories`;
-
-  if (memories.length > 0) {
-    const top = [...memories].sort((a,b) => (b.scanCount||0) - (a.scanCount||0))[0];
-    document.getElementById('statMost').textContent = top.title.length > 14 ? top.title.slice(0,14)+'…' : top.title;
-    document.getElementById('statMostSub').textContent = `${top.scanCount || 0} scans`;
-  } else {
-    document.getElementById('statMost').textContent = '—';
-    document.getElementById('statMostSub').textContent = 'no memories yet';
-  }
-}
-
-/* ── RENDER MEMORIES GRID ──────────────────────────────────── */
-function renderMemories() {
-  const grid = document.getElementById('memoriesGrid');
-  if (memories.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state" style="grid-column:1/-1">
-        <div class="empty-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        </div>
-        <h3>No memories yet</h3>
-        <p>Upload a photo and a video to create your first AR memory.</p>
-        <button class="btn-sm btn-primary" onclick="openUploadModal()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New memory
-        </button>
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    localStorage.setItem(PERM_KEY, 'true');
+    const video = document.getElementById('camera-video');
+    video.srcObject = stream;
+    await video.play();
+    // Camera is live — now wake backend (sequential, no overlap)
+    await wakeBackend();
+    setTimeout(() => {
+      document.getElementById('loading').classList.add('hidden');
+      beginMindAR();
+    }, 300);
+  } catch (err) {
+    localStorage.removeItem(PERM_KEY);
+    document.getElementById('loading').innerHTML = `
+      <div style="text-align:center;padding:40px">
+        <div style="font-size:32px;margin-bottom:16px">📷</div>
+        <h3 style="color:#fff;margin-bottom:8px">Camera access needed</h3>
+        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6">
+          Please allow camera access in your browser settings and reload.</p>
+        <button onclick="location.reload()"
+          style="margin-top:20px;padding:12px 24px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
+          Try again</button>
       </div>`;
-    return;
   }
-
-  grid.innerHTML = memories.map(m => {
-    const date = new Date(m.createdAt).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
-    const thumb = m.photoUrl
-      ? `<img class="memory-thumb-img" src="${m.photoUrl}" alt="${m.title}" loading="lazy"/>
-         <div class="memory-thumb-overlay"><div class="play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`
-      : `<div style="color:var(--ink-faint);font-size:12px">${m.title}</div>
-         <div class="memory-thumb-overlay"><div class="play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`;
-
-    return `
-      <div class="memory-card">
-        <div class="memory-thumb-placeholder" style="position:relative">
-          ${thumb}
-        </div>
-        <div class="memory-info">
-          <div class="memory-title">${m.title}</div>
-          <div class="memory-date">Added ${date}</div>
-          <div class="memory-meta">
-            <div class="scan-badge">
-              <span class="status-dot"></span>
-              ${m.scanCount || 0} scans
-            </div>
-            <div class="memory-actions">
-              <div class="icon-btn" title="Edit video position" onclick="openPositionEditModal('${m._id}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2"/></svg>
-              </div>
-              <div class="icon-btn" title="Copy scanner link" onclick="copyLink('${m._id}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-              </div>
-              <div class="icon-btn danger" title="Delete" onclick="askDelete('${m._id}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>`;
-  }).join('') + `
-    <div class="memory-card" style="border-style:dashed;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:240px" onclick="openUploadModal()">
-      <div style="text-align:center;color:var(--ink-faint)">
-        <div style="width:44px;height:44px;border-radius:10px;background:var(--gold-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </div>
-        <div style="font-size:13px;font-weight:500;color:var(--ink-muted)">Add memory</div>
-      </div>
-    </div>`;
 }
 
-/* ── BAR CHART (last 7 days labels, scan count from stats) ── */
-function renderBarChart(perMemory) {
-  const chart = document.getElementById('bar-chart');
-  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  // Distribute total week scans across days as a placeholder visual
-  const total = perMemory.reduce((s,m) => s + m.scans, 0);
-  const base = Math.max(1, Math.floor(total / 7));
-  const vals = days.map((_,i) => Math.max(1, base + Math.round((Math.random()-0.5)*base*0.6)));
-  vals[new Date().getDay() === 0 ? 6 : new Date().getDay()-1] = Math.max(...vals); // today is highest
-  const max = Math.max(...vals);
-  chart.innerHTML = '';
-  days.forEach((d,i) => {
-    const bar = document.createElement('div');
-    bar.className = 'bar';
-    bar.style.height = (vals[i]/max*100)+'%';
-    bar.innerHTML = `<span class="bar-label">${d}</span>`;
-    chart.appendChild(bar);
-  });
-}
-
-/* ── TOP MEMORIES LIST ─────────────────────────────────────── */
-function renderTopMemories(perMemory) {
-  const el = document.getElementById('topMemories');
-  if (!perMemory || perMemory.length === 0) {
-    el.innerHTML = '<div style="color:var(--ink-faint);font-size:13px">No scans yet</div>';
-    return;
+/* Resume camera when user returns to tab / app after switching away */
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!stream) return;
+  const tracks = stream.getVideoTracks();
+  if (tracks.length === 0 || tracks[0].readyState === 'ended') {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      const video = document.getElementById('camera-video');
+      video.srcObject = stream;
+      await video.play();
+    } catch (_) {}
   }
-  el.innerHTML = perMemory.slice(0,3).map(m => {
-    const mem = memories.find(x => x._id === String(m.memoryId));
-    const thumb = mem?.photoUrl
-      ? `<img src="${mem.photoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px"/>`
-      : '📷';
-    return `
-      <div class="top-item">
-        <div class="top-thumb">${thumb}</div>
-        <div>
-          <div class="top-name">${m.title || mem?.title || 'Memory'}</div>
-          <div class="top-scans">${m.scans} scans this week</div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-/* ── UPLOAD MODAL ──────────────────────────────────────────── */
-let photoFileOriginal = null; // original picked file, kept for re-pick comparisons
-let compressedPhotoBlob = null; // compressed version actually sent to server
-let photoNaturalW = 0, photoNaturalH = 0;
-
-function openUploadModal() {
-  photoFile = null; videoFile = null; photoFileOriginal = null; compressedPhotoBlob = null;
-  document.getElementById('memTitle').value = '';
-  document.getElementById('memDesc').value = '';
-  document.getElementById('uploadError').style.display = 'none';
-  document.getElementById('uploadError2').style.display = 'none';
-  document.getElementById('videoProgress').classList.remove('show');
-  document.getElementById('videoFill').style.width = '0%';
-  document.getElementById('uploadSizeLabel').style.display = 'none';
-  resetZone('photoZone', 'photo');
-  resetZone('videoZone', 'video');
-  showUploadStep(1);
-  document.getElementById('uploadModalTitle').textContent = 'New memory';
-  document.getElementById('uploadModal').classList.add('open');
-}
-function closeUploadModal() {
-  document.getElementById('uploadModal').classList.remove('open');
-  cancelActiveUpload();
-}
-document.getElementById('uploadModal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeUploadModal();
 });
 
-function showUploadStep(step) {
-  document.getElementById('uploadStep1').style.display = step === 1 ? 'block' : 'none';
-  document.getElementById('uploadStep2').style.display = step === 2 ? 'block' : 'none';
-  document.getElementById('footerStep1').style.display  = step === 1 ? 'flex' : 'none';
-  document.getElementById('footerStep2').style.display  = step === 2 ? 'flex' : 'none';
-}
+/* ============================================================
+   AR TRACKING — canvas frame capture + backend match
+   Uses the already-open camera stream (no AR.js conflict).
+   Every SCAN_INTERVAL ms: capture a frame → POST to /api/scan/match
+   → backend returns which memory matched + bounding box →
+   overlay the AR video exactly over that region.
+============================================================ */
+let _scanLoop = null;
+let _targets = [];        // fetched once on init, cached
+let _matchCooldown = {};  // per-target: don't re-trigger within 3s of last match
+const SCAN_INTERVAL = 800; // ms between frame captures
 
-function resetZone(id, type) {
-  const zone = document.getElementById(id);
-  zone.className = 'upload-zone';
-  if (type === 'photo') {
-    zone.onclick = () => document.getElementById('photoInput').click();
-    zone.innerHTML = `<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><p><strong>Click to upload</strong> or drag and drop</p><small>JPG, PNG — max 20MB</small>`;
-  } else {
-    zone.onclick = () => document.getElementById('videoInput').click();
-    zone.innerHTML = `<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></div><p><strong>Click to upload</strong> or drag and drop</p><small>MP4, MOV, WebM — max 500MB</small>`;
-  }
-}
+async function beginMindAR() {
+  const statusText = document.getElementById('statusText');
+  const pill = document.getElementById('statusPill');
 
-function handlePhotoSelect(input) {
-  if (!input.files.length) return;
-  photoFileOriginal = input.files[0];
-  photoFile = photoFileOriginal; // placeholder until compression finishes
-  const zone = document.getElementById('photoZone');
-  zone.classList.add('has-file');
-  zone.innerHTML = `<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><p><strong>${photoFileOriginal.name}</strong></p><small>Optimizing…</small>`;
+  try {
+    pill.className = 'status-pill ready';
+    statusText.textContent = 'Loading memories…';
 
-  compressPhoto(photoFileOriginal).then(({ blob, width, height }) => {
-    compressedPhotoBlob = blob;
-    photoFile = blob;
-    photoNaturalW = width; photoNaturalH = height;
-    const savedPct = Math.max(0, Math.round((1 - blob.size / photoFileOriginal.size) * 100));
-    const savedNote = savedPct > 0 ? ` · optimized ${savedPct}% smaller, same quality` : '';
-    zone.innerHTML = `<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><p><strong>${photoFileOriginal.name}</strong></p><small>${(blob.size/1024/1024).toFixed(1)}MB${savedNote}</small>`;
-  }).catch(() => {
-    // Compression failed (e.g. unsupported format) — fall back to original file untouched
-    compressedPhotoBlob = null;
-    photoFile = photoFileOriginal;
-    zone.innerHTML = `<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><p><strong>${photoFileOriginal.name}</strong></p><small>${(photoFileOriginal.size/1024/1024).toFixed(1)}MB · ready</small>`;
-  });
-}
+    const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
+    if (!res.ok) throw new Error(`Backend ${res.status}`);
+    const data = await res.json();
 
-/* Resize/compress a photo in-browser before upload. Caps the longest edge at
-   1600px and re-encodes as JPEG at quality 0.85 — visually indistinguishable
-   from the original but a fraction of the bytes, so it uploads much faster
-   on slow connections without losing perceptible quality. */
-function compressPhoto(file, maxEdge = 1600, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width, height } = img;
-      if (width > maxEdge || height > maxEdge) {
-        if (width >= height) { height = Math.round(height * (maxEdge / width)); width = maxEdge; }
-        else { width = Math.round(width * (maxEdge / height)); height = maxEdge; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(blob => {
-        if (!blob) return reject(new Error('toBlob failed'));
-        // Only use the compressed version if it's actually smaller —
-        // tiny/already-optimized images can come out larger as JPEG.
-        if (blob.size >= file.size) return resolve({ blob: file, width, height });
-        resolve({ blob, width, height });
-      }, 'image/jpeg', quality);
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-
-function handleVideoSelect(input) {
-  if (!input.files.length) return;
-  videoFile = input.files[0];
-  const zone = document.getElementById('videoZone');
-  zone.classList.add('has-file');
-  zone.innerHTML = `<div class="upload-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><p><strong>${videoFile.name}</strong></p><small>${(videoFile.size/1024/1024).toFixed(1)}MB · ready</small>`;
-}
-
-/* ── STEP 2 — POSITION EDITOR ─────────────────────────────────
-   Shared drag/resize engine, instantiated once for the "new memory"
-   flow (uploadStep2) and once for the "edit existing memory" modal.
-   Geometry is tracked as % of the stage's rendered photo box, so it
-   maps directly onto Memory.videoRect (also %-based, scale-free). */
-function createPosEditor(stageId, imgId, boxId, handleId) {
-  const stage = document.getElementById(stageId);
-  const img = document.getElementById(imgId);
-  const box = document.getElementById(boxId);
-  const handle = document.getElementById(handleId);
-
-  const RATIOS = { '9:16': 9/16, '1:1': 1, '4:5': 4/5 };
-  let state = { ratio: '9:16', xPct: 50, yPct: 50, widthPct: 45, heightPct: 80 };
-
-  function imgBox() {
-    // The <img> uses object-fit:contain inside the stage, so its rendered
-    // box may be smaller than the stage (letterboxed). All % math must be
-    // relative to the actual rendered image, not the stage container.
-    const sr = stage.getBoundingClientRect();
-    const natW = img.naturalWidth || 1, natH = img.naturalHeight || 1;
-    const stageRatio = sr.width / sr.height;
-    const natRatio = natW / natH;
-    let w, h, offX, offY;
-    if (natRatio > stageRatio) { w = sr.width; h = w / natRatio; offX = 0; offY = (sr.height - h) / 2; }
-    else { h = sr.height; w = h * natRatio; offY = 0; offX = (sr.width - w) / 2; }
-    return { width: w, height: h, offX, offY, stageW: sr.width, stageH: sr.height };
-  }
-
-  function clampState() {
-    state.widthPct = Math.min(95, Math.max(8, state.widthPct));
-    state.heightPct = Math.min(95, Math.max(8, state.heightPct));
-    const halfW = state.widthPct / 2, halfH = state.heightPct / 2;
-    state.xPct = Math.min(100 - halfW, Math.max(halfW, state.xPct));
-    state.yPct = Math.min(100 - halfH, Math.max(halfH, state.yPct));
-  }
-
-  function render() {
-    const ib = imgBox();
-    const wPx = (state.widthPct / 100) * ib.width;
-    const hPx = (state.heightPct / 100) * ib.height;
-    const cxPx = ib.offX + (state.xPct / 100) * ib.width;
-    const cyPx = ib.offY + (state.yPct / 100) * ib.height;
-    box.style.width = wPx + 'px';
-    box.style.height = hPx + 'px';
-    box.style.left = (cxPx - wPx / 2) + 'px';
-    box.style.top = (cyPx - hPx / 2) + 'px';
-  }
-
-  function setRatioInternal(ratioKey) {
-    state.ratio = ratioKey;
-    // Resize keeping the box's current area roughly constant so switching
-    // ratio doesn't make it jump drastically in scale.
-    const target = RATIOS[ratioKey];
-    const ib = imgBox();
-    const curWpx = (state.widthPct/100)*ib.width, curHpx = (state.heightPct/100)*ib.height;
-    const area = curWpx * curHpx;
-    let hPx = Math.sqrt(area / target);
-    let wPx = hPx * target;
-    state.widthPct = (wPx / ib.width) * 100;
-    state.heightPct = (hPx / ib.height) * 100;
-    clampState();
-    render();
-  }
-
-  function setFromMemory(rect) {
-    state = { ratio: rect.ratio || '9:16', xPct: rect.x ?? 50, yPct: rect.y ?? 50, widthPct: rect.width ?? 45, heightPct: rect.height ?? 80 };
-    clampState();
-    render();
-  }
-
-  // ── Drag to move ──
-  let dragMode = null; // 'move' | 'resize' | null
-  let dragStart = null;
-
-  function onPointerDown(e, mode) {
-    e.preventDefault();
-    dragMode = mode;
-    const pt = e.touches ? e.touches[0] : e;
-    dragStart = { px: pt.clientX, py: pt.clientY, ...state };
-    window.addEventListener('mousemove', onPointerMove);
-    window.addEventListener('mouseup', onPointerUp);
-    window.addEventListener('touchmove', onPointerMove, { passive: false });
-    window.addEventListener('touchend', onPointerUp);
-  }
-
-  function onPointerMove(e) {
-    if (!dragMode) return;
-    e.preventDefault();
-    const pt = e.touches ? e.touches[0] : e;
-    const ib = imgBox();
-    const dxPct = ((pt.clientX - dragStart.px) / ib.width) * 100;
-    const dyPct = ((pt.clientY - dragStart.py) / ib.height) * 100;
-
-    if (dragMode === 'move') {
-      state.xPct = dragStart.xPct + dxPct;
-      state.yPct = dragStart.yPct + dyPct;
-    } else if (dragMode === 'resize') {
-      // Resize from bottom-right corner, keep locked aspect ratio.
-      const target = RATIOS[state.ratio];
-      let newWpx = ((dragStart.widthPct/100)*ib.width) + (pt.clientX - dragStart.px);
-      newWpx = Math.max(40, newWpx);
-      const newHpx = newWpx / target;
-      state.widthPct = (newWpx / ib.width) * 100;
-      state.heightPct = (newHpx / ib.height) * 100;
-    }
-    clampState();
-    render();
-  }
-
-  function onPointerUp() {
-    dragMode = null;
-    window.removeEventListener('mousemove', onPointerMove);
-    window.removeEventListener('mouseup', onPointerUp);
-    window.removeEventListener('touchmove', onPointerMove);
-    window.removeEventListener('touchend', onPointerUp);
-  }
-
-  box.addEventListener('mousedown', e => { if (e.target === handle) return; onPointerDown(e, 'move'); });
-  box.addEventListener('touchstart', e => { if (e.target === handle) return; onPointerDown(e, 'move'); }, { passive: false });
-  handle.addEventListener('mousedown', e => onPointerDown(e, 'resize'));
-  handle.addEventListener('touchstart', e => onPointerDown(e, 'resize'), { passive: false });
-
-  window.addEventListener('resize', render);
-
-  return {
-    setImage(url) { img.src = url; img.onload = render; },
-    setRatio: setRatioInternal,
-    setFromMemory,
-    getRect() { return { ratio: state.ratio, x: state.xPct, y: state.yPct, width: state.widthPct, height: state.heightPct }; },
-    render,
-  };
-}
-
-const uploadPosEditor = createPosEditor('posStage', 'posStageImg', 'posBox', 'posHandleResize');
-const editPosEditor = createPosEditor('posStageEdit', 'posStageImgEdit', 'posBoxEdit', 'posHandleResizeEdit');
-
-function setRatio(ratioKey) {
-  document.querySelectorAll('#ratioChips .ratio-chip').forEach(c => c.classList.toggle('active', c.dataset.ratio === ratioKey));
-  uploadPosEditor.setRatio(ratioKey);
-}
-
-function goToPositionStep() {
-  const title = document.getElementById('memTitle').value.trim();
-  const errEl = document.getElementById('uploadError');
-  errEl.style.display = 'none';
-
-  if (!title)      { showErr('Please enter a title.'); return; }
-  if (!photoFile)  { showErr('Please select a photo file.'); return; }
-  if (!videoFile)  { showErr('Please select a video file.'); return; }
-
-  const previewUrl = URL.createObjectURL(photoFile);
-  uploadPosEditor.setImage(previewUrl);
-  // Default to 9:16, centered — matches schema default
-  document.querySelectorAll('#ratioChips .ratio-chip').forEach(c => c.classList.toggle('active', c.dataset.ratio === '9:16'));
-  uploadPosEditor.setFromMemory({ ratio: '9:16', x: 50, y: 50, width: 45, height: 80 });
-  showUploadStep(2);
-}
-
-function backToStep1() {
-  showUploadStep(1);
-}
-
-/* ── RESUMABLE UPLOAD WITH LIVE SPEED + DATA-USED DISPLAY ─────
-   Plain XHR upload, but wrapped with automatic retry: if the
-   connection drops mid-transfer, it backs off briefly and resends
-   the whole request (Cloudinary upload is fast enough that a full
-   resend is simpler and more reliable than byte-range resume, and
-   the backend doesn't support partial uploads). Files are never
-   recompressed between retries, so the same fast, optimized payload
-   goes out each time — only the network attempt repeats. ── */
-let _activeXhr = null;
-let _uploadCancelled = false;
-let _retryCount = 0;
-const MAX_RETRIES = 5;
-
-function cancelActiveUpload() {
-  _uploadCancelled = true;
-  if (_activeXhr) { try { _activeXhr.abort(); } catch(_){} }
-  _activeXhr = null;
-}
-
-function fmtBytes(b) {
-  if (b >= 1048576) return (b/1048576).toFixed(1) + ' MB';
-  return (b/1024).toFixed(0) + ' KB';
-}
-
-function doUpload() {
-  _uploadCancelled = false;
-  _retryCount = 0;
-
-  const rect = uploadPosEditor.getRect();
-  startUploadAttempt(rect);
-}
-
-function startUploadAttempt(rect) {
-  const title = document.getElementById('memTitle').value.trim();
-  const desc  = document.getElementById('memDesc').value.trim();
-  const err2  = document.getElementById('uploadError2');
-  err2.style.display = 'none';
-
-  const btn      = document.getElementById('uploadBtn');
-  const back     = document.getElementById('backBtn');
-  const progress = document.getElementById('videoProgress');
-  const fill     = document.getElementById('videoFill');
-  const statsRow = document.getElementById('uploadSizeLabel');
-  const statsText = document.getElementById('uploadStatsText');
-  const speedText = document.getElementById('uploadSpeedText');
-
-  btn.textContent = _retryCount > 0 ? 'Reconnecting…' : 'Uploading…';
-  btn.disabled = true;
-  back.disabled = true;
-  progress.classList.add('show');
-  fill.style.transition = 'width 0.2s ease';
-  statsRow.style.display = 'flex';
-
-  const totalBytes = photoFile.size + videoFile.size;
-  let lastLoaded = 0, lastTime = performance.now();
-
-  const form = new FormData();
-  form.append('title', title);
-  if (desc) form.append('description', desc);
-  form.append('photo', photoFile, 'photo.jpg');
-  form.append('video', videoFile);
-  form.append('videoRect', JSON.stringify(rect));
-
-  const xhr = new XMLHttpRequest();
-  _activeXhr = xhr;
-
-  xhr.upload.addEventListener('progress', e => {
-    if (!e.lengthComputable) return;
-    const pct = Math.round((e.loaded / e.total) * 70);
-    fill.style.width = pct + '%';
-    btn.textContent = `Uploading… ${pct}%`;
-
-    const now = performance.now();
-    const dt = (now - lastTime) / 1000;
-    if (dt > 0.4) {
-      const bytesPerSec = (e.loaded - lastLoaded) / dt;
-      speedText.textContent = bytesPerSec > 0 ? `${fmtBytes(bytesPerSec)}/s` : '';
-      lastLoaded = e.loaded; lastTime = now;
-    }
-    statsText.textContent = `${fmtBytes(e.loaded)} / ${fmtBytes(totalBytes)} used`;
-  });
-
-  xhr.upload.addEventListener('load', () => {
-    fill.style.transition = 'width 1.5s ease';
-    fill.style.width = '95%';
-    btn.textContent = 'Processing…';
-    statsText.textContent = `${fmtBytes(totalBytes)} / ${fmtBytes(totalBytes)} used`;
-    speedText.textContent = '';
-  });
-
-  xhr.addEventListener('load', () => {
-    _activeXhr = null;
-    fill.style.transition = 'width 0.2s ease';
-    fill.style.width = '100%';
-
-    let json;
-    try { json = JSON.parse(xhr.responseText); } catch(_) { json = {}; }
-
-    if (xhr.status < 200 || xhr.status >= 300) {
-      showErr2(json.message || 'Upload failed. Please try again.');
-      resetUploadBtn(btn, back);
+    if (!data.success || !data.data.targets || data.data.targets.length === 0) {
+      statusText.textContent = 'No memories uploaded yet.';
       return;
     }
 
-    setTimeout(() => {
-      closeUploadModal();
-      showToast('Memory created! ✓');
-      loadAll();
-      resetUploadBtn(btn, back);
-    }, 300);
-  });
+    _targets = data.data.targets;
+    statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
-  xhr.addEventListener('error', () => {
-    _activeXhr = null;
-    attemptRetryOrFail(rect, btn, back, speedText, 'Network error.');
-  });
+    // Preload all target reference images (used for client-side pixel comparison)
+    await Promise.all(_targets.map(t => new Promise(resolve => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => { t._refImg = img; resolve(); };
+      img.onerror = resolve;
+      img.src = t.photoUrl;
+    })));
 
-  xhr.addEventListener('timeout', () => {
-    _activeXhr = null;
-    attemptRetryOrFail(rect, btn, back, speedText, 'Upload timed out.');
-  });
+    // Preload all videos so they play instantly on detection
+    _targets.forEach(t => {
+      const v = document.createElement('video');
+      v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
+    });
 
-  xhr.addEventListener('abort', () => {
-    _activeXhr = null;
-  });
+    startScanLoop();
 
-  xhr.timeout = 300_000; // 5 min max per attempt
-  xhr.open('POST', `${API}/api/memories/upload`);
-  xhr.send(form);
-}
-
-/* On a dropped connection, auto-resume by retrying the same request with
-   a short exponential backoff — picks back up the moment internet returns,
-   without the user needing to do anything. Gives up after MAX_RETRIES and
-   shows a manual retry option instead. */
-function attemptRetryOrFail(rect, btn, back, speedText, reasonLabel) {
-  if (_uploadCancelled) { resetUploadBtn(btn, back); return; }
-
-  if (_retryCount < MAX_RETRIES) {
-    _retryCount++;
-    const delayMs = Math.min(8000, 800 * Math.pow(2, _retryCount - 1));
-    speedText.textContent = '';
-    btn.textContent = `Connection lost — retrying in ${Math.round(delayMs/1000)}s…`;
-    setTimeout(() => {
-      if (_uploadCancelled) { resetUploadBtn(btn, back); return; }
-      startUploadAttempt(rect);
-    }, delayMs);
-  } else {
-    showErr2(`${reasonLabel} Couldn't reconnect after several tries — check your connection and try again.`);
-    resetUploadBtn(btn, back);
+  } catch (err) {
+    console.error('AR init failed:', err);
+    statusText.textContent = 'Failed to load memories. Reload to retry.';
   }
 }
 
-function resetUploadBtn(btn, back) {
-  btn.textContent = 'Upload & generate AR target';
-  btn.disabled = false;
-  back.disabled = false;
+function startScanLoop() {
+  if (_scanLoop) clearInterval(_scanLoop);
+  _scanLoop = setInterval(captureAndMatch, SCAN_INTERVAL);
 }
 
-function showErr(msg) {
-  const el = document.getElementById('uploadError');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-function showErr2(msg) {
-  const el = document.getElementById('uploadError2');
-  el.textContent = msg;
-  el.style.display = 'block';
+function stopScanLoop() {
+  if (_scanLoop) { clearInterval(_scanLoop); _scanLoop = null; }
 }
 
-/* ── EDIT POSITION (existing memory) — metadata-only, no re-upload ── */
-let _editingMemoryId = null;
+/* Capture one frame from the live video, downscale to 320px wide,
+   then compare against each target's reference image via pixel histogram.
+   This is a lightweight CPU-only approach — no server round-trip needed. */
+const _offscreen = document.createElement('canvas');
+const _octx = _offscreen.getContext('2d', { willReadFrequently: true });
 
-function openPositionEditModal(memoryId) {
-  const mem = memories.find(m => m._id === memoryId);
-  if (!mem) return;
-  _editingMemoryId = memoryId;
+function captureAndMatch() {
+  const video = document.getElementById('camera-video');
+  if (!video || !video.readyState || video.readyState < 2) return;
+  if (!_targets.length) return;
 
-  document.getElementById('positionEditError').style.display = 'none';
-  editPosEditor.setImage(mem.photoUrl);
-  const rect = mem.videoRect || { ratio: '9:16', x: 50, y: 50, width: 45, height: 80 };
-  document.querySelectorAll('#ratioChipsEdit .ratio-chip').forEach(c => c.classList.toggle('active', c.dataset.ratio === rect.ratio));
-  editPosEditor.setFromMemory(rect);
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
 
-  document.getElementById('positionEditModal').classList.add('open');
+  // Downscale to 320 wide for speed
+  const scale = 320 / vw;
+  _offscreen.width  = 320;
+  _offscreen.height = Math.round(vh * scale);
+  _octx.drawImage(video, 0, 0, _offscreen.width, _offscreen.height);
+
+  const frameData = _octx.getImageData(0, 0, _offscreen.width, _offscreen.height);
+
+  _targets.forEach(target => {
+    if (!target._refImg) return;
+    const now = Date.now();
+    // If already showing this target, keep refreshing rect but don't re-trigger
+    if (arTargets.has(String(target.id))) {
+      // Update rect to center of screen (we don't have true homography, so center it)
+      updateArTarget(String(target.id), getCenterRect(target.videoRect));
+      return;
+    }
+    // Cooldown: don't retrigger within 3s of losing a target
+    if (_matchCooldown[target.id] && now - _matchCooldown[target.id] < 3000) return;
+
+    // Compare reference image histogram against frame histogram
+    const score = compareHistogram(frameData, target._refImg);
+    if (score > 0.55) { // threshold tuned for real photos
+      _matchCooldown[target.id] = now;
+      spawnArTarget(String(target.id), target.videoUrl, getCenterRect(target.videoRect));
+      logScan(target.id);
+    }
+  });
 }
-function closePositionEditModal() {
-  document.getElementById('positionEditModal').classList.remove('open');
-  _editingMemoryId = null;
+
+/* Simple normalised colour histogram intersection — fast, rotation-invariant */
+function compareHistogram(frameData, refImg) {
+  try {
+    const rc = document.createElement('canvas');
+    rc.width = 64; rc.height = 64;
+    const rctx = rc.getContext('2d', { willReadFrequently: true });
+    rctx.drawImage(refImg, 0, 0, 64, 64);
+    const refData = rctx.getImageData(0, 0, 64, 64);
+
+    const fc = document.createElement('canvas');
+    fc.width = 64; fc.height = 64;
+    const fctx = fc.getContext('2d', { willReadFrequently: true });
+    fctx.drawImage(_offscreen, 0, 0, 64, 64);
+    const frd = fctx.getImageData(0, 0, 64, 64);
+
+    // Build 16-bin histograms for R, G, B channels
+    const bins = 16;
+    const rH = new Float32Array(bins), gH = new Float32Array(bins), bH = new Float32Array(bins);
+    const fH = new Float32Array(bins), fGH = new Float32Array(bins), fBH = new Float32Array(bins);
+    const n = refData.data.length / 4;
+
+    for (let i = 0; i < n; i++) {
+      const ri = i * 4;
+      const rb = Math.floor(refData.data[ri]   / (256/bins));
+      const gb = Math.floor(refData.data[ri+1] / (256/bins));
+      const bb = Math.floor(refData.data[ri+2] / (256/bins));
+      rH[rb]++; gH[gb]++; bH[bb]++;
+
+      const fb = Math.floor(frd.data[ri]   / (256/bins));
+      const fg = Math.floor(frd.data[ri+1] / (256/bins));
+      const fbb = Math.floor(frd.data[ri+2] / (256/bins));
+      fH[fb]++; fGH[fg]++; fBH[fbb]++;
+    }
+
+    // Normalise
+    for (let i = 0; i < bins; i++) {
+      rH[i] /= n; gH[i] /= n; bH[i] /= n;
+      fH[i] /= n; fGH[i] /= n; fBH[i] /= n;
+    }
+
+    // Histogram intersection
+    let score = 0;
+    for (let i = 0; i < bins; i++) {
+      score += Math.min(rH[i], fH[i]) + Math.min(gH[i], fGH[i]) + Math.min(bH[i], fBH[i]);
+    }
+    return score / 3; // 0..1
+  } catch (_) { return 0; }
 }
-document.getElementById('positionEditModal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closePositionEditModal();
+
+/* Center rect — video overlay sits centred on screen at a reasonable size.
+   Without true homography tracking we can't pin it to the photo's exact
+   on-screen position, so we centre it — but we DO honor the ratio and
+   relative size chosen in the dashboard's position editor (videoRect),
+   so a 1:1 or 4:5 overlay looks right instead of always defaulting to
+   the old fixed 9:16-ish box. Tap to open fullscreen works as before. */
+function getCenterRect(videoRect) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const RATIOS = { '9:16': 9/16, '1:1': 1, '4:5': 4/5 };
+  const ratioKey = (videoRect && videoRect.ratio) || '9:16';
+  const ratio = RATIOS[ratioKey] || RATIOS['9:16'];
+
+  // widthPct (% of screen width) scales with the saved relative size,
+  // clamped to a sensible on-screen range.
+  const widthPct = videoRect && typeof videoRect.width === 'number'
+    ? Math.min(0.92, Math.max(0.35, videoRect.width / 100))
+    : 0.8;
+
+  const maxW = ratio >= 1 ? 420 : 340; // squarer overlays can run a bit wider
+  const w = Math.min(vw * widthPct, maxW);
+  const h = w / ratio;
+  return { x: (vw - w) / 2, y: (vh - h) / 2, width: w, height: h, rotation: 0 };
+}
+
+// Stop scan loop while fullscreen player is open (save CPU)
+// — resumed in closeFullscreen()
+
+// Fire and forget — log scan to backend for analytics
+async function logScan(memoryId) {
+  try {
+    await fetch(`${BACKEND_URL}/api/scan/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        memoryId,
+        sessionId: getSessionId(),
+        deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+        userAgent: navigator.userAgent
+      })
+    });
+  } catch (e) { /* non-critical, ignore silently */ }
+}
+
+// Persistent anonymous session ID for scan analytics
+function getSessionId() {
+  let sid = localStorage.getItem('memoria_session');
+  if (!sid) {
+    sid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+    localStorage.setItem('memoria_session', sid);
+  }
+  return sid;
+}
+
+/* ============================================================
+   PER-TARGET AR VIDEO — create / update / remove
+============================================================ */
+function spawnArTarget(id, videoUrl, rect){
+  if(arTargets.has(id)) return updateArTarget(id, rect);
+
+  const wrapper=document.createElement('div');
+  wrapper.className='ar-video-wrapper';
+  wrapper.dataset.targetId=id;
+
+  const video=document.createElement('video');
+  video.className='ar-video';
+  video.autoplay=true; video.loop=true; video.playsInline=true; video.muted=true;
+  video.src=videoUrl;
+  wrapper.appendChild(video);
+
+  wrapper.addEventListener('click',()=>openFullscreen(id));
+  document.getElementById('ar-layer').appendChild(wrapper);
+
+  const entry={wrapper,video,lastSeen:performance.now()};
+  arTargets.set(id,entry);
+
+  applyRect(wrapper,rect);
+  requestAnimationFrame(()=>{
+    wrapper.classList.add('visible','tracking');
+    video.play().catch(()=>{});
+  });
+
+  refreshStatusPill();
+}
+
+function updateArTarget(id, rect){
+  const entry=arTargets.get(id);
+  if(!entry) return;
+  entry.lastSeen=performance.now();
+  applyRect(entry.wrapper,rect);
+}
+
+function applyRect(wrapper, rect){
+  if(!rect) return;
+  // rect: {x,y,width,height,rotation} in screen pixels — exactly the poster's own
+  // on-screen bounds this frame, so the video auto zooms in/out and resizes with it.
+  wrapper.style.width=rect.width+'px';
+  wrapper.style.height=rect.height+'px';
+  wrapper.style.transform=`translate(${rect.x}px, ${rect.y}px) rotate(${rect.rotation||0}deg)`;
+}
+
+function removeArTarget(id){
+  const entry=arTargets.get(id);
+  if(!entry) return;
+  entry.wrapper.classList.remove('tracking');
+  entry.wrapper.classList.add('losing');
+  entry.video.pause();
+  setTimeout(()=>{ entry.wrapper.remove(); },250);
+  arTargets.delete(id);
+  _matchCooldown[id] = Date.now(); // prevent immediate re-trigger
+  refreshStatusPill();
+}
+
+function refreshStatusPill(){
+  const pill=document.getElementById('statusPill');
+  const text=document.getElementById('statusText');
+  clearTimeout(window._pillTimer);
+  if(arTargets.size>0){
+    pill.classList.remove('fade-out');
+    pill.className='status-pill found';
+    text.textContent = arTargets.size===1 ? 'Memory found' : arTargets.size+' memories found';
+    window._pillTimer=setTimeout(()=>pill.classList.add('fade-out'),1800);
+  }else{
+    pill.classList.remove('fade-out');
+    pill.className='status-pill ready';
+    text.textContent='Scanning for photos…';
+  }
+}
+
+/* ============================================================
+   CAMERA CONTROLS
+============================================================ */
+async function toggleTorch(){
+  if(!stream)return;
+  const track=stream.getVideoTracks()[0];
+  if(!track.getCapabilities || !track.getCapabilities().torch)return;
+  torchOn=!torchOn;
+  await track.applyConstraints({advanced:[{torch:torchOn}]});
+  document.getElementById('torchBtn').style.color=torchOn?'var(--gold)':'#fff';
+}
+
+async function switchCamera(){
+  if(stream){stream.getTracks().forEach(t=>t.stop())}
+  facingMode=facingMode==='environment'?'user':'environment';
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode},audio:false});
+    document.getElementById('camera-video').srcObject=stream;
+  }catch(e){console.error(e)}
+}
+
+/* Each AR target's wrapper gets its own click listener at creation time (see
+   spawnArTarget), so tapping any one of several simultaneous videos opens
+   that specific clip fullscreen — not a single shared element. */
+
+/* ============================================================
+   FULLSCREEN PLAYER — Netflix / Hotstar style
+============================================================ */
+const fsVideo = document.getElementById('fs-video');
+let fsControlsTimer=null;
+let fsWasMuted=false;
+let fsScrubbing=false;
+let fsOpenTargetId=null;
+
+function openFullscreen(targetId){
+  const entry=arTargets.get(targetId);
+  if(!entry) return;
+  stopScanLoop(); // pause detection while fullscreen is open
+  fsOpenTargetId=targetId;
+  const fsPlayer=document.getElementById('fullscreen-player');
+  fsVideo.src = entry.video.currentSrc || entry.video.src || '';
+  fsVideo.muted = false;
+  fsVideo.currentTime = entry.video.currentTime || 0;
+  fsPlayer.classList.add('open');
+  entry.video.pause();
+
+  fsVideo.play().catch(()=>{ fsVideo.muted=true; fsVideo.play().catch(()=>{}); });
+  updateFsMuteIcon();
+  showFsControls(true);
+}
+
+function closeFullscreen(e){
+  if(e) e.stopPropagation();
+  document.getElementById('fullscreen-player').classList.remove('open');
+  document.getElementById('fsMenu').classList.remove('open');
+  fsVideo.pause();
+  const entry=fsOpenTargetId && arTargets.get(fsOpenTargetId);
+  if(entry) entry.video.play().catch(()=>{});
+  fsOpenTargetId=null;
+  startScanLoop(); // resume detection
+}
+
+function onFsTap(e){
+  // ignore taps that originated on a control (those stopPropagation themselves)
+  const controls=document.getElementById('fs-controls');
+  if(controls.classList.contains('hidden')){
+    showFsControls(true);
+  }else{
+    showFsControls(false);
+  }
+}
+
+function showFsControls(visible){
+  const controls=document.getElementById('fs-controls');
+  clearTimeout(fsControlsTimer);
+  if(visible){
+    controls.classList.remove('hidden');
+    if(!fsVideo.paused){
+      fsControlsTimer=setTimeout(()=>controls.classList.add('hidden'),3200);
+    }
+  }else{
+    controls.classList.add('hidden');
+    document.getElementById('fsMenu').classList.remove('open');
+  }
+}
+
+function toggleFsPlay(e){
+  if(e) e.stopPropagation();
+  if(fsVideo.paused){
+    fsVideo.play();
+  }else{
+    fsVideo.pause();
+  }
+}
+
+fsVideo.addEventListener('play',()=>{
+  document.getElementById('fsCenterIcon').innerHTML='<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+  document.querySelector('#fsPlayBtn svg').innerHTML='<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+  showFsControls(true);
+});
+fsVideo.addEventListener('pause',()=>{
+  document.getElementById('fsCenterIcon').innerHTML='<path d="M8 5v14l11-7z"/>';
+  document.querySelector('#fsPlayBtn svg').innerHTML='<path d="M8 5v14l11-7z"/>';
+  showFsControls(true);
+  clearTimeout(fsControlsTimer);
 });
 
-function setRatioEdit(ratioKey) {
-  document.querySelectorAll('#ratioChipsEdit .ratio-chip').forEach(c => c.classList.toggle('active', c.dataset.ratio === ratioKey));
-  editPosEditor.setRatio(ratioKey);
+function toggleFsMute(e){
+  if(e) e.stopPropagation();
+  fsVideo.muted=!fsVideo.muted;
+  updateFsMuteIcon();
+}
+function updateFsMuteIcon(){
+  const btn=document.getElementById('fsMuteBtn');
+  btn.innerHTML = fsVideo.muted
+    ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+    : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>';
 }
 
-async function savePositionEdit() {
-  if (!_editingMemoryId) return;
-  const btn = document.getElementById('positionEditSaveBtn');
-  const cancel = document.getElementById('positionEditCancelBtn');
-  const errEl = document.getElementById('positionEditError');
-  errEl.style.display = 'none';
+/* --- timeline / scrubber --- */
+function fmtTime(t){
+  if(!isFinite(t)||t<0) t=0;
+  const m=Math.floor(t/60), s=Math.floor(t%60);
+  return m+':'+String(s).padStart(2,'0');
+}
+fsVideo.addEventListener('loadedmetadata',()=>{
+  document.getElementById('fsTimeDuration').textContent=fmtTime(fsVideo.duration);
+});
+fsVideo.addEventListener('timeupdate',()=>{
+  if(fsScrubbing) return;
+  const pct = fsVideo.duration ? (fsVideo.currentTime/fsVideo.duration)*100 : 0;
+  document.getElementById('fsScrubFill').style.width=pct+'%';
+  document.getElementById('fsScrubHandle').style.left=pct+'%';
+  document.getElementById('fsTimeCurrent').textContent=fmtTime(fsVideo.currentTime);
+});
+fsVideo.addEventListener('progress',()=>{
+  if(fsVideo.buffered.length && fsVideo.duration){
+    const end=fsVideo.buffered.end(fsVideo.buffered.length-1);
+    document.getElementById('fsScrubBuffer').style.width=((end/fsVideo.duration)*100)+'%';
+  }
+});
+fsVideo.addEventListener('ended',()=>{
+  document.getElementById('fsCenterIcon').innerHTML='<path d="M8 5v14l11-7z"/>';
+  document.querySelector('#fsPlayBtn svg').innerHTML='<path d="M8 5v14l11-7z"/>';
+  showFsControls(true);
+});
 
-  btn.textContent = 'Saving…';
-  btn.disabled = true;
-  cancel.disabled = true;
+const scrubTrack=document.getElementById('fsScrubTrack');
+function scrubToClientX(clientX){
+  const rect=scrubTrack.getBoundingClientRect();
+  let pct=(clientX-rect.left)/rect.width;
+  pct=Math.max(0,Math.min(1,pct));
+  if(fsVideo.duration) fsVideo.currentTime=pct*fsVideo.duration;
+  document.getElementById('fsScrubFill').style.width=(pct*100)+'%';
+  document.getElementById('fsScrubHandle').style.left=(pct*100)+'%';
+  document.getElementById('fsTimeCurrent').textContent=fmtTime(pct*(fsVideo.duration||0));
+}
+function scrubStart(e){
+  e.stopPropagation();
+  fsScrubbing=true;
+  clearTimeout(fsControlsTimer);
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  scrubToClientX(x);
+}
+function scrubMove(e){
+  if(!fsScrubbing) return;
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  scrubToClientX(x);
+}
+function scrubEnd(){
+  if(!fsScrubbing) return;
+  fsScrubbing=false;
+  showFsControls(true);
+}
+scrubTrack.addEventListener('mousedown',scrubStart);
+scrubTrack.addEventListener('touchstart',scrubStart,{passive:true});
+window.addEventListener('mousemove',scrubMove);
+window.addEventListener('touchmove',scrubMove,{passive:true});
+window.addEventListener('mouseup',scrubEnd);
+window.addEventListener('touchend',scrubEnd);
 
-  try {
-    const rect = editPosEditor.getRect();
-    const res = await fetch(`${API}/api/memories/${_editingMemoryId}/position`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoRect: rect }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json.success) throw new Error(json.message || 'Failed to save position');
+/* --- 3-dot menu + download --- */
+function toggleFsMenu(e){
+  e.stopPropagation();
+  document.getElementById('fsMenu').classList.toggle('open');
+}
+document.addEventListener('click',(e)=>{
+  const menu=document.getElementById('fsMenu');
+  if(menu.classList.contains('open') && !menu.contains(e.target)){
+    menu.classList.remove('open');
+  }
+});
 
-    closePositionEditModal();
-    showToast('Position saved ✓');
-    loadAll();
-  } catch (err) {
-    errEl.textContent = err.message || 'Could not save. Check your connection and try again.';
-    errEl.style.display = 'block';
-  } finally {
-    btn.textContent = 'Save';
-    btn.disabled = false;
-    cancel.disabled = false;
+async function downloadCurrentVideo(e){
+  e.stopPropagation();
+  document.getElementById('fsMenu').classList.remove('open');
+  const url = fsVideo.currentSrc || fsVideo.src;
+  if(!url) return;
+  try{
+    const res=await fetch(url);
+    const blob=await res.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='memoria-video.mp4';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showFsToast('Downloading video…');
+  }catch(err){
+    // Fallback for cross-origin sources that block fetch — open directly
+    const a=document.createElement('a');
+    a.href=url; a.download='memoria-video.mp4'; a.target='_blank';
+    document.body.appendChild(a); a.click(); a.remove();
+    showFsToast('Downloading video…');
   }
 }
 
-
-/* ── DELETE ────────────────────────────────────────────────── */
-function askDelete(id) {
-  deleteTargetId = id;
-  document.getElementById('confirmModal').classList.add('open');
-}
-function closeConfirm() {
-  deleteTargetId = null;
-  document.getElementById('confirmModal').classList.remove('open');
-}
-async function confirmDelete() {
-  if (!deleteTargetId) return;
-  const btn = document.getElementById('confirmDeleteBtn');
-  btn.textContent = 'Deleting…';
-  btn.disabled = true;
-  try {
-    const res = await fetch(`${API}/api/memories/${deleteTargetId}`, { method:'DELETE' });
-    if (res.ok) {
-      closeConfirm();
-      showToast('Memory deleted.');
-      loadAll();
-    } else {
-      showToast('Delete failed. Try again.');
-    }
-  } catch(e) {
-    showToast('Network error.');
-  }
-  btn.textContent = 'Delete';
-  btn.disabled = false;
-}
-
-/* ── SHARE LINK ────────────────────────────────────────────── */
-function copyLink(id) {
-  const url = `${window.location.origin}/app/scanner.html?target=${id}`;
-  navigator.clipboard.writeText(url).then(() => showToast('Scanner link copied!')).catch(() => showToast('Could not copy link.'));
-}
-
-/* ── TOAST ─────────────────────────────────────────────────── */
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
+function showFsToast(msg){
+  const toast=document.getElementById('fs-toast');
+  toast.textContent=msg;
+  toast.classList.add('show');
   clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  window._toastTimer=setTimeout(()=>toast.classList.remove('show'),2200);
 }
 
-/* ── NAV ───────────────────────────────────────────────────── */
-function setView(v, el) {
-  document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active'));
-  if (el) el.classList.add('active');
-  document.getElementById('topbar-title').textContent = v === 'memories' ? 'My Memories' : 'Analytics';
-}
+/* ============================================================
+   BOOT
+============================================================ */
+initScanner();
 </script>
 </body>
 </html>
