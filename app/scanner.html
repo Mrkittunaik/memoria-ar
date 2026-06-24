@@ -101,9 +101,8 @@ html,body{
 }
 .ar-video-inner{
   position:absolute;inset:0;
-  box-shadow:0 0 0 1px rgba(255,255,255,.06);
   opacity:0;
-  transition:opacity .25s,box-shadow .12s ease;
+  transition:opacity .25s ease;
   pointer-events:none;
   /* Same fast-movement fix as the wrapper — this is the element that's
      actually visible (wrapper itself has no paint), so it needs its own
@@ -144,23 +143,72 @@ html,body{
   -webkit-transform:translateZ(0);
   border-radius:3px;
 }
-/* FULL DETECTION BORDER — wraps the entire matched photo, not just the video
-   crop, and snaps on fast (.12s, no fade-in delay) the instant tracking
-   locks, so it reads as an immediate "found it" confirmation rather than a
-   slow reveal. box-shadow (not border) is used so it doesn't add to the
-   wrapper's box size or shift the video's object-fit:cover crop. */
-.ar-video-inner.tracking{
-  box-shadow:0 0 0 3px var(--gold),0 0 16px 2px rgba(201,147,58,.5);
+/* CORNER BRACKET OVERLAY — sits on top of the video inner, covers the full
+   wrapper size, never participates in layout. The 4 corner brackets are
+   drawn as ::before/::after on .ar-corner-tl/.ar-corner-br etc, each a
+   fixed-size L-shape. They appear instantly on tracking lock (.08s) and
+   vanish on lose, so they read as a hard "target acquired" snap — not a
+   slow glow. Using a separate sibling element (not pseudo-elements on
+   .ar-video-inner itself) means CSS3DRenderer's display:none stomps on the
+   parent wrapper, not on these — they survive visibility toggling cleanly. */
+.ar-corners{
+  position:absolute;inset:0;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .08s ease;
+  /* GPU layer — same matrix3d() will-change context as the wrapper */
+  will-change:opacity;
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
 }
-/* Thin gold corner ticks on top of the full border, for extra "locked on" detail */
-.ar-video-inner::before,.ar-video-inner::after{
-  content:'';position:absolute;width:14px;height:14px;
-  border:2px solid #fff;opacity:0;
-  transition:opacity .12s;pointer-events:none;
+.ar-video-inner.tracking ~ .ar-corners,
+.ar-corners.tracking{
+  opacity:1;
 }
-.ar-video-inner.tracking::before,.ar-video-inner.tracking::after{opacity:.9}
-.ar-video-inner::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
-.ar-video-inner::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+/* Each corner is a small L-bracket. The wrapper is always PLANE_PX=1000px
+   wide before CSS3D scaling, so absolute px values here are stable — after
+   CSS3D scale they render at the right physical size on screen regardless of
+   the poster's actual on-screen dimensions. 60px arm = ~6% of 1000px, which
+   reads as a clean corner bracket at any typical photo viewing distance. */
+.ar-corner{
+  position:absolute;
+  width:60px;height:60px;
+  border-color:var(--gold);
+  border-style:solid;
+  border-width:0;
+  /* Subtle gold glow so the bracket reads clearly over any video content */
+  filter:drop-shadow(0 0 6px rgba(201,147,58,.9)) drop-shadow(0 0 2px rgba(201,147,58,1));
+}
+.ar-corner-tl{
+  top:0;left:0;
+  border-top-width:4px;border-left-width:4px;
+  border-top-left-radius:3px;
+}
+.ar-corner-tr{
+  top:0;right:0;
+  border-top-width:4px;border-right-width:4px;
+  border-top-right-radius:3px;
+}
+.ar-corner-bl{
+  bottom:0;left:0;
+  border-bottom-width:4px;border-left-width:4px;
+  border-bottom-left-radius:3px;
+}
+.ar-corner-br{
+  bottom:0;right:0;
+  border-bottom-width:4px;border-right-width:4px;
+  border-bottom-right-radius:3px;
+}
+/* Scan-lock animation — tiny inward pulse on the bracket arm lengths the
+   frame tracking is first acquired. Gives the "locking on" click feel. */
+@keyframes bracketLock{
+  0%{width:80px;height:80px;opacity:.6}
+  60%{width:54px;height:54px;opacity:1}
+  100%{width:60px;height:60px;opacity:1}
+}
+.ar-corners.lock-anim .ar-corner{
+  animation:bracketLock .22s cubic-bezier(.22,.9,.32,1) both;
+}
 
 /* CLEAN CAMERA UI — plain viewfinder, no frame/brackets/scanline */
 #scan-ui{
@@ -1257,6 +1305,20 @@ function spawnArTarget(id, targetIndex, target, anchor){
   inner.appendChild(video);
   wrapper.appendChild(inner);
 
+  // ── CORNER BRACKET OVERLAY ─────────────────────────────────────────────
+  // Four L-shaped gold corner brackets that sit over the full wrapper area
+  // (not just the cropped video rect) so they visually lock onto the poster
+  // corners — exactly the "scanning a TV" effect: bracket arms hug the 4
+  // corners of the recognised photo, video plays within, both track together.
+  const corners = document.createElement('div');
+  corners.className = 'ar-corners';
+  ['tl','tr','bl','br'].forEach(pos => {
+    const c = document.createElement('div');
+    c.className = `ar-corner ar-corner-${pos}`;
+    corners.appendChild(c);
+  });
+  wrapper.appendChild(corners);
+
   wrapper.addEventListener('click',()=>openFullscreen(id));
 
   // Position the video within the poster using the saved videoRect (percentages
@@ -1377,7 +1439,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   smoothed.quaternion.setFromRotationMatrix(anchor.group.matrix);
   smoothed.scale.setFromMatrixScale(anchor.group.matrix);
 
-  const entry={wrapper,inner,video,cssObject,smoothed,anchor,lastSeen:0,visible:false};
+  const entry={wrapper,inner,corners,video,cssObject,smoothed,anchor,lastSeen:0,visible:false};
   arTargets.set(id,entry);
 }
 
@@ -1387,6 +1449,21 @@ function onTargetFound(id){
   entry.visible=true;
   entry.lastSeen=performance.now();
   entry.inner.classList.add('visible','tracking');
+
+  // Snap corner brackets on — animate the "lock-on" pulse only on the very
+  // first found frame (wasTracking false), not on every re-detect after
+  // a brief occlusion blink, so it doesn't feel spammy during normal use.
+  const wasTracking = entry.corners.classList.contains('tracking');
+  entry.corners.classList.add('tracking');
+  if (!wasTracking) {
+    entry.corners.classList.remove('lock-anim');
+    // Force reflow so removing+re-adding the class restarts the animation
+    void entry.corners.offsetWidth;
+    entry.corners.classList.add('lock-anim');
+    // Remove the animation class once it's done — the 'tracking' class keeps
+    // the brackets visible; this just prevents re-triggering next frame.
+    setTimeout(() => entry.corners.classList.remove('lock-anim'), 300);
+  }
 
   // DIAGNOSTIC — actual rendered box sizes at the moment of detection. If
   // wrapperRect or videoRect below come back as 0×0 (or absurdly
@@ -1484,6 +1561,7 @@ function onTargetLost(id){
   entry.visible=false;
   entry.inner.classList.remove('tracking');
   entry.inner.classList.add('losing');
+  entry.corners.classList.remove('tracking','lock-anim');
   entry.video.pause();
   setTimeout(()=>{
     if(!entry.visible) entry.inner.classList.remove('visible','losing');
