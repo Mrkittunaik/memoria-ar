@@ -902,8 +902,24 @@ async function beginMindAR(mindUrl) {
     container: document.getElementById('ar-container'),
     imageTargetSrc: mindUrl,
     maxTrack: Math.min(_targets.length, 2),
-    filterMinCF: 0.001,
-    filterBeta: 0.01,
+    // ── JITTER FIX ──────────────────────────────────────────────────────
+    // MindAR smooths every tracked corner point through a One Euro filter
+    // (src/libs/one-euro-filter.js) before it ever becomes a worldMatrix.
+    // Its own library defaults are filterMinCF=0.001, filterBeta=1000 —
+    // the previous values here (filterMinCF:0.001, filterBeta:0.01) had
+    // beta set ~100,000× BELOW that default.
+    // What beta actually does: effective cutoff = minCutOff + beta×|velocity|.
+    // With beta this tiny, the cutoff stays pinned near the minimum almost
+    // all the time regardless of motion — which sounds like "more
+    // smoothing" but is actually the opposite: a near-zero cutoff lets
+    // high-frequency noise through with very little resistance, which is
+    // exactly the visible shake you were seeing, worst right when the
+    // phone is nearly still (the most common case).
+    // These values stay closer to the library's own tuned defaults, with
+    // minCutOff nudged down a bit for a calmer hold-still state — good for
+    // "video glued to a printed photo" rather than fast game-style motion:
+    filterMinCF: 0.0005,
+    filterBeta: 200,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
 
@@ -925,7 +941,65 @@ async function beginMindAR(mindUrl) {
     anchor.onTargetLost  = () => onTargetLost(String(target.id));
   });
 
+  // ── SMOOTHING LOOP ──────────────────────────────────────────────────
+  // Runs every frame BEFORE the two renders below. For each tracked target,
+  // reads anchor.group's raw matrix (MindAR's own filtered tracking output,
+  // overwritten every frame — see _startAR's onUpdate in MindAR's source)
+  // and eases our standalone `smoothed` object toward it instead of
+  // snapping straight to it. This is a simple exponential ease (lerp for
+  // position/scale, slerp for rotation), framerate-independent via the
+  // per-frame dt so it behaves consistently regardless of device FPS.
+  //
+  // SMOOTHING_HALF_LIFE_MS: time for the smoothed transform to close half
+  // the remaining gap to the raw tracked transform. Smaller = snappier/more
+  // responsive but more residual jitter; larger = smoother but more visible
+  // lag when you actually move the poster. ~70ms is a good middle ground
+  // for "video glued to a held photo" — noticeably calmer than raw tracking
+  // while still easily fast enough not to visibly lag normal hand movement.
+  const SMOOTHING_HALF_LIFE_MS = 70;
+  let _lastFrameTime = performance.now();
+  const _rawPos = new THREE.Vector3();
+  const _rawQuat = new THREE.Quaternion();
+  const _rawScale = new THREE.Vector3();
+
   mindarThree.renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    const dt = Math.max(0, now - _lastFrameTime);
+    _lastFrameTime = now;
+    // Convert half-life to a per-frame lerp factor: alpha = 1 - 0.5^(dt/halfLife)
+    const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / SMOOTHING_HALF_LIFE_MS) : 1;
+
+    arTargets.forEach((entry) => {
+      const { anchor, smoothed, inner } = entry;
+      const rawVisible = anchor.visible;
+
+      // Visibility now driven here, since cssObject no longer lives inside
+      // anchor.group (MindAR's own per-frame visibility write — see
+      // onUpdate in its source — targets anchor.group.children, which our
+      // object is no longer a member of).
+      const wasVisible = smoothed.userData.wasVisible === true;
+      entry.cssObject.element.style.visibility = rawVisible ? 'visible' : 'hidden';
+      smoothed.userData.wasVisible = rawVisible;
+
+      if (!rawVisible) return; // no fresh matrix to ease toward while lost
+
+      anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
+
+      if (!wasVisible) {
+        // Snap on the very frame tracking is (re)acquired — easing in from
+        // a stale or identity transform here would itself look like a
+        // jitter/teleport, the opposite of what we want.
+        smoothed.position.copy(_rawPos);
+        smoothed.quaternion.copy(_rawQuat);
+        smoothed.scale.copy(_rawScale);
+      } else {
+        smoothed.position.lerp(_rawPos, alpha);
+        smoothed.quaternion.slerp(_rawQuat, alpha);
+        smoothed.scale.lerp(_rawScale, alpha);
+      }
+      smoothed.updateMatrix();
+    });
+
     mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
     mindarThree.cssRenderer.render(mindarThree.cssScene, mindarThree.camera);
   });
@@ -1133,9 +1207,32 @@ function spawnArTarget(id, targetIndex, target, anchor){
   cssObject.scale.set(SCALE, SCALE, SCALE);
   // No position offset — CSS3DObject's built-in centering already lines up
   // with the anchor's expected centered-plane convention. See note above.
-  anchor.group.add(cssObject);
+  //
+  // ── SMOOTHING RIG ───────────────────────────────────────────────────
+  // cssObject is NOT added directly to anchor.group. Instead it's parented
+  // to its own standalone "smoothed" Object3D living straight in the
+  // cssScene, and every render frame (see the smoothing step in the main
+  // animation loop below) we read anchor.group's raw matrix — which MindAR
+  // overwrites every frame from its own One Euro-filtered tracking data —
+  // decompose it, and ease this smoothed group's position/quaternion/scale
+  // toward it. That gives a second smoothing pass on the FINAL rendered
+  // transform, which removes residual high-frequency jitter that survives
+  // the upstream per-corner-point filtering once it propagates through the
+  // homography → 3D matrix decomposition. Visibility still comes from
+  // anchor.group.children's element.style.visibility writes (MindAR sets
+  // that on anchor.group's own children, not ours) — see visibility sync
+  // below in the loop, since our object now lives outside anchor.group.
+  const smoothed = new THREE.Object3D();
+  smoothed.add(cssObject);
+  mindarThree.cssScene.add(smoothed);
+  smoothed.matrixAutoUpdate = true;
+  // Start matching anchor.group's current (initially invisible/identity)
+  // matrix so the very first found-frame doesn't ease in from the origin.
+  smoothed.position.setFromMatrixPosition(anchor.group.matrix);
+  smoothed.quaternion.setFromRotationMatrix(anchor.group.matrix);
+  smoothed.scale.setFromMatrixScale(anchor.group.matrix);
 
-  const entry={wrapper,inner,video,cssObject,anchor,lastSeen:0,visible:false};
+  const entry={wrapper,inner,video,cssObject,smoothed,anchor,lastSeen:0,visible:false};
   arTargets.set(id,entry);
 }
 
