@@ -20,20 +20,12 @@ html,body{
   -webkit-font-smoothing:antialiased;
 }
 
-/* CAMERA CONTAINER */
+/* CAMERA CONTAINER — MindARThree mounts its own <video> + canvases inside
+   #ar-container and sizes them itself (see its resize() method), so no
+   manual #camera-video/#ar-canvas styling is needed here anymore. */
 #ar-container{
   position:fixed;inset:0;
   background:#000;
-}
-#camera-video{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  object-fit:cover;
-}
-#ar-canvas{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  pointer-events:none;
 }
 
 /* VIDEO OVERLAY — anchored by MindAR onto the target, sits smoothly inside the photo frame.
@@ -45,19 +37,20 @@ html,body{
   pointer-events:none;
 }
 .ar-video-wrapper{
-  position:absolute;
-  top:0;left:0;
-  transform-origin:top left;
-  display:none;
+  /* position:absolute is set inline by CSS3DObject itself — don't fight it here.
+     Actual show/hide is driven by anchor.group.visible (a Three.js flag MindAR
+     sets every frame), NOT by a CSS class — CSS3DRenderer writes element.style.display
+     directly each frame, which would silently override any class-based display rule. */
   cursor:pointer;
   pointer-events:all;
-  will-change:transform;
   overflow:hidden;
   border-radius:2px;
   box-shadow:0 0 0 1px rgba(255,255,255,.06);
+  opacity:0;
+  transition:opacity .25s;
 }
 .ar-video-wrapper.visible{
-  display:block;
+  opacity:1;
   animation:arFadeIn .35s ease both;
 }
 .ar-video-wrapper.losing{
@@ -377,7 +370,18 @@ html,body{
   font-size:13px;cursor:pointer;font-family:inherit;
 }
 </style>
-<!-- Image tracking handled via canvas frame capture -->
+<!-- Real image tracking: MindAR (image-target tracking engine) + Three.js (its peer dep).
+     Targets are compiled to .mind data ON THE FLY in this page from each memory's
+     photoUrl — no pre-built .mind files needed, no backend changes needed. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
 
@@ -392,13 +396,15 @@ html,body{
   </div>
 </div>
 
-<!-- AR CONTAINER -->
-<div id="ar-container">
-  <video id="camera-video" autoplay playsinline muted></video>
-  <canvas id="ar-canvas"></canvas>
-  <!-- One .ar-video-wrapper is created per detected poster — see spawnArTarget() -->
-  <div id="ar-layer"></div>
-</div>
+<!-- AR CONTAINER
+     MindARThree mounts its OWN <video> (camera feed) + WebGL canvas + CSS3D layer
+     directly into this container — that's what gives us the real worldMatrix
+     (position/rotation/scale) per tracked poster, every frame.
+     The CSS3D layer is where our .ar-video-wrapper elements actually live once
+     mounted as CSS3DObjects (done in JS below) — ar-layer is no longer used
+     directly but kept as a harmless legacy node. -->
+<div id="ar-container"></div>
+<div id="ar-layer" style="display:none"></div>
 
 <!-- SCAN UI -->
 <div id="scan-ui">
@@ -511,25 +517,29 @@ html,body{
   <button class="btn-demo-close" onclick="document.getElementById('demo-overlay').classList.add('hidden')">Skip intro</button>
 </div>
 
-<script>
+<script type="module">
+import * as THREE from 'three';
+import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+
 /* ============================================================
    STATE
 ============================================================ */
 const BACKEND_URL = 'https://memoria-ar-backend.onrender.com';
 
-let stream=null;
-let facingMode='environment';
 let torchOn=false;
+let mindarThree=null;   // the MindARThree instance — owns camera + tracking
+let videoTrack=null;    // current camera MediaStreamTrack (for torch control)
 
-/* Registry of every currently-tracked poster: key -> {wrapper, video, lastSeen}
+/* Registry of every currently-tracked poster: key -> {wrapper, video, cssObject, anchor, lastSeen}
    Multiple posters can be live at once, each with its own independent video,
-   sized/rotated to exactly match that poster's own on-screen rectangle. */
+   sized/rotated to exactly match that poster's own on-screen rectangle —
+   driven by MindAR's real per-frame tracking matrix, not a guess. */
 const arTargets=new Map();
 
 /* ============================================================
    PERMISSION-AWARE STARTUP
-   Flow: camera permission (once, remembered) → live feed →
-   wake backend if cold → begin AR. Never overlap.
+   Flow: camera permission (once, remembered) → wake backend if cold →
+   fetch targets → compile .mind data for each → begin MindAR tracking.
 ============================================================ */
 const PERM_KEY = 'memoria_camera_granted';
 let _backendReady = false;
@@ -584,20 +594,14 @@ async function startScanner() {
   setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
   document.getElementById('loading').classList.remove('hidden');
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false
-    });
+    // Just a quick permission probe — MindARThree opens the real camera stream itself.
+    const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    probe.getTracks().forEach(t => t.stop());
     localStorage.setItem(PERM_KEY, 'true');
-    const video = document.getElementById('camera-video');
-    video.srcObject = stream;
-    await video.play();
-    // Camera is live — now wake backend (sequential, no overlap)
+
     await wakeBackend();
-    setTimeout(() => {
-      document.getElementById('loading').classList.add('hidden');
-      beginMindAR();
-    }, 300);
+    await beginMindAR();
+    document.getElementById('loading').classList.add('hidden');
   } catch (err) {
     localStorage.removeItem(PERM_KEY);
     document.getElementById('loading').innerHTML = `
@@ -613,207 +617,107 @@ async function startScanner() {
   }
 }
 
-/* Resume camera when user returns to tab / app after switching away */
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible') return;
-  if (!stream) return;
-  const tracks = stream.getVideoTracks();
-  if (tracks.length === 0 || tracks[0].readyState === 'ended') {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false
-      });
-      const video = document.getElementById('camera-video');
-      video.srcObject = stream;
-      await video.play();
-    } catch (_) {}
-  }
-});
-
 /* ============================================================
-   AR TRACKING — canvas frame capture + backend match
-   Uses the already-open camera stream (no AR.js conflict).
-   Every SCAN_INTERVAL ms: capture a frame → POST to /api/scan/match
-   → backend returns which memory matched + bounding box →
-   overlay the AR video exactly over that region.
+   REAL AR TRACKING — MindAR image targets, compiled on the fly
+   For each active memory: fetch its photo, run MindAR's browser Compiler
+   on it right here (no pre-built .mind file, no backend change needed),
+   bundle every target into one in-memory .mind blob, then hand that to
+   MindARThree which owns the camera, runs per-frame tracking, and reports
+   a real position/rotation/scale matrix for each poster every frame.
 ============================================================ */
-let _scanLoop = null;
-let _targets = [];        // fetched once on init, cached
-let _matchCooldown = {};  // per-target: don't re-trigger within 3s of last match
-const SCAN_INTERVAL = 800; // ms between frame captures
+let _targets = [];        // fetched once on init, cached (id, title, videoUrl, videoRect, photoWidth/Height)
 
 async function beginMindAR() {
   const statusText = document.getElementById('statusText');
   const pill = document.getElementById('statusPill');
 
-  try {
-    pill.className = 'status-pill ready';
-    statusText.textContent = 'Loading memories…';
+  pill.className = 'status-pill ready';
+  statusText.textContent = 'Loading memories…';
 
-    const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
-    if (!res.ok) throw new Error(`Backend ${res.status}`);
-    const data = await res.json();
+  const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
+  if (!res.ok) throw new Error(`Backend ${res.status}`);
+  const data = await res.json();
 
-    if (!data.success || !data.data.targets || data.data.targets.length === 0) {
-      statusText.textContent = 'No memories uploaded yet.';
-      return;
-    }
-
-    _targets = data.data.targets;
-    statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
-
-    // Preload all target reference images (used for client-side pixel comparison)
-    await Promise.all(_targets.map(t => new Promise(resolve => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => { t._refImg = img; resolve(); };
-      img.onerror = resolve;
-      img.src = t.photoUrl;
-    })));
-
-    // Preload all videos so they play instantly on detection
-    _targets.forEach(t => {
-      const v = document.createElement('video');
-      v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
-    });
-
-    startScanLoop();
-
-  } catch (err) {
-    console.error('AR init failed:', err);
-    statusText.textContent = 'Failed to load memories. Reload to retry.';
+  if (!data.success || !data.data.targets || data.data.targets.length === 0) {
+    statusText.textContent = 'No memories uploaded yet.';
+    return;
   }
-}
+  _targets = data.data.targets;
 
-function startScanLoop() {
-  if (_scanLoop) clearInterval(_scanLoop);
-  _scanLoop = setInterval(captureAndMatch, SCAN_INTERVAL);
-}
+  statusText.textContent = `Preparing AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
-function stopScanLoop() {
-  if (_scanLoop) { clearInterval(_scanLoop); _scanLoop = null; }
-}
+  // ── Compile every target photo into one .mind dataset, in this page ──
+  const { Compiler } = window.MINDAR.IMAGE;
+  const compiler = new Compiler();
+  const images = await Promise.all(_targets.map(t => loadImage(t.photoUrl)));
+  await compiler.compileImageTargets(images, (progress) => {
+    statusText.textContent = `Preparing AR tracking… ${Math.round(progress)}%`;
+  });
+  const mindBuffer = compiler.exportData();           // ArrayBuffer-ish, msgpack-encoded
+  const mindBlob = new Blob([mindBuffer]);
+  const mindUrl = URL.createObjectURL(mindBlob);      // local blob: URL — MindAR fetches this itself
 
-/* Capture one frame from the live video, downscale to 320px wide,
-   then compare against each target's reference image via pixel histogram.
-   This is a lightweight CPU-only approach — no server round-trip needed. */
-const _offscreen = document.createElement('canvas');
-const _octx = _offscreen.getContext('2d', { willReadFrequently: true });
+  // Preload all videos so they play instantly on detection
+  _targets.forEach(t => {
+    const v = document.createElement('video');
+    v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
+  });
 
-function captureAndMatch() {
-  const video = document.getElementById('camera-video');
-  if (!video || !video.readyState || video.readyState < 2) return;
-  if (!_targets.length) return;
+  statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) return;
+  // ── Hand off to MindARThree — it owns the camera + tracking loop from here ──
+  mindarThree = new window.MINDAR.IMAGE.MindARThree({
+    container: document.getElementById('ar-container'),
+    imageTargetSrc: mindUrl,
+    maxTrack: Math.min(_targets.length, 8), // track up to 8 simultaneous posters
+    filterMinCF: 0.0001,  // tighter = less jitter once locked
+    filterBeta: 0.01,
+    uiLoading: 'no', uiScanning: 'no', uiError: 'no', // we drive our own status pill
+  });
 
-  // Downscale to 320 wide for speed
-  const scale = 320 / vw;
-  _offscreen.width  = 320;
-  _offscreen.height = Math.round(vh * scale);
-  _octx.drawImage(video, 0, 0, _offscreen.width, _offscreen.height);
+  await mindarThree.start();
 
-  const frameData = _octx.getImageData(0, 0, _offscreen.width, _offscreen.height);
+  // Grab the live camera track for torch control, since we no longer open our own stream
+  try {
+    videoTrack = mindarThree.video.srcObject.getVideoTracks()[0];
+  } catch (_) {}
 
-  _targets.forEach(target => {
-    if (!target._refImg) return;
-    const now = Date.now();
-    // If already showing this target, keep refreshing rect but don't re-trigger
-    if (arTargets.has(String(target.id))) {
-      // Update rect to center of screen (we don't have true homography, so center it)
-      updateArTarget(String(target.id), getCenterRect(target.videoRect));
-      return;
-    }
-    // Cooldown: don't retrigger within 3s of losing a target
-    if (_matchCooldown[target.id] && now - _matchCooldown[target.id] < 3000) return;
+  // One CSS anchor per target index — each is a 3D group MindAR positions every
+  // frame to exactly match that poster's real on-screen rect (position, rotation, scale).
+  _targets.forEach((target, index) => {
+    const anchor = mindarThree.addCSSAnchor(index);
+    spawnArTarget(String(target.id), index, target, anchor);
 
-    // Compare reference image histogram against frame histogram
-    const score = compareHistogram(frameData, target._refImg);
-    if (score > 0.55) { // threshold tuned for real photos
-      _matchCooldown[target.id] = now;
-      spawnArTarget(String(target.id), target.videoUrl, getCenterRect(target.videoRect));
-      logScan(target.id);
-    }
+    anchor.onTargetFound = () => onTargetFound(String(target.id));
+    anchor.onTargetLost  = () => onTargetLost(String(target.id));
+  });
+
+  // Render loop — required for CSS3DRenderer/WebGLRenderer to actually draw each frame
+  mindarThree.renderer.setAnimationLoop(() => {
+    mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
+    mindarThree.cssRenderer.render(mindarThree.cssScene, mindarThree.camera);
   });
 }
 
-/* Simple normalised colour histogram intersection — fast, rotation-invariant */
-function compareHistogram(frameData, refImg) {
-  try {
-    const rc = document.createElement('canvas');
-    rc.width = 64; rc.height = 64;
-    const rctx = rc.getContext('2d', { willReadFrequently: true });
-    rctx.drawImage(refImg, 0, 0, 64, 64);
-    const refData = rctx.getImageData(0, 0, 64, 64);
-
-    const fc = document.createElement('canvas');
-    fc.width = 64; fc.height = 64;
-    const fctx = fc.getContext('2d', { willReadFrequently: true });
-    fctx.drawImage(_offscreen, 0, 0, 64, 64);
-    const frd = fctx.getImageData(0, 0, 64, 64);
-
-    // Build 16-bin histograms for R, G, B channels
-    const bins = 16;
-    const rH = new Float32Array(bins), gH = new Float32Array(bins), bH = new Float32Array(bins);
-    const fH = new Float32Array(bins), fGH = new Float32Array(bins), fBH = new Float32Array(bins);
-    const n = refData.data.length / 4;
-
-    for (let i = 0; i < n; i++) {
-      const ri = i * 4;
-      const rb = Math.floor(refData.data[ri]   / (256/bins));
-      const gb = Math.floor(refData.data[ri+1] / (256/bins));
-      const bb = Math.floor(refData.data[ri+2] / (256/bins));
-      rH[rb]++; gH[gb]++; bH[bb]++;
-
-      const fb = Math.floor(frd.data[ri]   / (256/bins));
-      const fg = Math.floor(frd.data[ri+1] / (256/bins));
-      const fbb = Math.floor(frd.data[ri+2] / (256/bins));
-      fH[fb]++; fGH[fg]++; fBH[fbb]++;
-    }
-
-    // Normalise
-    for (let i = 0; i < bins; i++) {
-      rH[i] /= n; gH[i] /= n; bH[i] /= n;
-      fH[i] /= n; fGH[i] /= n; fBH[i] /= n;
-    }
-
-    // Histogram intersection
-    let score = 0;
-    for (let i = 0; i < bins; i++) {
-      score += Math.min(rH[i], fH[i]) + Math.min(gH[i], fGH[i]) + Math.min(bH[i], fBH[i]);
-    }
-    return score / 3; // 0..1
-  } catch (_) { return 0; }
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
-/* Center rect — video overlay sits centred on screen at a reasonable size.
-   Without true homography tracking we can't pin it to the photo's exact
-   on-screen position, so we centre it — but we DO honor the ratio and
-   relative size chosen in the dashboard's position editor (videoRect),
-   so a 1:1 or 4:5 overlay looks right instead of always defaulting to
-   the old fixed 9:16-ish box. Tap to open fullscreen works as before. */
-function getCenterRect(videoRect) {
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const RATIOS = { '9:16': 9/16, '1:1': 1, '4:5': 4/5 };
-  const ratioKey = (videoRect && videoRect.ratio) || '9:16';
-  const ratio = RATIOS[ratioKey] || RATIOS['9:16'];
-
-  // widthPct (% of screen width) scales with the saved relative size,
-  // clamped to a sensible on-screen range.
-  const widthPct = videoRect && typeof videoRect.width === 'number'
-    ? Math.min(0.92, Math.max(0.35, videoRect.width / 100))
-    : 0.8;
-
-  const maxW = ratio >= 1 ? 420 : 340; // squarer overlays can run a bit wider
-  const w = Math.min(vw * widthPct, maxW);
-  const h = w / ratio;
-  return { x: (vw - w) / 2, y: (vh - h) / 2, width: w, height: h, rotation: 0 };
+function stopScanLoop() {
+  // Pause tracking while fullscreen player is open (saves CPU/battery)
+  if (mindarThree && mindarThree.controller) mindarThree.controller.stopProcessVideo();
 }
-
-// Stop scan loop while fullscreen player is open (save CPU)
-// — resumed in closeFullscreen()
+function startScanLoop() {
+  if (mindarThree && mindarThree.controller && mindarThree.video) {
+    mindarThree.controller.processVideo(mindarThree.video);
+  }
+}
 
 // Fire and forget — log scan to backend for analytics
 async function logScan(memoryId) {
@@ -842,72 +746,87 @@ function getSessionId() {
 }
 
 /* ============================================================
-   PER-TARGET AR VIDEO — create / update / remove
+   PER-TARGET AR VIDEO — create once per target, shown/hidden by
+   MindAR's onTargetFound/onTargetLost (real detection, not a guess).
+   Sizing/position within the poster comes from each memory's own
+   videoRect (%, set in your dashboard's position editor) — same data
+   you already had, now finally placed on a tracked 3D plane instead
+   of being centered on the screen.
 ============================================================ */
-function spawnArTarget(id, videoUrl, rect){
-  if(arTargets.has(id)) return updateArTarget(id, rect);
+const PLANE_SIZE = 1; // MindAR's anchor group is sized to the poster's own width=1 unit (see postMatrix in MindARThree)
 
+function spawnArTarget(id, targetIndex, target, anchor){
   const wrapper=document.createElement('div');
   wrapper.className='ar-video-wrapper';
   wrapper.dataset.targetId=id;
+  // Fixed pixel size for the CSS3D plane's own local space — CSS3DObject scales
+  // this by the anchor group's matrix (which MindAR drives every frame), so the
+  // actual on-screen size/rotation/perspective always matches the real poster.
+  wrapper.style.width = '1000px';
+  wrapper.style.height = '1000px';
 
   const video=document.createElement('video');
   video.className='ar-video';
-  video.autoplay=true; video.loop=true; video.playsInline=true; video.muted=true;
-  video.src=videoUrl;
+  video.loop=true; video.playsInline=true; video.muted=true;
+  video.src=target.videoUrl;
   wrapper.appendChild(video);
 
   wrapper.addEventListener('click',()=>openFullscreen(id));
-  document.getElementById('ar-layer').appendChild(wrapper);
 
-  const entry={wrapper,video,lastSeen:performance.now()};
+  // Position the video within the poster using the saved videoRect (percentages
+  // of the photo's own size) — same numbers your dashboard's editor already saves.
+  const rect = target.videoRect || { x:50, y:50, width:45, height:80 };
+  video.style.position='absolute';
+  video.style.left   = (rect.x - rect.width/2)  + '%';
+  video.style.top    = (rect.y - rect.height/2) + '%';
+  video.style.width  = rect.width  + '%';
+  video.style.height = rect.height + '%';
+
+  const cssObject = new CSS3DObject(wrapper);
+  // Scale the 1000px local plane down to MindAR's 1-unit marker space, matching
+  // the aspect ratio the poster itself was compiled with.
+  const aspect = (target.photoHeight && target.photoWidth) ? target.photoHeight/target.photoWidth : 1;
+  cssObject.scale.set(0.001, 0.001 * aspect, 0.001);
+  cssObject.position.set(0, 0, 0);
+  anchor.group.add(cssObject);
+
+  const entry={wrapper,video,cssObject,anchor,lastSeen:0,visible:false};
   arTargets.set(id,entry);
+}
 
-  applyRect(wrapper,rect);
-  requestAnimationFrame(()=>{
-    wrapper.classList.add('visible','tracking');
-    video.play().catch(()=>{});
-  });
-
+function onTargetFound(id){
+  const entry=arTargets.get(id);
+  if(!entry) return;
+  entry.visible=true;
+  entry.lastSeen=performance.now();
+  entry.wrapper.classList.add('visible','tracking');
+  entry.video.play().catch(()=>{});
+  logScan(id);
   refreshStatusPill();
 }
 
-function updateArTarget(id, rect){
+function onTargetLost(id){
   const entry=arTargets.get(id);
   if(!entry) return;
-  entry.lastSeen=performance.now();
-  applyRect(entry.wrapper,rect);
-}
-
-function applyRect(wrapper, rect){
-  if(!rect) return;
-  // rect: {x,y,width,height,rotation} in screen pixels — exactly the poster's own
-  // on-screen bounds this frame, so the video auto zooms in/out and resizes with it.
-  wrapper.style.width=rect.width+'px';
-  wrapper.style.height=rect.height+'px';
-  wrapper.style.transform=`translate(${rect.x}px, ${rect.y}px) rotate(${rect.rotation||0}deg)`;
-}
-
-function removeArTarget(id){
-  const entry=arTargets.get(id);
-  if(!entry) return;
+  entry.visible=false;
   entry.wrapper.classList.remove('tracking');
   entry.wrapper.classList.add('losing');
   entry.video.pause();
-  setTimeout(()=>{ entry.wrapper.remove(); },250);
-  arTargets.delete(id);
-  _matchCooldown[id] = Date.now(); // prevent immediate re-trigger
+  setTimeout(()=>{
+    if(!entry.visible) entry.wrapper.classList.remove('visible','losing');
+  },250);
   refreshStatusPill();
 }
 
 function refreshStatusPill(){
   const pill=document.getElementById('statusPill');
   const text=document.getElementById('statusText');
+  const activeCount=[...arTargets.values()].filter(e=>e.visible).length;
   clearTimeout(window._pillTimer);
-  if(arTargets.size>0){
+  if(activeCount>0){
     pill.classList.remove('fade-out');
     pill.className='status-pill found';
-    text.textContent = arTargets.size===1 ? 'Memory found' : arTargets.size+' memories found';
+    text.textContent = activeCount===1 ? 'Memory found' : activeCount+' memories found';
     window._pillTimer=setTimeout(()=>pill.classList.add('fade-out'),1800);
   }else{
     pill.classList.remove('fade-out');
@@ -918,24 +837,30 @@ function refreshStatusPill(){
 
 /* ============================================================
    CAMERA CONTROLS
+   MindARThree owns the actual camera stream now (mindarThree.video) —
+   these just reach into it instead of managing a separate stream.
 ============================================================ */
 async function toggleTorch(){
-  if(!stream)return;
-  const track=stream.getVideoTracks()[0];
-  if(!track.getCapabilities || !track.getCapabilities().torch)return;
+  if(!videoTrack)return;
+  if(!videoTrack.getCapabilities || !videoTrack.getCapabilities().torch)return;
   torchOn=!torchOn;
-  await track.applyConstraints({advanced:[{torch:torchOn}]});
+  await videoTrack.applyConstraints({advanced:[{torch:torchOn}]});
   document.getElementById('torchBtn').style.color=torchOn?'var(--gold)':'#fff';
 }
 
 async function switchCamera(){
-  if(stream){stream.getTracks().forEach(t=>t.stop())}
-  facingMode=facingMode==='environment'?'user':'environment';
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode},audio:false});
-    document.getElementById('camera-video').srcObject=stream;
-  }catch(e){console.error(e)}
+  if(!mindarThree) return;
+  mindarThree.switchCamera(); // MindARThree handles stop+restart of its own stream internally
+  setTimeout(()=>{
+    try{ videoTrack = mindarThree.video.srcObject.getVideoTracks()[0]; }catch(_){}
+  }, 500);
 }
+
+// Expose functions invoked from inline onclick="" handlers in the HTML above
+window.startScanner = startScanner;
+window.toggleTorch = toggleTorch;
+window.switchCamera = switchCamera;
+
 
 /* Each AR target's wrapper gets its own click listener at creation time (see
    spawnArTarget), so tapping any one of several simultaneous videos opens
@@ -1140,6 +1065,20 @@ function showFsToast(msg){
   clearTimeout(window._toastTimer);
   window._toastTimer=setTimeout(()=>toast.classList.remove('show'),2200);
 }
+
+/* ============================================================
+   EXPOSE TO WINDOW — needed because this script is type="module"
+   now (ES module imports for THREE/CSS3DObject), and inline
+   onclick="" attributes in the HTML above can only see window-scope
+   globals, not module-scope ones.
+============================================================ */
+window.openFullscreen = openFullscreen;
+window.closeFullscreen = closeFullscreen;
+window.onFsTap = onFsTap;
+window.toggleFsPlay = toggleFsPlay;
+window.toggleFsMute = toggleFsMute;
+window.toggleFsMenu = toggleFsMenu;
+window.downloadCurrentVideo = downloadCurrentVideo;
 
 /* ============================================================
    BOOT
