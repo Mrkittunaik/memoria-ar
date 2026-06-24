@@ -571,11 +571,26 @@ function setLoadingState(title, sub, counter) {
 
 async function wakeBackend() {
   if (_backendReady) return;
-  setLoadingState('Waking up backend…', 'Free Render instances sleep after inactivity. This takes 30–60s.', '');
+  const statusText = document.getElementById('statusText');
+
+  // Try once, fast, first — if the backend is already awake (the normal
+  // case, since Render only sleeps after real inactivity), this resolves in
+  // well under a second and we skip the "waking up" messaging entirely.
+  // Only show that messaging if this quick check actually fails/times out,
+  // which is the real signal the instance was asleep.
+  try {
+    const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) { _backendReady = true; return; }
+  } catch (_) {}
+
+  // First check failed — backend really is asleep (cold start). Now show
+  // the slow-wake messaging, on the status pill since the loading screen
+  // is already hidden by this point in the flow (camera preview is live).
+  if (statusText) statusText.textContent = 'Waking up server… this can take 30–60s on first scan';
   let secs = 0;
   const timer = setInterval(() => {
     secs++;
-    document.getElementById('loading-counter').textContent = secs + 's elapsed…';
+    if (statusText) statusText.textContent = `Waking up server… ${secs}s elapsed`;
   }, 1000);
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
@@ -758,6 +773,7 @@ async function retryStartScanner() {
    a real position/rotation/scale matrix for each poster every frame.
 ============================================================ */
 let _targets = [];        // fetched once on init, cached (id, title, videoUrl, videoRect, photoWidth/Height)
+let _lastMindUrl = null;  // compiled .mind blob URL, cached so visibility-triggered rebuilds skip re-compiling
 
 /* DATA PREP ONLY — no camera involved at all here, so this can run fully in
    parallel with the user just looking at their instant preview. Fetches
@@ -798,7 +814,12 @@ async function fetchAndCompileTargets() {
     v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
   });
 
-  return URL.createObjectURL(mindBlob);
+  // Cached so a later visibility-triggered rebuild (see handleVisibilityChange
+  // below) can reconstruct mindarThree without re-fetching/re-compiling —
+  // that work only needs to happen once per page load, not every time the
+  // user locks their phone and comes back.
+  _lastMindUrl = URL.createObjectURL(mindBlob);
+  return _lastMindUrl;
 }
 
 /* ONE single correct construction of MindARThree, with imageTargetSrc set
@@ -1280,6 +1301,88 @@ window.toggleFsPlay = toggleFsPlay;
 window.toggleFsMute = toggleFsMute;
 window.toggleFsMenu = toggleFsMenu;
 window.downloadCurrentVideo = downloadCurrentVideo;
+
+/* ============================================================
+   AUTO CAMERA OFF/ON — page visibility
+   Locking the phone, switching apps, or swiping to another tab leaves the
+   camera hardware running indefinitely otherwise (stopScanLoop only pauses
+   MindAR's processing loop, not the actual MediaStreamTrack — the camera
+   LED and battery drain keep going). This fully releases everything the
+   moment the page is hidden, and rebuilds it from scratch the moment it's
+   visible again.
+
+   IMPORTANT — why this is a full teardown+rebuild, not stop()/start() reuse:
+   An earlier version of this called mindarThree.stop() then mindarThree.start()
+   on the SAME instance to toggle the camera. That looked safe (MindAR's own
+   switchCamera() does exactly that pair, once), but stop() only stops camera
+   tracks and removes the <video> — it does NOT touch this.controller, which
+   holds a Web Worker (new ControllerWorker() — confirmed in MindAR's own
+   controller.js constructor) plus TensorFlow.js/WebGL kernels for tracking.
+   start() then creates a BRAND NEW Controller (and therefore a brand new
+   Worker) every time, on top of the old one that was never released. Cycle
+   this a few times (lock phone, unlock, switch apps, come back) and you leak
+   a Worker + a WebGL context per cycle — mobile browsers have hard per-page
+   limits on both, and hitting that limit presents as exactly what was
+   reported: black screen, totally unresponsive, no buttons, nothing drawing.
+   The fix is to properly dispose everything old (controller.dispose() closes
+   the worker — confirmed via controller.worker.js's "dispose" case calling
+   close(); renderer.dispose()+forceContextLoss() frees the WebGL context)
+   before building a fresh mindarThree from zero, the same correct way
+   beginMindAR() does on first load.
+============================================================ */
+let _cameraStoppedForVisibility = false;
+
+function teardownMindAR() {
+  if (!mindarThree) return;
+  try { if (mindarThree.controller) mindarThree.controller.dispose(); } catch (_) {}
+  try {
+    if (mindarThree.video && mindarThree.video.srcObject) {
+      mindarThree.video.srcObject.getTracks().forEach(t => t.stop());
+    }
+    if (mindarThree.video) mindarThree.video.remove();
+  } catch (_) {}
+  try {
+    mindarThree.renderer.setAnimationLoop(null);   // stop the render loop before freeing the context
+    mindarThree.renderer.dispose();
+    mindarThree.renderer.forceContextLoss();        // releases the WebGL context immediately, not on GC
+    if (mindarThree.renderer.domElement) mindarThree.renderer.domElement.remove();
+  } catch (_) {}
+  try {
+    if (mindarThree.cssRenderer.domElement) mindarThree.cssRenderer.domElement.remove();
+  } catch (_) {}
+  mindarThree = null;
+  videoTrack = null;
+}
+
+async function handleVisibilityChange() {
+  if (!mindarThree) return;               // camera never started yet — nothing to do
+  if (fsOpenTargetId !== null) return;     // fullscreen player handles its own pause/resume
+
+  if (document.hidden) {
+    if (_cameraStoppedForVisibility) return;
+    _cameraStoppedForVisibility = true;
+    teardownMindAR();
+  } else {
+    if (!_cameraStoppedForVisibility) return;
+    _cameraStoppedForVisibility = false;
+    try {
+      // Rebuild from scratch with the SAME compiled targets/mindUrl from
+      // first load — arTargets (the video wrappers themselves) are untouched
+      // by any of this, only the camera/tracking layer gets recreated, so
+      // spawnArTarget must run again to attach fresh CSS3D objects/anchors
+      // onto the new mindarThree instance. Clear the old registry first so
+      // we don't end up with duplicate/orphaned wrapper elements.
+      arTargets.forEach(entry => { try { entry.wrapper.remove(); } catch (_) {} });
+      arTargets.clear();
+      await beginMindAR(_lastMindUrl);
+      refreshStatusPill();
+    } catch (err) {
+      console.error('[Memoria] camera restart on return failed:', err);
+      showCameraErrorScreen(err);
+    }
+  }
+}
+document.addEventListener('visibilitychange', handleVisibilityChange);
 
 /* ============================================================
    BOOT
