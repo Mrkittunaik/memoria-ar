@@ -377,7 +377,8 @@ html,body{
 }
 </style>
 <!-- MindAR image tracking (works with plain Cloudinary photo URLs — no pre-compiled NFT files needed) -->
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
 
@@ -655,11 +656,7 @@ async function beginMindAR() {
     const targets = data.data.targets;
     statusText.textContent = `Scanning for ${targets.length} photo${targets.length > 1 ? 's' : ''}…`;
 
-    // 2. Build MindAR .mind file from target photo URLs (fetched as images)
-    //    MindAR ImageTarget needs image elements or compiled .mind data.
-    //    We dynamically compile targets at runtime using MindAR's compiler.
-    const { MindARThree } = window.MINDAR.IMAGE;
-
+    // 2. Compile AR targets at runtime from Cloudinary photo URLs
     // Load each target photo as an HTMLImageElement
     const imageElements = await Promise.all(targets.map(t => new Promise((res, rej) => {
       const img = new Image();
@@ -690,13 +687,14 @@ async function beginMindAR() {
 
     statusText.textContent = 'Starting camera…';
 
-    // 4. Initialise MindAR scene
+    // 4. Initialise MindAR scene (Three.js mode)
     const container = document.getElementById('ar-container');
 
+    const { MindARThree } = window.MINDAR.IMAGE;
     const mindar = new MindARThree({
       container,
       imageTargetSrc: exportedBuffer,
-      maxTrack: targets.length,
+      maxTrack: Math.min(targets.length, 3), // cap at 3 simultaneous tracks
       uiScanning: false,
       uiLoading: false,
     });
@@ -707,7 +705,7 @@ async function beginMindAR() {
     targets.forEach((target, idx) => {
       const anchor = mindar.addAnchor(idx);
 
-      // Create a simple plane sized to the image aspect ratio
+      // Plane sized to the image aspect ratio
       const aspect = (target.photoWidth && target.photoHeight)
         ? target.photoWidth / target.photoHeight : 1.6;
       const planeGeom = new THREE.PlaneGeometry(1, 1 / aspect);
@@ -720,8 +718,10 @@ async function beginMindAR() {
       vid.playsInline = true;
       vid.crossOrigin = 'anonymous';
       vid.preload = 'auto';
+      document.body.appendChild(vid); // must be in DOM for VideoTexture to work
 
       const vidTexture = new THREE.VideoTexture(vid);
+      vidTexture.minFilter = THREE.LinearFilter;
       const mat = new THREE.MeshBasicMaterial({ map: vidTexture, side: THREE.DoubleSide });
       const plane = new THREE.Mesh(planeGeom, mat);
       anchor.group.add(plane);
@@ -729,13 +729,16 @@ async function beginMindAR() {
       anchor.onTargetFound = () => {
         vid.play().catch(() => {});
         logScan(target.id);
-        spawnArTarget(target.id, target.videoUrl, null); // overlay handled by 3D plane
       };
       anchor.onTargetLost = () => {
         vid.pause();
-        removeArTarget(target.id);
       };
     });
+
+    // Resize renderer to fill container
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
 
     document.getElementById('loading').classList.add('hidden');
     statusText.textContent = 'Point at a registered photo';
