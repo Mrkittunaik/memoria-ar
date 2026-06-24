@@ -7,6 +7,17 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>Scan — Memoria</title>
+<!-- ============================================================
+     TEMP DEBUG ONLY — Eruda on-screen console, for diagnosing the
+     "sound plays, video invisible" bug directly on a phone with no
+     cable/laptop needed. Adds a small floating button (usually
+     bottom-right) that opens a mobile DevTools-style panel showing
+     all console.log output, including the [Memoria] diagnostic logs
+     already built into spawnArTarget() and onTargetFound() below.
+     REMOVE both lines below once the bug is found — not for production.
+============================================================ -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
