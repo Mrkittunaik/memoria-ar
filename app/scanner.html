@@ -403,6 +403,18 @@ html,body{
   </div>
 </div>
 
+<!-- INSTANT PREVIEW — a plain raw camera feed shown the moment getUserMedia
+     resolves, BEFORE MindAR has finished compiling targets + warming up its
+     GPU kernels. MindAR's own start() does camera-open + addImageTargets +
+     postMatrix build + dummyRun(GPU warmup) all in one sequential call that
+     can't be split apart safely (its internal postMatrixs only get built
+     once, from whatever targets exist at that moment — confirmed in its
+     source). So instead of fighting that lifecycle, we show this cheap
+     preview first for instant visual feedback, then swap to MindAR's own
+     video+canvases the moment mindarThree.start() resolves (tracking-ready). -->
+<video id="instant-preview" autoplay muted playsinline
+       style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:1"></video>
+
 <!-- AR CONTAINER
      MindARThree mounts its OWN <video> (camera feed) + WebGL canvas + CSS3D layer
      directly into this container — that's what gives us the real worldMatrix
@@ -410,7 +422,7 @@ html,body{
      The CSS3D layer is where our .ar-video-wrapper elements actually live once
      mounted as CSS3DObjects (done in JS below) — ar-layer is no longer used
      directly but kept as a harmless legacy node. -->
-<div id="ar-container"></div>
+<div id="ar-container" style="position:relative;z-index:2"></div>
 <div id="ar-layer" style="display:none"></div>
 
 <!-- SCAN UI -->
@@ -603,28 +615,67 @@ async function startScanner() {
   document.getElementById('demo-overlay').classList.add('hidden');
   setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
   document.getElementById('loading').classList.remove('hidden');
-  try {
-    // MindARThree requests the camera itself internally, but its own error
-    // handling throws away the real error object (it calls reject() with no
-    // argument on failure) — so on its own we'd never know WHY it failed.
-    // We probe with our own getUserMedia call first purely to capture the
-    // real error (NotAllowedError, NotFoundError, NotReadableError, etc),
-    // then release it before MindAR opens its own stream.
-    let probe;
-    try {
-      probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-    } catch (probeErr) {
-      throw probeErr; // has a real .name (NotAllowedError etc) — let the catch below classify it
-    }
-    probe.getTracks().forEach(t => t.stop());
 
-    await wakeBackend();
-    await beginMindAR();
-    localStorage.setItem(PERM_KEY, 'true');
-    document.getElementById('loading').classList.add('hidden');
+  // ── STEP 1: instant raw camera preview ──
+  // This is the one and only getUserMedia call that needs permission. It's
+  // also the fastest possible thing to put on screen — no MindAR, no
+  // compiling, nothing. The moment this resolves, the loading screen comes
+  // down and the user is looking at their own camera feed, full speed.
+  let previewStream;
+  try {
+    previewStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false
+    });
   } catch (err) {
-    console.error('[Memoria] startScanner failed:', err);
     showCameraErrorScreen(err);
+    return;
+  }
+  const previewVideo = document.getElementById('instant-preview');
+  previewVideo.srcObject = previewStream;
+  document.getElementById('loading').classList.add('hidden');
+  localStorage.setItem(PERM_KEY, 'true');
+
+  // ── STEP 2: everything MindAR needs, fetched/compiled in parallel ──
+  // wakeBackend + fetching targets + compiling .mind all run here, UNDER
+  // the live preview the user is already looking at — not blocking it.
+  // Status pill communicates progress instead of a full-screen blocker.
+  let mindUrl;
+  try {
+    await wakeBackend();
+    mindUrl = await fetchAndCompileTargets();
+  } catch (err) {
+    console.error('[Memoria] target prep failed:', err);
+    const statusText = document.getElementById('statusText');
+    if (statusText) statusText.textContent = 'Could not load memories. Pull to retry.';
+    return;
+  }
+  if (!mindUrl) return; // no targets uploaded yet — message already shown by fetchAndCompileTargets
+
+  // ── STEP 3: hand off to MindAR ──
+  // MindARThree.start() opens ITS OWN internal getUserMedia stream (separate
+  // from previewStream above) and does addImageTargets + postMatrix build +
+  // GPU warmup as one atomic sequence — this is the one safe way to give it
+  // imageTargetSrc (confirmed against MindAR's own source: postMatrixs are
+  // only ever built once, synchronously, right after this exact call, from
+  // whatever targets exist at that moment — adding targets after start()
+  // leaves postMatrixs stale, which is why a previous version of this fix
+  // played sound with no visible video).
+  // We stop our preview stream FIRST, before MindAR opens its own — some
+  // Android camera drivers refuse a second simultaneous open of the same
+  // physical camera even from the same page, throwing NotReadableError.
+  // Permission is already granted at this point, so MindAR's own internal
+  // getUserMedia call is effectively instant — the brief black frame this
+  // creates is much safer than risking a failed camera open on those devices.
+  previewStream.getTracks().forEach(t => t.stop());
+  previewVideo.srcObject = null;
+  previewVideo.style.display = 'none';
+
+  try {
+    await beginMindAR(mindUrl);
+  } catch (err) {
+    console.error('[Memoria] MindAR start failed:', err);
+    showCameraErrorScreen(err);
+    return;
   }
 }
 
@@ -635,7 +686,7 @@ async function startScanner() {
    pretending we can re-ask, we detect that specific case (getUserMedia throws
    NotAllowedError / PermissionDeniedError) and show exact, browser-aware
    steps — then let them hit "Try again" right here, no full page reload,
-   which re-runs beginMindAR() directly so it picks up the change instantly. */
+   which re-runs startScanner() directly so it picks up the change instantly. */
 function showCameraErrorScreen(err) {
   localStorage.removeItem(PERM_KEY);
   const name = err && err.name;
@@ -708,10 +759,15 @@ async function retryStartScanner() {
 ============================================================ */
 let _targets = [];        // fetched once on init, cached (id, title, videoUrl, videoRect, photoWidth/Height)
 
-async function beginMindAR() {
+/* DATA PREP ONLY — no camera involved at all here, so this can run fully in
+   parallel with the user just looking at their instant preview. Fetches
+   target metadata + photos from the backend and compiles them into one
+   .mind dataset, exactly as before, just no longer entangled with camera
+   startup. Returns the blob URL to hand to MindARThree, or null if there
+   are no targets yet. */
+async function fetchAndCompileTargets() {
   const statusText = document.getElementById('statusText');
   const pill = document.getElementById('statusPill');
-
   pill.className = 'status-pill ready';
   statusText.textContent = 'Loading memories…';
 
@@ -721,22 +777,20 @@ async function beginMindAR() {
 
   if (!data.success || !data.data.targets || data.data.targets.length === 0) {
     statusText.textContent = 'No memories uploaded yet.';
-    return;
+    return null;
   }
   _targets = data.data.targets;
 
   statusText.textContent = `Preparing AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
-  // ── Compile every target photo into one .mind dataset, in this page ──
   const { Compiler } = window.MINDAR.IMAGE;
   const compiler = new Compiler();
   const images = await Promise.all(_targets.map(t => loadImage(t.photoUrl)));
   await compiler.compileImageTargets(images, (progress) => {
     statusText.textContent = `Preparing AR tracking… ${Math.round(progress)}%`;
   });
-  const mindBuffer = compiler.exportData();           // ArrayBuffer-ish, msgpack-encoded
+  const mindBuffer = compiler.exportData();
   const mindBlob = new Blob([mindBuffer]);
-  const mindUrl = URL.createObjectURL(mindBlob);      // local blob: URL — MindAR fetches this itself
 
   // Preload all videos so they play instantly on detection
   _targets.forEach(t => {
@@ -744,27 +798,35 @@ async function beginMindAR() {
     v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
   });
 
-  statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+  return URL.createObjectURL(mindBlob);
+}
 
-  // ── Hand off to MindARThree — it owns the camera + tracking loop from here ──
+/* ONE single correct construction of MindARThree, with imageTargetSrc set
+   in the constructor like MindAR expects — this is what fixes the "sound
+   plays but video doesn't show" bug. start() runs camera-open, target
+   loading, postMatrix build and GPU warmup as one atomic sequence; calling
+   it this way means postMatrixs are built for the SAME targets we then add
+   CSS anchors for below, instead of being stale from an empty initial set. */
+async function beginMindAR(mindUrl) {
+  const statusText = document.getElementById('statusText');
+
   mindarThree = new window.MINDAR.IMAGE.MindARThree({
     container: document.getElementById('ar-container'),
     imageTargetSrc: mindUrl,
-    maxTrack: Math.min(_targets.length, 8), // track up to 8 simultaneous posters
-    filterMinCF: 0.0001,  // tighter = less jitter once locked
+    maxTrack: Math.min(_targets.length, 8),
+    filterMinCF: 0.0001,
     filterBeta: 0.01,
-    uiLoading: 'no', uiScanning: 'no', uiError: 'no', // we drive our own status pill
+    uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
 
   await mindarThree.start();
 
-  // Grab the live camera track for torch control, since we no longer open our own stream
   try {
     videoTrack = mindarThree.video.srcObject.getVideoTracks()[0];
   } catch (_) {}
 
-  // One CSS anchor per target index — each is a 3D group MindAR positions every
-  // frame to exactly match that poster's real on-screen rect (position, rotation, scale).
+  statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+
   _targets.forEach((target, index) => {
     const anchor = mindarThree.addCSSAnchor(index);
     spawnArTarget(String(target.id), index, target, anchor);
@@ -773,7 +835,6 @@ async function beginMindAR() {
     anchor.onTargetLost  = () => onTargetLost(String(target.id));
   });
 
-  // Render loop — required for CSS3DRenderer/WebGLRenderer to actually draw each frame
   mindarThree.renderer.setAnimationLoop(() => {
     mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
     mindarThree.cssRenderer.render(mindarThree.cssScene, mindarThree.camera);
