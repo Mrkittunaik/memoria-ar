@@ -96,6 +96,13 @@ html,body{
   display:flex;flex-direction:column;
   align-items:center;justify-content:space-between;
   padding:env(safe-area-inset-top,20px) 0 env(safe-area-inset-bottom,20px);
+  /* MUST sit above #ar-container (z-index:2) and #instant-preview (z-index:1) —
+     this had no z-index at all before, which defaults to auto/0, so the
+     camera layer painted over the torch/flip-camera buttons and status pill
+     entirely once #ar-container got a z-index for the instant-preview
+     layering. Buttons were still in the DOM and technically present, just
+     visually covered by the camera feed on top of them. */
+  z-index:5;
 }
 
 /* TOP BAR */
