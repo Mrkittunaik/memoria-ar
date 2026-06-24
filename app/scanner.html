@@ -22,10 +22,18 @@ html,body{
 
 /* CAMERA CONTAINER — MindARThree mounts its own <video> + canvases inside
    #ar-container and sizes them itself (see its resize() method), so no
-   manual #camera-video/#ar-canvas styling is needed here anymore. */
+   manual #camera-video/#ar-canvas styling is needed here anymore.
+   z-index sits above #instant-preview so MindAR's real feed shows once ready,
+   but inset:0 + position:fixed MUST stay intact — MindAR's resize() reads
+   container.clientWidth/clientHeight to size its canvases, and an inline
+   style overriding position:fixed to position:relative here previously
+   collapsed this box's height to near-zero before its canvases had any
+   content, which is what caused the camera feed to only fill the top
+   portion of the screen with black space below. */
 #ar-container{
   position:fixed;inset:0;
   background:#000;
+  z-index:2;
 }
 
 /* VIDEO OVERLAY — anchored by MindAR onto the target, sits smoothly inside the photo frame.
@@ -47,7 +55,7 @@ html,body{
   border-radius:2px;
   box-shadow:0 0 0 1px rgba(255,255,255,.06);
   opacity:0;
-  transition:opacity .25s;
+  transition:opacity .25s,box-shadow .12s ease;
 }
 .ar-video-wrapper.visible{
   opacity:1;
@@ -64,13 +72,21 @@ html,body{
   display:block;
   pointer-events:none;
 }
-/* Thin gold corner ticks while a poster is actively tracked — confirms lock without a boxy frame */
+/* FULL DETECTION BORDER — wraps the entire matched photo, not just the video
+   crop, and snaps on fast (.12s, no fade-in delay) the instant tracking
+   locks, so it reads as an immediate "found it" confirmation rather than a
+   slow reveal. box-shadow (not border) is used so it doesn't add to the
+   wrapper's box size or shift the video's object-fit:cover crop. */
+.ar-video-wrapper.tracking{
+  box-shadow:0 0 0 3px var(--gold),0 0 16px 2px rgba(201,147,58,.5);
+}
+/* Thin gold corner ticks on top of the full border, for extra "locked on" detail */
 .ar-video-wrapper::before,.ar-video-wrapper::after{
   content:'';position:absolute;width:14px;height:14px;
-  border:2px solid var(--gold-light);opacity:0;
-  transition:opacity .25s;pointer-events:none;
+  border:2px solid #fff;opacity:0;
+  transition:opacity .12s;pointer-events:none;
 }
-.ar-video-wrapper.tracking::before,.ar-video-wrapper.tracking::after{opacity:.85}
+.ar-video-wrapper.tracking::before,.ar-video-wrapper.tracking::after{opacity:.9}
 .ar-video-wrapper::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
 .ar-video-wrapper::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
 
@@ -422,7 +438,7 @@ html,body{
      The CSS3D layer is where our .ar-video-wrapper elements actually live once
      mounted as CSS3DObjects (done in JS below) — ar-layer is no longer used
      directly but kept as a harmless legacy node. -->
-<div id="ar-container" style="position:relative;z-index:2"></div>
+<div id="ar-container"></div>
 <div id="ar-layer" style="display:none"></div>
 
 <!-- SCAN UI -->
@@ -846,6 +862,8 @@ async function beginMindAR(mindUrl) {
     videoTrack = mindarThree.video.srcObject.getVideoTracks()[0];
   } catch (_) {}
 
+  acquireWakeLock(); // fire-and-forget — non-fatal if unsupported/denied, see module above
+
   statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
   _targets.forEach((target, index) => {
@@ -966,19 +984,37 @@ function spawnArTarget(id, targetIndex, target, anchor){
   video.style.width  = rect.width  + '%';
   video.style.height = rect.height + '%';
 
+  // ── SCALE — this was the actual bug behind "sound plays, video invisible" ──
+  // MindAR applies TWO scale factors to CSS anchors, not one: postMatrix
+  // (scale = markerWidth, the compiled target's pixel width — e.g. ~1200 for
+  // a 1200px-wide photo) AND, only for CSS anchors specifically, an
+  // additional cssScaleDownMatrix that multiplies by 0.001 on top of that
+  // (both confirmed directly in MindARThree's source: this.postMatrixs[...]
+  // composed with scale.set(markerWidth,markerWidth,markerWidth), then
+  // m.multiply(cssScaleDownMatrix) where cssScaleDownMatrix is itself
+  // composed with scale (0.001,0.001,0.001), gated on `if (anchor.css)`).
+  // Net scale ends up ≈ markerWidth × 0.001 — e.g. ≈1.2 for a 1200px photo —
+  // NOT exactly 1, and NOT the plain normalized 0–1 unit space that the
+  // non-CSS addAnchor()/PlaneGeometry(1, aspect) convention uses. A previous
+  // version of this file assumed the CSS path used that same plain
+  // convention and set SCALE = 1/PLANE_PX (0.001), which after MindAR's own
+  // extra ×0.001 on top left the video rendering at roughly 1/1000th its
+  // correct size — technically on screen, just shrunk to a near-invisible
+  // speck. Solving for the scale that lands our PLANE_PX-pixel wrapper at
+  // the SAME final size MindAR's own plane convention uses (markerWidth):
+  //   PLANE_PX × SCALE × markerWidth × 0.001 = markerWidth
+  //   SCALE = 1 / (PLANE_PX × 0.001) = 1000 / PLANE_PX
   const cssObject = new CSS3DObject(wrapper);
-  // Single uniform scale: PLANE_PX pixels → 1 MindAR unit. Matches MindAR's
-  // own convention of a uniform-scaled unit marker space (see postMatrix in
-  // MindARThree's source — scale.x/y/z are all set to the same markerWidth).
-  const SCALE = 1 / PLANE_PX;
+  const SCALE = 1000 / PLANE_PX;
   cssObject.scale.set(SCALE, SCALE, SCALE);
   // Anchor origin sits at the photo's top-left corner with +y pointing UP
   // (Three.js convention), while our wrapper's own (0,0) is its top-left
   // corner with +y pointing DOWN (CSS convention) before any 3D transform.
   // CSS3DObject keeps the element's own top-left as its local origin, so we
-  // shift it up by its full height and right by zero — landing the wrapper's
-  // visual top-left at the anchor's (0, aspect), i.e. the photo's true top-left
-  // once Three.js's flipped y-axis is accounted for.
+  // shift it up by its full height to land the wrapper's visual top-left at
+  // the anchor's true top-left once the y-axis flip is accounted for. This
+  // offset must be expressed in the SAME final units as the corrected scale
+  // above (markerWidth-equivalent units), so it uses the same conversion.
   cssObject.position.set(0, PLANE_PX * aspect * SCALE, 0);
   anchor.group.add(cssObject);
 
@@ -1303,6 +1339,43 @@ window.toggleFsMenu = toggleFsMenu;
 window.downloadCurrentVideo = downloadCurrentVideo;
 
 /* ============================================================
+   SCREEN WAKE LOCK
+   Without this, the phone's own screen-off timeout (often as short as
+   30s–2min depending on device settings) kicks in while someone is actively
+   holding the phone up to scan a photo. The screen dims/locks, the page
+   correctly fires visibilitychange (by browser design — that part was never
+   the bug), and the camera correctly tears down per handleVisibilityChange
+   below — but from the person's perspective, since they were still actively
+   using it, it looks exactly like "the camera randomly turned itself off
+   after a minute or two." This holds the screen awake for the entire time
+   the scanner is genuinely in active use, and lets it sleep normally the
+   moment the person actually navigates away — matching "don't auto-off
+   while in use, do turn off when truly leaving" rather than a fixed timer.
+   The Wake Lock API itself auto-releases when the page becomes hidden (per
+   spec), so this naturally complements handleVisibilityChange instead of
+   needing to duplicate that logic here.
+============================================================ */
+let _wakeLock = null;
+
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return; // unsupported browser — silently skip, not fatal
+  try {
+    _wakeLock = await navigator.wakeLock.request('screen');
+    _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+  } catch (_) {
+    // Can fail if battery saver is on, tab isn't focused yet, etc — non-fatal,
+    // the scanner still works, the screen just won't be held awake this time.
+  }
+}
+
+async function reacquireWakeLockIfNeeded() {
+  if (!document.hidden && !_wakeLock && mindarThree) {
+    await acquireWakeLock();
+  }
+}
+document.addEventListener('visibilitychange', reacquireWakeLockIfNeeded);
+
+/* ============================================================
    AUTO CAMERA OFF/ON — page visibility
    Locking the phone, switching apps, or swiping to another tab leaves the
    camera hardware running indefinitely otherwise (stopScanLoop only pauses
@@ -1334,6 +1407,7 @@ let _cameraStoppedForVisibility = false;
 
 function teardownMindAR() {
   if (!mindarThree) return;
+  if (_wakeLock) { try { _wakeLock.release(); } catch (_) {} _wakeLock = null; }
   try { if (mindarThree.controller) mindarThree.controller.dispose(); } catch (_) {}
   try {
     if (mindarThree.video && mindarThree.video.srcObject) {
