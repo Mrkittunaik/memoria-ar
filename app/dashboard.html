@@ -299,6 +299,7 @@ body{
         </div>
         <input type="file" id="videoInput" accept="video/*" style="display:none" onchange="handleVideoSelect(this)"/>
         <div class="progress-bar" id="videoProgress"><div class="progress-fill" id="videoFill"></div></div>
+        <div id="uploadSizeLabel" style="font-size:11px;color:var(--ink-faint);margin-top:4px;display:none"></div>
       </div>
       <div class="form-group">
         <label>Description <span style="color:var(--ink-faint)">(optional)</span></label>
@@ -334,42 +335,6 @@ body{
 <script>
 /* ── CONFIG ────────────────────────────────────────────────── */
 const API = 'https://memoria-ar-backend.onrender.com';
-
-// ── Render cold-start: only show overlay if backend takes >6s to respond ────────
-(async () => {
-  const TIMEOUT = 90000;
-  const SLOW_THRESHOLD = 6000;
-  const start = Date.now();
-  let overlay = null;
-  let resolved = false;
-
-  const healthPromise = fetch(`${API}/health`).then(r => { resolved = true; return r; }).catch(() => null);
-
-  setTimeout(async () => {
-    if (resolved) return;
-    overlay = document.createElement('div');
-    overlay.id = 'wake-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(253,250,247,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:"DM Sans",sans-serif;text-align:center;padding:32px;';
-    overlay.innerHTML = '<div style="font-size:36px">☕</div><div style="font-size:17px;font-weight:500;color:#0D0B0A">Waking up backend…</div><div style="font-size:13px;color:#6B6560;max-width:280px;line-height:1.6">Free Render instances sleep after inactivity.<br>This takes 30–60 seconds.</div><div id="wake-dash-timer" style="font-size:13px;color:#C9933A">Waiting…</div>';
-    document.body.appendChild(overlay);
-
-    while (!resolved && Date.now() - start < TIMEOUT) {
-      await new Promise(r => setTimeout(r, 3000));
-      const elapsed = Math.round((Date.now() - start) / 1000);
-      const timerEl = document.getElementById('wake-dash-timer');
-      if (timerEl) timerEl.textContent = `${elapsed}s elapsed…`;
-      try {
-        const r = await fetch(`${API}/health`);
-        if (r.ok) { resolved = true; break; }
-      } catch (_) {}
-    }
-    if (overlay) { overlay.remove(); overlay = null; loadAll(); }
-  }, SLOW_THRESHOLD);
-
-  await healthPromise;
-  resolved = true;
-  if (overlay) { overlay.remove(); overlay = null; }
-})();
 
 /* ── STATE ─────────────────────────────────────────────────── */
 let memories = [];
@@ -546,6 +511,7 @@ function openUploadModal() {
   document.getElementById('uploadError').style.display = 'none';
   document.getElementById('videoProgress').classList.remove('show');
   document.getElementById('videoFill').style.width = '0%';
+  document.getElementById('uploadSizeLabel').style.display = 'none';
   resetZone('photoZone', 'photo');
   resetZone('videoZone', 'video');
   document.getElementById('uploadModal').classList.add('open');
@@ -586,7 +552,7 @@ function handleVideoSelect(input) {
 }
 
 /* ── REAL UPLOAD TO BACKEND ────────────────────────────────── */
-async function doUpload() {
+function doUpload() {
   const title = document.getElementById('memTitle').value.trim();
   const desc  = document.getElementById('memDesc').value.trim();
   const errEl = document.getElementById('uploadError');
@@ -596,61 +562,89 @@ async function doUpload() {
   if (!photoFile)  { showErr('Please select a photo file.'); return; }
   if (!videoFile)  { showErr('Please select a video file.'); return; }
 
-  // Lock UI
-  const btn = document.getElementById('uploadBtn');
+  const btn    = document.getElementById('uploadBtn');
   const cancel = document.getElementById('cancelBtn');
+  const progress = document.getElementById('videoProgress');
+  const fill     = document.getElementById('videoFill');
+
   btn.textContent = 'Uploading…';
   btn.disabled = true;
   cancel.disabled = true;
-
-  // Fake progress bar while Cloudinary uploads
-  const progress = document.getElementById('videoProgress');
-  const fill = document.getElementById('videoFill');
   progress.classList.add('show');
-  let pct = 0;
-  const ticker = setInterval(() => {
-    pct = Math.min(pct + Math.random() * 8, 88);
+  fill.style.width = '0%';
+  fill.style.transition = 'width 0.2s ease';
+
+  // Show sizes so user knows what's being uploaded
+  const sizeLabel = document.getElementById('uploadSizeLabel');
+  const fmt = b => b > 1048576 ? (b/1048576).toFixed(1)+' MB' : (b/1024).toFixed(0)+' KB';
+  sizeLabel.textContent = `Photo: ${fmt(photoFile.size)} · Video: ${fmt(videoFile.size)}`;
+  sizeLabel.style.display = 'block';
+
+  const form = new FormData();
+  form.append('title', title);
+  if (desc) form.append('description', desc);
+  form.append('photo', photoFile);
+  form.append('video', videoFile);
+
+  const xhr = new XMLHttpRequest();
+
+  // Real upload progress from XHR (tracks bytes sent to server)
+  xhr.upload.addEventListener('progress', e => {
+    if (!e.lengthComputable) return;
+    // Upload to server = first 70% of the bar; Cloudinary processing = last 30%
+    const pct = Math.round((e.loaded / e.total) * 70);
     fill.style.width = pct + '%';
-  }, 400);
+    btn.textContent = `Uploading… ${pct}%`;
+  });
 
-  try {
-    const form = new FormData();
-    form.append('title', title);
-    if (desc) form.append('description', desc);
-    form.append('photo', photoFile);
-    form.append('video', videoFile);
+  xhr.upload.addEventListener('load', () => {
+    // Files reached server — now Cloudinary is processing (animate 70→95%)
+    fill.style.transition = 'width 1.5s ease';
+    fill.style.width = '95%';
+    btn.textContent = 'Processing…';
+  });
 
-    const res = await fetch(`${API}/api/memories/upload`, { method:'POST', body: form });
-    const json = await res.json();
-
-    clearInterval(ticker);
+  xhr.addEventListener('load', () => {
+    fill.style.transition = 'width 0.2s ease';
     fill.style.width = '100%';
 
-    if (!res.ok) {
+    let json;
+    try { json = JSON.parse(xhr.responseText); } catch(_) { json = {}; }
+
+    if (xhr.status < 200 || xhr.status >= 300) {
       showErr(json.message || 'Upload failed. Please try again.');
-      btn.textContent = 'Upload & generate AR target';
-      btn.disabled = false;
-      cancel.disabled = false;
+      resetUploadBtn(btn, cancel);
       return;
     }
 
-    // Success
     setTimeout(() => {
       closeUploadModal();
       showToast('Memory created! ✓');
       loadAll();
-      btn.textContent = 'Upload & generate AR target';
-      btn.disabled = false;
-      cancel.disabled = false;
-    }, 400);
+      resetUploadBtn(btn, cancel);
+    }, 300);
+  });
 
-  } catch(e) {
-    clearInterval(ticker);
+  xhr.addEventListener('error', () => {
     showErr('Network error. Check your connection and try again.');
-    btn.textContent = 'Upload & generate AR target';
-    btn.disabled = false;
-    cancel.disabled = false;
-  }
+    resetUploadBtn(btn, cancel);
+  });
+
+  xhr.addEventListener('timeout', () => {
+    showErr('Upload timed out. Try a smaller video or check your connection.');
+    resetUploadBtn(btn, cancel);
+  });
+
+  xhr.timeout = 300_000; // 5 min max
+  xhr.open('POST', `${API}/api/memories/upload`);
+  xhr.send(form);
+}
+
+function resetUploadBtn(btn, cancel) {
+  btn.textContent = 'Upload & generate AR target';
+  btn.disabled = false;
+  cancel.disabled = false;
+  document.getElementById('uploadSizeLabel').style.display = 'none';
 }
 
 function showErr(msg) {
