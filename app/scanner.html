@@ -376,6 +376,9 @@ html,body{
   font-size:13px;cursor:pointer;font-family:inherit;
 }
 </style>
+<!-- AR.js + A-Frame for real image tracking -->
+<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.js"></script>
 </head>
 <body>
 
@@ -512,10 +515,11 @@ html,body{
 /* ============================================================
    STATE
 ============================================================ */
+const BACKEND_URL = 'https://YOUR_RENDER_URL'; // ← replace with your Render backend URL
+
 let stream=null;
 let facingMode='environment';
 let torchOn=false;
-let demoActive=false;
 
 /* Registry of every currently-tracked poster: key -> {wrapper, video, lastSeen}
    Multiple posters can be live at once, each with its own independent video,
@@ -590,42 +594,160 @@ async function startScanner(){
 /* ============================================================
    AR TRACKING
 ============================================================ */
-function beginMindAR(){
-  /*
-   * PRODUCTION IMPLEMENTATION:
-   *
-   * import * as MINDAR from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js'
-   *
-   * const mindarThree = new MindARThree({
-   *   container: document.getElementById('ar-container'),
-   *   imageTargetSrc: '/api/targets/{userId}.mind',   // ONE compiled file can hold MANY targets
-   * });
-   *
-   * const { renderer, scene, camera } = mindarThree;
-   *
-   * // One addAnchor() call per registered photo — supports many simultaneous targets,
-   * // each tracked completely independently every frame.
-   * targets.forEach((target, i) => {
-   *   const anchor = mindarThree.addAnchor(i);
-   *   anchor.onTargetFound = () => spawnArTarget(target.id, target.videoUrl);
-   *   anchor.onTargetLost  = () => removeArTarget(target.id);
-   *   anchor.onUpdate = (modelViewMatrix) => updateArTarget(target.id, modelViewMatrix);
-   * });
-   *
-   * await mindarThree.start();
-   * renderer.setAnimationLoop(() => renderer.render(scene, camera));
-   *
-   * updateArTarget() projects the tracked photo's 4 corners from 3D model space into
-   * 2D screen pixels using the anchor's model-view-projection matrix, then sets that
-   * target's wrapper width/height/rotation/transform to match exactly — so the video
-   * is always pinned to, and sized to, that one poster only, however near, far, or
-   * tilted it is. No two posters ever share a wrapper.
-   */
+async function beginMindAR() {
+  const pill = document.getElementById('statusPill');
+  const statusText = document.getElementById('statusText');
 
-  // Until the real MindAR + backend wiring lands, this auto-running stand-in shows the
-  // intended UX: the camera watches itself, and as soon as a poster-shaped rectangle
-  // would be "found", a video auto-spawns fitted exactly inside it — zero buttons.
-  runAutoDemo();
+  try {
+    pill.className = 'status-pill ready';
+    statusText.textContent = 'Loading memories…';
+
+    // 1. Fetch all active targets from backend
+    const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
+    if (!res.ok) throw new Error(`Backend error: ${res.status}`);
+    const data = await res.json();
+
+    if (!data.success || !data.data.targets || data.data.targets.length === 0) {
+      statusText.textContent = 'No memories uploaded yet.';
+      document.getElementById('loading').classList.add('hidden');
+      return;
+    }
+
+    const targets = data.data.targets;
+    statusText.textContent = `Scanning for ${targets.length} photo${targets.length > 1 ? 's' : ''}…`;
+
+    // 2. Silently preload all videos in background while AR initialises
+    // so when detection fires the video is already buffered — plays instantly
+    targets.forEach(target => {
+      const preload = document.createElement('video');
+      preload.src = target.videoUrl;
+      preload.preload = 'auto';
+      preload.muted = true;
+      preload.playsInline = true;
+      preload.load();
+    });
+
+    // 3. Build AR.js NFT scene injected into existing #ar-container
+    const container = document.getElementById('ar-container');
+
+    const scene = document.createElement('a-scene');
+    scene.setAttribute('embedded', '');
+    scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false;');
+    scene.setAttribute('vr-mode-ui', 'enabled: false');
+    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; precision: medium;');
+    scene.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:1;';
+
+    // 4. One a-nft marker per uploaded photo — all tracked independently simultaneously
+    targets.forEach(target => {
+      const marker = document.createElement('a-nft');
+      // nftUrl = base path to NFT descriptor files (.fset .fset3 .iset) stored in Cloudinary
+      // backend generates these files during upload and returns the base URL
+      marker.setAttribute('type', 'nft');
+      marker.setAttribute('url', target.nftUrl);
+      marker.setAttribute('smooth', 'true');
+      marker.setAttribute('smoothCount', '10');
+      marker.setAttribute('smoothTolerance', '0.01');
+      marker.setAttribute('smoothThreshold', '5');
+
+      // Target found — spawn video overlay at detected position
+      marker.addEventListener('markerFound', () => {
+        const rect = getMarkerScreenRect(marker);
+        if (rect) spawnArTarget(target.id, target.videoUrl, rect);
+        logScan(target.id);
+      });
+
+      // Every frame while tracked — keep video perfectly glued to the photo
+      marker.addEventListener('markerUpdated', () => {
+        const rect = getMarkerScreenRect(marker);
+        if (rect) updateArTarget(target.id, rect);
+      });
+
+      // Target lost — fade out and remove video overlay smoothly
+      marker.addEventListener('markerLost', () => {
+        removeArTarget(target.id);
+      });
+
+      scene.appendChild(marker);
+    });
+
+    // AR.js requires an a-entity camera
+    const cam = document.createElement('a-entity');
+    cam.setAttribute('camera', '');
+    scene.appendChild(cam);
+
+    container.appendChild(scene);
+
+    // Keep our UI layers on top of the AR.js canvas
+    document.getElementById('ar-layer').style.zIndex = '10';
+    document.getElementById('scan-ui').style.zIndex = '20';
+    document.getElementById('loading').classList.add('hidden');
+
+  } catch (err) {
+    console.error('AR init failed:', err);
+    document.getElementById('statusText').textContent = 'Failed to load. Please reload.';
+    document.getElementById('loading').classList.add('hidden');
+  }
+}
+
+// Convert AR.js marker 3D world position → 2D screen pixel rect
+// so existing spawnArTarget / updateArTarget / applyRect work exactly unchanged
+function getMarkerScreenRect(markerEl) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  try {
+    const obj = markerEl.object3D;
+    if (!obj || !obj.visible) return null;
+
+    const pos = new THREE.Vector3();
+    obj.getWorldPosition(pos);
+
+    const camEl = document.querySelector('[camera]');
+    if (!camEl) return null;
+    const camera = camEl.getObject3D('camera');
+    if (!camera) return null;
+
+    const projected = pos.clone().project(camera);
+    const screenX = (projected.x + 1) / 2 * vw;
+    const screenY = (-projected.y + 1) / 2 * vh;
+
+    // Scale overlay size based on marker's world scale (distance from camera)
+    const scale = obj.scale.x || 1;
+    const baseSize = Math.min(vw, vh) * 0.45 * scale;
+    const w = baseSize;
+    const h = baseSize * 0.65;
+
+    const rotation = THREE.MathUtils.radToDeg(obj.rotation.z) || 0;
+
+    return { x: screenX - w / 2, y: screenY - h / 2, width: w, height: h, rotation };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Fire and forget — log scan to backend for analytics
+async function logScan(memoryId) {
+  try {
+    await fetch(`${BACKEND_URL}/api/scan/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        memoryId,
+        sessionId: getSessionId(),
+        deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+        userAgent: navigator.userAgent
+      })
+    });
+  } catch (e) { /* non-critical, ignore silently */ }
+}
+
+// Persistent anonymous session ID for scan analytics
+function getSessionId() {
+  let sid = localStorage.getItem('memoria_session');
+  if (!sid) {
+    sid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+    localStorage.setItem('memoria_session', sid);
+  }
+  return sid;
 }
 
 /* ============================================================
@@ -700,68 +822,6 @@ function refreshStatusPill(){
     pill.className='status-pill ready';
     text.textContent='Scanning for photos…';
   }
-}
-
-/* ============================================================
-   AUTO-RUNNING STAND-IN (no backend / no MindAR wired up yet)
-   Spawns 1-2 demo posters with auto-fitted, auto-zooming videos on a timer so the
-   finished UX can be reviewed end-to-end. Swap this call for real MindAR callbacks
-   (anchor.onTargetFound / onUpdate / onTargetLost above) once both are ready.
-============================================================ */
-const DEMO_CLIPS=[
-  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4'
-];
-let demoRectsTimer=null, demoSpawnTimer=null, demoTick=0;
-
-function runAutoDemo(){
-  if(demoActive) return;
-  demoActive=true;
-  demoTick=0;
-
-  // Poster A appears almost immediately
-  demoSpawnTimer=setTimeout(()=>{
-    spawnArTarget('demo-a', DEMO_CLIPS[0], demoRectFor('demo-a',0));
-  },600);
-  // Poster B joins a moment later — proves multiple targets track independently at once
-  demoSpawnTimer=setTimeout(()=>{
-    spawnArTarget('demo-b', DEMO_CLIPS[1], demoRectFor('demo-b',0));
-  },2600);
-
-  demoRectsTimer=setInterval(()=>{
-    demoTick++;
-    if(arTargets.has('demo-a')) updateArTarget('demo-a', demoRectFor('demo-a',demoTick));
-    if(arTargets.has('demo-b')) updateArTarget('demo-b', demoRectFor('demo-b',demoTick));
-  },50); // ~20fps, matches real-time tracking update rate
-}
-
-function stopAutoDemo(){
-  demoActive=false;
-  clearTimeout(demoSpawnTimer);
-  clearInterval(demoRectsTimer);
-  ['demo-a','demo-b'].forEach(removeArTarget);
-}
-
-/* Produces a believable "poster moving toward/away/around camera" rectangle each tick —
-   stands in for MindAR's real per-frame corner projection. Drives home, far/near = bigger/
-   smaller, and gentle drift/rotation = the video staying glued to the poster as it moves. */
-function demoRectFor(id, tick){
-  const t=tick*0.05;
-  const vw=window.innerWidth, vh=window.innerHeight;
-  const baseX = id==='demo-a' ? vw*0.30 : vw*0.62;
-  const baseY = vh*0.42;
-  // Slow "breathing" zoom simulates walking closer/farther from the printed photo
-  const zoom = 1 + Math.sin(t*0.6 + (id==='demo-a'?0:1.4))*0.18;
-  const w = Math.min(vw*0.40,260) * zoom;
-  const h = w*0.62;
-  const driftX = Math.sin(t*0.4)*14;
-  const driftY = Math.cos(t*0.35)*10;
-  const rotation = Math.sin(t*0.3)*4; // slight tilt, as if photo/phone isn't perfectly square-on
-  return {
-    x: baseX + driftX - w/2,
-    y: baseY + driftY - h/2,
-    width:w, height:h, rotation
-  };
 }
 
 /* ============================================================
@@ -990,7 +1050,6 @@ function showFsToast(msg){
 /* ============================================================
    BOOT
 ============================================================ */
-setTimeout(()=>document.getElementById('loading').classList.add('hidden'),3500);
 initScanner();
 </script>
 </body>
