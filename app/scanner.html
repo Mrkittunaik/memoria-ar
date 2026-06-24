@@ -7,6 +7,17 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>Scan — Memoria</title>
+<!-- ============================================================
+     TEMP DEBUG ONLY — Eruda on-screen console, for diagnosing the
+     "sound plays, video invisible" bug directly on a phone with no
+     cable/laptop needed. Adds a small floating button (usually
+     bottom-right) that opens a mobile DevTools-style panel showing
+     all console.log output, including the [Memoria] diagnostic logs
+     already built into spawnArTarget() and onTargetFound() below.
+     REMOVE both lines below once the bug is found — not for production.
+============================================================ -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -866,34 +877,6 @@ async function fetchAndCompileTargets() {
   return _lastMindUrl;
 }
 
-/* ============================================================
-   MATRIX SANITY GUARD — shared by beginMindAR's per-frame render-loop
-   check AND onTargetFound's deferred first-reveal check below. Exists
-   because of a real production bug: CSS3DRenderer computing a matrix3d()
-   transform off an anchor that hasn't received a real tracked pose yet
-   (or, more rarely, off one momentary glitch frame on an already-tracked
-   target) doesn't fail with a clean NaN — it produces enormous BUT FINITE
-   numbers (observed: wrapper width ~46 billion px, top ~-124 billion px).
-   isFinite() alone would miss that; this checks magnitude too.
-============================================================ */
-const MATRIX_SANITY_LIMIT = 1e6; // generous — real marker-space coords never approach this
-function isMatrixSane(m){
-  const e = m.elements;
-  for (let i = 0; i < 16; i++){
-    const v = e[i];
-    if (!Number.isFinite(v)) return false;          // clean failure mode: NaN/Infinity
-    if (Math.abs(v) > MATRIX_SANITY_LIMIT) return false; // messy failure mode: huge-but-finite
-  }
-  // Scale-collapse precursor: length of the local X basis vector
-  // (columns 0-2) approximates uniform scale. A real tracked pose's scale
-  // never legitimately approaches 0 — only a not-yet-posed/placeholder
-  // matrix does. Catches the bad state ONE FRAME BEFORE it would explode
-  // into huge numbers on the next frame, so we can hide pre-emptively.
-  const scaleX = Math.hypot(e[0], e[1], e[2]);
-  if (!Number.isFinite(scaleX) || scaleX < 1e-6) return false;
-  return true;
-}
-
 /* ONE single correct construction of MindARThree, with imageTargetSrc set
    in the constructor like MindAR expects — this is what fixes the "sound
    plays but video doesn't show" bug. start() runs camera-open, target
@@ -930,46 +913,8 @@ async function beginMindAR(mindUrl) {
     anchor.onTargetLost  = () => onTargetLost(String(target.id));
   });
 
-  // Per-frame matrix guard — see isMatrixSane() defined at module scope
-  // below PLANE_SIZE for the full rationale. It's declared there (not
-  // locally here) so onTargetFound's deferred reveal check can call the
-  // exact same function.
-
   mindarThree.renderer.setAnimationLoop(() => {
     mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
-
-    // Per-frame guard pass — cheap (one matrix-element scan per visible
-    // target, and only targets currently flagged visible are checked at
-    // all) and runs BEFORE cssRenderer.render() touches anything this
-    // frame, so a bad matrix is caught and the object hidden before
-    // CSS3DRenderer ever converts it to a matrix3d() string.
-    arTargets.forEach((entry, id) => {
-      if (!entry.cssObject.visible) return; // not currently shown — nothing to guard
-      entry.cssObject.updateWorldMatrix(true, false);
-      if (!isMatrixSane(entry.cssObject.matrixWorld)) {
-        // Self-heal: hide immediately rather than let this frame render
-        // garbage. onTargetFound will flip it back true on the NEXT clean
-        // detection — tracking doesn't actually stop, we just skip
-        // painting this one corrupt frame's worth of CSS3D output.
-        entry.cssObject.visible = false;
-        entry._guardTripped = (entry._guardTripped || 0) + 1;
-        console.warn('[Memoria] matrix guard tripped, hiding target this frame', id,
-          { tripCount: entry._guardTripped });
-        // Re-arm on the very next found-state frame rather than waiting
-        // for a full lost→found cycle — if the target is still actively
-        // tracked (just had one bad frame), recheck next tick instead of
-        // staying hidden until onTargetLost/onTargetFound fire again.
-        if (entry.visible) {
-          requestAnimationFrame(() => {
-            entry.cssObject.updateWorldMatrix(true, false);
-            if (entry.visible && isMatrixSane(entry.cssObject.matrixWorld)) {
-              entry.cssObject.visible = true;
-            }
-          });
-        }
-      }
-    });
-
     mindarThree.cssRenderer.render(mindarThree.cssScene, mindarThree.camera);
   });
 }
@@ -1157,28 +1102,6 @@ function spawnArTarget(id, targetIndex, target, anchor){
   // offset must be expressed in the SAME final units as the corrected scale
   // above (markerWidth-equivalent units), so it uses the same conversion.
   cssObject.position.set(0, PLANE_PX * aspect * SCALE, 0);
-
-  // ── THE ACTUAL "sound plays, video invisible" CAUSE ──────────────────
-  // mindarThree.renderer.setAnimationLoop() starts calling cssRenderer.render()
-  // every frame as soon as beginMindAR() runs — well before MindAR has ever
-  // found this target. Until the controller's first real pose update,
-  // anchor.group's matrix is just whatever placeholder MindAR seeded it
-  // with, NOT yet a valid tracked transform. CSS3DRenderer still walks that
-  // placeholder matrix every frame regardless — it has no concept of "not
-  // tracked yet" — and composing our SCALE against a not-yet-valid parent
-  // matrix is exactly the kind of near-zero/garbage matrix element that
-  // makes CSS3DRenderer's perspective-string math blow up to the
-  // billions-of-pixels, "negative 124 billion top" numbers seen in
-  // [Memoria] target found, rendered size logs. The CSS .visible/opacity
-  // class (added in onTargetFound below) does NOT prevent this — opacity:0
-  // still computes and applies the full transform, it just paints
-  // transparently. cssObject.visible=false, by contrast, makes
-  // CSS3DRenderer skip the element (sets display:none) and never compute a
-  // matrix for it at all, which is the only thing that actually stops the
-  // garbage-frame render. Flip to true only once onTargetFound fires for
-  // real (added below) and back to false on onTargetLost, so every
-  // re-detection also gets a clean first frame, not just the very first one.
-  cssObject.visible = false;
   anchor.group.add(cssObject);
 
   const entry={wrapper,video,cssObject,anchor,lastSeen:0,visible:false};
@@ -1190,38 +1113,6 @@ function onTargetFound(id){
   if(!entry) return;
   entry.visible=true;
   entry.lastSeen=performance.now();
-  // Three.js-level visibility — this is what actually stops CSS3DRenderer
-  // from ever computing a matrix off an unposed/placeholder anchor matrix
-  // (see the long comment in spawnArTarget). The CSS .visible class below
-  // only controls fade-in opacity on an element CSS3DRenderer is already
-  // safely rendering by this point.
-  //
-  // DEFERRED, not immediate: onTargetFound fires from MindAR's controller
-  // tick, but Three.js only recomputes matrixWorld during the renderer's
-  // OWN render() pass on the NEXT animation frame — flipping visible=true
-  // synchronously here risks exactly one frame where cssObject.visible is
-  // true but its matrixWorld is still the previous (possibly placeholder)
-  // value. requestAnimationFrame + a matrix sanity check closes that gap:
-  // by the time we actually flip visible, the matrix has been refreshed
-  // by that frame's render() and is verified sane before being trusted.
-  requestAnimationFrame(() => {
-    if (!entry.visible) return; // lost again before this frame ran — don't re-show stale state
-    entry.cssObject.updateWorldMatrix(true, false);
-    if (isMatrixSane(entry.cssObject.matrixWorld)) {
-      entry.cssObject.visible = true;
-    } else {
-      // Still not sane one frame later — try once more next frame rather
-      // than flashing garbage. The per-frame guard in beginMindAR's render
-      // loop is the ongoing backstop after this; this just covers the
-      // very first reveal, which is where the original bug always showed.
-      console.warn('[Memoria] matrix not sane on first found-frame, retrying', id);
-      requestAnimationFrame(() => {
-        if (!entry.visible) return;
-        entry.cssObject.updateWorldMatrix(true, false);
-        if (isMatrixSane(entry.cssObject.matrixWorld)) entry.cssObject.visible = true;
-      });
-    }
-  });
   entry.wrapper.classList.add('visible','tracking');
 
   // DIAGNOSTIC — actual rendered box sizes at the moment of detection. If
@@ -1289,11 +1180,6 @@ function onTargetLost(id){
   const entry=arTargets.get(id);
   if(!entry) return;
   entry.visible=false;
-  // Drop back to Three.js-invisible immediately on loss — by the time
-  // tracking re-acquires, MindAR will be feeding a fresh real pose before
-  // we flip this back to true in onTargetFound, so the "garbage first
-  // frame" risk is avoided on every re-detection too, not just page load.
-  entry.cssObject.visible=false;
   entry.wrapper.classList.remove('tracking');
   entry.wrapper.classList.add('losing');
   entry.video.pause();
