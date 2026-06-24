@@ -57,22 +57,34 @@ html,body{
 }
 .ar-video-wrapper{
   /* position:absolute is set inline by CSS3DObject itself — don't fight it here.
-     Actual show/hide is driven by anchor.group.visible (a Three.js flag MindAR
-     sets every frame), NOT by a CSS class — CSS3DRenderer writes element.style.display
-     directly each frame, which would silently override any class-based display rule. */
+     CSS3DRenderer ALSO writes element.style.display = 'none'/'' on THIS exact
+     element every single frame, based on the Three.js anchor's visible flag —
+     unconditionally, with no transition, no matter what CSS classes are on
+     this element. That's why fade/border classes used to live directly here:
+     the very next frame after a class toggled opacity to 1, CSS3DRenderer
+     could stomp it by flipping display back to none, racing the fade —
+     this is what produced "audio plays, video never visible".
+     FIX: this element now carries ONLY layout (size/position) and is never
+     touched by our own class toggles. All fade/visibility/border styling
+     moved to a nested .ar-video-inner element that CSS3DRenderer never
+     writes to, so it can't be raced or overwritten by it. */
   cursor:pointer;
   pointer-events:all;
   overflow:hidden;
   border-radius:2px;
+}
+.ar-video-inner{
+  position:absolute;inset:0;
   box-shadow:0 0 0 1px rgba(255,255,255,.06);
   opacity:0;
   transition:opacity .25s,box-shadow .12s ease;
+  pointer-events:none;
 }
-.ar-video-wrapper.visible{
+.ar-video-inner.visible{
   opacity:1;
   animation:arFadeIn .35s ease both;
 }
-.ar-video-wrapper.losing{
+.ar-video-inner.losing{
   animation:arFadeOut .25s ease both;
 }
 @keyframes arFadeIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
@@ -88,18 +100,18 @@ html,body{
    locks, so it reads as an immediate "found it" confirmation rather than a
    slow reveal. box-shadow (not border) is used so it doesn't add to the
    wrapper's box size or shift the video's object-fit:cover crop. */
-.ar-video-wrapper.tracking{
+.ar-video-inner.tracking{
   box-shadow:0 0 0 3px var(--gold),0 0 16px 2px rgba(201,147,58,.5);
 }
 /* Thin gold corner ticks on top of the full border, for extra "locked on" detail */
-.ar-video-wrapper::before,.ar-video-wrapper::after{
+.ar-video-inner::before,.ar-video-inner::after{
   content:'';position:absolute;width:14px;height:14px;
   border:2px solid #fff;opacity:0;
   transition:opacity .12s;pointer-events:none;
 }
-.ar-video-wrapper.tracking::before,.ar-video-wrapper.tracking::after{opacity:.9}
-.ar-video-wrapper::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
-.ar-video-wrapper::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+.ar-video-inner.tracking::before,.ar-video-inner.tracking::after{opacity:.9}
+.ar-video-inner::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.ar-video-inner::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
 
 /* CLEAN CAMERA UI — plain viewfinder, no frame/brackets/scanline */
 #scan-ui{
@@ -1010,6 +1022,13 @@ function spawnArTarget(id, targetIndex, target, anchor){
   wrapper.style.width  = PLANE_PX + 'px';
   wrapper.style.height = (PLANE_PX * aspect) + 'px';
 
+  // Nested element that actually carries fade/tracking-border classes — see
+  // the long comment on .ar-video-wrapper in <style> for why this can't be
+  // the wrapper itself (CSS3DRenderer overwrites wrapper.style.display every
+  // frame, racing any opacity transition we'd put directly on it).
+  const inner=document.createElement('div');
+  inner.className='ar-video-inner';
+
   const video=document.createElement('video');
   video.className='ar-video';
   video.loop=true; video.playsInline=true;
@@ -1035,7 +1054,8 @@ function spawnArTarget(id, targetIndex, target, anchor){
     });
   });
   video.load();
-  wrapper.appendChild(video);
+  inner.appendChild(video);
+  wrapper.appendChild(inner);
 
   wrapper.addEventListener('click',()=>openFullscreen(id));
 
@@ -1104,7 +1124,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   cssObject.position.set(0, PLANE_PX * aspect * SCALE, 0);
   anchor.group.add(cssObject);
 
-  const entry={wrapper,video,cssObject,anchor,lastSeen:0,visible:false};
+  const entry={wrapper,inner,video,cssObject,anchor,lastSeen:0,visible:false};
   arTargets.set(id,entry);
 }
 
@@ -1113,7 +1133,7 @@ function onTargetFound(id){
   if(!entry) return;
   entry.visible=true;
   entry.lastSeen=performance.now();
-  entry.wrapper.classList.add('visible','tracking');
+  entry.inner.classList.add('visible','tracking');
 
   // DIAGNOSTIC — actual rendered box sizes at the moment of detection. If
   // wrapperRect or videoRect below come back as 0×0 (or absurdly
@@ -1180,11 +1200,11 @@ function onTargetLost(id){
   const entry=arTargets.get(id);
   if(!entry) return;
   entry.visible=false;
-  entry.wrapper.classList.remove('tracking');
-  entry.wrapper.classList.add('losing');
+  entry.inner.classList.remove('tracking');
+  entry.inner.classList.add('losing');
   entry.video.pause();
   setTimeout(()=>{
-    if(!entry.visible) entry.wrapper.classList.remove('visible','losing');
+    if(!entry.visible) entry.inner.classList.remove('visible','losing');
   },250);
   refreshStatusPill();
 }
