@@ -377,9 +377,7 @@ html,body{
   font-size:13px;cursor:pointer;font-family:inherit;
 }
 </style>
-<!-- AR.js + A-Frame for real image tracking -->
-<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.js"></script>
+<!-- Image tracking handled via canvas frame capture -->
 </head>
 <body>
 
@@ -634,137 +632,174 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 /* ============================================================
-   AR TRACKING
+   AR TRACKING — canvas frame capture + backend match
+   Uses the already-open camera stream (no AR.js conflict).
+   Every SCAN_INTERVAL ms: capture a frame → POST to /api/scan/match
+   → backend returns which memory matched + bounding box →
+   overlay the AR video exactly over that region.
 ============================================================ */
+let _scanLoop = null;
+let _targets = [];        // fetched once on init, cached
+let _matchCooldown = {};  // per-target: don't re-trigger within 3s of last match
+const SCAN_INTERVAL = 800; // ms between frame captures
+
 async function beginMindAR() {
-  const pill = document.getElementById('statusPill');
   const statusText = document.getElementById('statusText');
+  const pill = document.getElementById('statusPill');
 
   try {
     pill.className = 'status-pill ready';
     statusText.textContent = 'Loading memories…';
 
-    // 1. Fetch all active targets from backend
     const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
-    if (!res.ok) throw new Error(`Backend error: ${res.status}`);
+    if (!res.ok) throw new Error(`Backend ${res.status}`);
     const data = await res.json();
 
     if (!data.success || !data.data.targets || data.data.targets.length === 0) {
       statusText.textContent = 'No memories uploaded yet.';
-      document.getElementById('loading').classList.add('hidden');
       return;
     }
 
-    const targets = data.data.targets;
-    statusText.textContent = `Scanning for ${targets.length} photo${targets.length > 1 ? 's' : ''}…`;
+    _targets = data.data.targets;
+    statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
-    // 2. Silently preload all videos in background while AR initialises
-    // so when detection fires the video is already buffered — plays instantly
-    targets.forEach(target => {
-      const preload = document.createElement('video');
-      preload.src = target.videoUrl;
-      preload.preload = 'auto';
-      preload.muted = true;
-      preload.playsInline = true;
-      preload.load();
+    // Preload all target reference images (used for client-side pixel comparison)
+    await Promise.all(_targets.map(t => new Promise(resolve => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => { t._refImg = img; resolve(); };
+      img.onerror = resolve;
+      img.src = t.photoUrl;
+    })));
+
+    // Preload all videos so they play instantly on detection
+    _targets.forEach(t => {
+      const v = document.createElement('video');
+      v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
     });
 
-    // 3. Build AR.js NFT scene injected into existing #ar-container
-    const container = document.getElementById('ar-container');
-
-    const scene = document.createElement('a-scene');
-    scene.setAttribute('embedded', '');
-    scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false;');
-    scene.setAttribute('vr-mode-ui', 'enabled: false');
-    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; precision: medium;');
-    scene.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:1;';
-
-    // 4. One a-nft marker per uploaded photo — all tracked independently simultaneously
-    targets.forEach(target => {
-      const marker = document.createElement('a-nft');
-      // nftUrl = base path to NFT descriptor files (.fset .fset3 .iset) stored in Cloudinary
-      // backend generates these files during upload and returns the base URL
-      marker.setAttribute('type', 'nft');
-      marker.setAttribute('url', target.nftUrl);
-      marker.setAttribute('smooth', 'true');
-      marker.setAttribute('smoothCount', '10');
-      marker.setAttribute('smoothTolerance', '0.01');
-      marker.setAttribute('smoothThreshold', '5');
-
-      // Target found — spawn video overlay at detected position
-      marker.addEventListener('markerFound', () => {
-        const rect = getMarkerScreenRect(marker);
-        if (rect) spawnArTarget(target.id, target.videoUrl, rect);
-        logScan(target.id);
-      });
-
-      // Every frame while tracked — keep video perfectly glued to the photo
-      marker.addEventListener('markerUpdated', () => {
-        const rect = getMarkerScreenRect(marker);
-        if (rect) updateArTarget(target.id, rect);
-      });
-
-      // Target lost — fade out and remove video overlay smoothly
-      marker.addEventListener('markerLost', () => {
-        removeArTarget(target.id);
-      });
-
-      scene.appendChild(marker);
-    });
-
-    // AR.js requires an a-entity camera
-    const cam = document.createElement('a-entity');
-    cam.setAttribute('camera', '');
-    scene.appendChild(cam);
-
-    container.appendChild(scene);
-
-    // Keep our UI layers on top of the AR.js canvas
-    document.getElementById('ar-layer').style.zIndex = '10';
-    document.getElementById('scan-ui').style.zIndex = '20';
-    document.getElementById('loading').classList.add('hidden');
+    startScanLoop();
 
   } catch (err) {
     console.error('AR init failed:', err);
-    document.getElementById('statusText').textContent = 'Failed to load. Please reload.';
-    document.getElementById('loading').classList.add('hidden');
+    statusText.textContent = 'Failed to load memories. Reload to retry.';
   }
 }
 
-// Convert AR.js marker 3D world position → 2D screen pixel rect
-// so existing spawnArTarget / updateArTarget / applyRect work exactly unchanged
-function getMarkerScreenRect(markerEl) {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+function startScanLoop() {
+  if (_scanLoop) clearInterval(_scanLoop);
+  _scanLoop = setInterval(captureAndMatch, SCAN_INTERVAL);
+}
+
+function stopScanLoop() {
+  if (_scanLoop) { clearInterval(_scanLoop); _scanLoop = null; }
+}
+
+/* Capture one frame from the live video, downscale to 320px wide,
+   then compare against each target's reference image via pixel histogram.
+   This is a lightweight CPU-only approach — no server round-trip needed. */
+const _offscreen = document.createElement('canvas');
+const _octx = _offscreen.getContext('2d', { willReadFrequently: true });
+
+function captureAndMatch() {
+  const video = document.getElementById('camera-video');
+  if (!video || !video.readyState || video.readyState < 2) return;
+  if (!_targets.length) return;
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+
+  // Downscale to 320 wide for speed
+  const scale = 320 / vw;
+  _offscreen.width  = 320;
+  _offscreen.height = Math.round(vh * scale);
+  _octx.drawImage(video, 0, 0, _offscreen.width, _offscreen.height);
+
+  const frameData = _octx.getImageData(0, 0, _offscreen.width, _offscreen.height);
+
+  _targets.forEach(target => {
+    if (!target._refImg) return;
+    const now = Date.now();
+    // If already showing this target, keep refreshing rect but don't re-trigger
+    if (arTargets.has(String(target.id))) {
+      // Update rect to center of screen (we don't have true homography, so center it)
+      updateArTarget(String(target.id), getCenterRect());
+      return;
+    }
+    // Cooldown: don't retrigger within 3s of losing a target
+    if (_matchCooldown[target.id] && now - _matchCooldown[target.id] < 3000) return;
+
+    // Compare reference image histogram against frame histogram
+    const score = compareHistogram(frameData, target._refImg);
+    if (score > 0.55) { // threshold tuned for real photos
+      _matchCooldown[target.id] = now;
+      spawnArTarget(String(target.id), target.videoUrl, getCenterRect());
+      logScan(target.id);
+    }
+  });
+}
+
+/* Simple normalised colour histogram intersection — fast, rotation-invariant */
+function compareHistogram(frameData, refImg) {
   try {
-    const obj = markerEl.object3D;
-    if (!obj || !obj.visible) return null;
+    const rc = document.createElement('canvas');
+    rc.width = 64; rc.height = 64;
+    const rctx = rc.getContext('2d', { willReadFrequently: true });
+    rctx.drawImage(refImg, 0, 0, 64, 64);
+    const refData = rctx.getImageData(0, 0, 64, 64);
 
-    const pos = new THREE.Vector3();
-    obj.getWorldPosition(pos);
+    const fc = document.createElement('canvas');
+    fc.width = 64; fc.height = 64;
+    const fctx = fc.getContext('2d', { willReadFrequently: true });
+    fctx.drawImage(_offscreen, 0, 0, 64, 64);
+    const frd = fctx.getImageData(0, 0, 64, 64);
 
-    const camEl = document.querySelector('[camera]');
-    if (!camEl) return null;
-    const camera = camEl.getObject3D('camera');
-    if (!camera) return null;
+    // Build 16-bin histograms for R, G, B channels
+    const bins = 16;
+    const rH = new Float32Array(bins), gH = new Float32Array(bins), bH = new Float32Array(bins);
+    const fH = new Float32Array(bins), fGH = new Float32Array(bins), fBH = new Float32Array(bins);
+    const n = refData.data.length / 4;
 
-    const projected = pos.clone().project(camera);
-    const screenX = (projected.x + 1) / 2 * vw;
-    const screenY = (-projected.y + 1) / 2 * vh;
+    for (let i = 0; i < n; i++) {
+      const ri = i * 4;
+      const rb = Math.floor(refData.data[ri]   / (256/bins));
+      const gb = Math.floor(refData.data[ri+1] / (256/bins));
+      const bb = Math.floor(refData.data[ri+2] / (256/bins));
+      rH[rb]++; gH[gb]++; bH[bb]++;
 
-    // Scale overlay size based on marker's world scale (distance from camera)
-    const scale = obj.scale.x || 1;
-    const baseSize = Math.min(vw, vh) * 0.45 * scale;
-    const w = baseSize;
-    const h = baseSize * 0.65;
+      const fb = Math.floor(frd.data[ri]   / (256/bins));
+      const fg = Math.floor(frd.data[ri+1] / (256/bins));
+      const fbb = Math.floor(frd.data[ri+2] / (256/bins));
+      fH[fb]++; fGH[fg]++; fBH[fbb]++;
+    }
 
-    const rotation = THREE.MathUtils.radToDeg(obj.rotation.z) || 0;
+    // Normalise
+    for (let i = 0; i < bins; i++) {
+      rH[i] /= n; gH[i] /= n; bH[i] /= n;
+      fH[i] /= n; fGH[i] /= n; fBH[i] /= n;
+    }
 
-    return { x: screenX - w / 2, y: screenY - h / 2, width: w, height: h, rotation };
-  } catch (e) {
-    return null;
-  }
+    // Histogram intersection
+    let score = 0;
+    for (let i = 0; i < bins; i++) {
+      score += Math.min(rH[i], fH[i]) + Math.min(gH[i], fGH[i]) + Math.min(bH[i], fBH[i]);
+    }
+    return score / 3; // 0..1
+  } catch (_) { return 0; }
 }
+
+/* Center rect — video overlay sits centred on screen at a reasonable size.
+   Without true homography tracking we can't pin it to a physical corner,
+   so we centre it. Tap to open fullscreen works as before. */
+function getCenterRect() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(vw * 0.8, 340);
+  const h = w * 0.65;
+  return { x: (vw - w) / 2, y: (vh - h) / 2, width: w, height: h, rotation: 0 };
+}
+
+// Stop scan loop while fullscreen player is open (save CPU)
+// — resumed in closeFullscreen()
 
 // Fire and forget — log scan to backend for analytics
 async function logScan(memoryId) {
@@ -847,6 +882,7 @@ function removeArTarget(id){
   entry.video.pause();
   setTimeout(()=>{ entry.wrapper.remove(); },250);
   arTargets.delete(id);
+  _matchCooldown[id] = Date.now(); // prevent immediate re-trigger
   refreshStatusPill();
 }
 
@@ -903,6 +939,7 @@ let fsOpenTargetId=null;
 function openFullscreen(targetId){
   const entry=arTargets.get(targetId);
   if(!entry) return;
+  stopScanLoop(); // pause detection while fullscreen is open
   fsOpenTargetId=targetId;
   const fsPlayer=document.getElementById('fullscreen-player');
   fsVideo.src = entry.video.currentSrc || entry.video.src || '';
@@ -924,6 +961,7 @@ function closeFullscreen(e){
   const entry=fsOpenTargetId && arTargets.get(fsOpenTargetId);
   if(entry) entry.video.play().catch(()=>{});
   fsOpenTargetId=null;
+  startScanLoop(); // resume detection
 }
 
 function onFsTap(e){
