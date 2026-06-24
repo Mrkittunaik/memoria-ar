@@ -376,9 +376,8 @@ html,body{
   font-size:13px;cursor:pointer;font-family:inherit;
 }
 </style>
-<!-- AR.js + A-Frame for real image tracking -->
-<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.js"></script>
+<!-- MindAR image tracking (works with plain Cloudinary photo URLs — no pre-compiled NFT files needed) -->
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 </head>
 <body>
 
@@ -515,7 +514,39 @@ html,body{
 /* ============================================================
    STATE
 ============================================================ */
-const BACKEND_URL = 'https://YOUR_RENDER_URL'; // ← replace with your Render backend URL
+const BACKEND_URL = 'https://memoria-ar-backend.onrender.com';
+
+// ── Render cold-start: ping /health and show a "waking up" overlay if slow ──
+(async () => {
+  const TIMEOUT = 60000;
+  const start   = Date.now();
+  let wakeOverlay = null;
+  try {
+    const probe = await Promise.race([
+      fetch(`${BACKEND_URL}/health`),
+      new Promise((_,r) => setTimeout(() => r(new Error('slow')), 2000))
+    ]);
+    if (probe && probe.ok) return;
+  } catch (_) {}
+
+  wakeOverlay = document.createElement('div');
+  wakeOverlay.id = 'wake-overlay';
+  wakeOverlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:-apple-system,sans-serif;color:#fff;text-align:center;padding:32px;';
+  wakeOverlay.innerHTML = '<div style="font-size:36px">☕</div><div style="font-size:18px;font-weight:500">Waking up backend…</div><div style="font-size:13px;color:rgba(255,255,255,.55);max-width:260px;line-height:1.6">Free Render instances spin down after inactivity.<br>This usually takes 30–60 seconds.</div><div id="wake-timer" style="font-size:13px;color:rgba(201,147,58,.85)">Waiting…</div>';
+  document.body.appendChild(wakeOverlay);
+
+  while (Date.now() - start < TIMEOUT) {
+    await new Promise(r => setTimeout(r, 3000));
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    const timerEl = document.getElementById('wake-timer');
+    if (timerEl) timerEl.textContent = `${elapsed}s elapsed…`;
+    try {
+      const r = await fetch(`${BACKEND_URL}/health`);
+      if (r.ok) { break; }
+    } catch (_) {}
+  }
+  if (wakeOverlay) wakeOverlay.remove();
+})();
 
 let stream=null;
 let facingMode='environment';
@@ -602,7 +633,7 @@ async function beginMindAR() {
     pill.className = 'status-pill ready';
     statusText.textContent = 'Loading memories…';
 
-    // 1. Fetch all active targets from backend
+    // 1. Fetch active targets from backend
     const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
     if (!res.ok) throw new Error(`Backend error: ${res.status}`);
     const data = await res.json();
@@ -616,8 +647,30 @@ async function beginMindAR() {
     const targets = data.data.targets;
     statusText.textContent = `Scanning for ${targets.length} photo${targets.length > 1 ? 's' : ''}…`;
 
-    // 2. Silently preload all videos in background while AR initialises
-    // so when detection fires the video is already buffered — plays instantly
+    // 2. Build MindAR .mind file from target photo URLs (fetched as images)
+    //    MindAR ImageTarget needs image elements or compiled .mind data.
+    //    We dynamically compile targets at runtime using MindAR's compiler.
+    const { MindARThree } = window.MINDAR.IMAGE;
+
+    // Load each target photo as an HTMLImageElement
+    const imageElements = await Promise.all(targets.map(t => new Promise((res, rej) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error(`Failed to load: ${t.photoUrl}`));
+      img.src = t.photoUrl;
+    })));
+
+    statusText.textContent = 'Compiling AR targets…';
+
+    // Compile .mind data from the images
+    const compiler = new window.MINDAR.IMAGE.Compiler();
+    await compiler.compileImageTargets(imageElements, (progress) => {
+      statusText.textContent = `Compiling… ${Math.round(progress * 100)}%`;
+    });
+    const exportedBuffer = await compiler.exportData();
+
+    // 3. Preload videos while AR starts up
     targets.forEach(target => {
       const preload = document.createElement('video');
       preload.src = target.videoUrl;
@@ -627,102 +680,72 @@ async function beginMindAR() {
       preload.load();
     });
 
-    // 3. Build AR.js NFT scene injected into existing #ar-container
+    statusText.textContent = 'Starting camera…';
+
+    // 4. Initialise MindAR scene
     const container = document.getElementById('ar-container');
 
-    const scene = document.createElement('a-scene');
-    scene.setAttribute('embedded', '');
-    scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false;');
-    scene.setAttribute('vr-mode-ui', 'enabled: false');
-    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; precision: medium;');
-    scene.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:1;';
-
-    // 4. One a-nft marker per uploaded photo — all tracked independently simultaneously
-    targets.forEach(target => {
-      const marker = document.createElement('a-nft');
-      // nftUrl = base path to NFT descriptor files (.fset .fset3 .iset) stored in Cloudinary
-      // backend generates these files during upload and returns the base URL
-      marker.setAttribute('type', 'nft');
-      marker.setAttribute('url', target.nftUrl);
-      marker.setAttribute('smooth', 'true');
-      marker.setAttribute('smoothCount', '10');
-      marker.setAttribute('smoothTolerance', '0.01');
-      marker.setAttribute('smoothThreshold', '5');
-
-      // Target found — spawn video overlay at detected position
-      marker.addEventListener('markerFound', () => {
-        const rect = getMarkerScreenRect(marker);
-        if (rect) spawnArTarget(target.id, target.videoUrl, rect);
-        logScan(target.id);
-      });
-
-      // Every frame while tracked — keep video perfectly glued to the photo
-      marker.addEventListener('markerUpdated', () => {
-        const rect = getMarkerScreenRect(marker);
-        if (rect) updateArTarget(target.id, rect);
-      });
-
-      // Target lost — fade out and remove video overlay smoothly
-      marker.addEventListener('markerLost', () => {
-        removeArTarget(target.id);
-      });
-
-      scene.appendChild(marker);
+    const mindar = new MindARThree({
+      container,
+      imageTargetSrc: exportedBuffer,
+      maxTrack: targets.length,
+      uiScanning: false,
+      uiLoading: false,
     });
 
-    // AR.js requires an a-entity camera
-    const cam = document.createElement('a-entity');
-    cam.setAttribute('camera', '');
-    scene.appendChild(cam);
+    const { renderer, scene, camera } = mindar;
 
-    container.appendChild(scene);
+    // One anchor + video plane per target
+    targets.forEach((target, idx) => {
+      const anchor = mindar.addAnchor(idx);
 
-    // Keep our UI layers on top of the AR.js canvas
-    document.getElementById('ar-layer').style.zIndex = '10';
-    document.getElementById('scan-ui').style.zIndex = '20';
+      // Create a simple plane sized to the image aspect ratio
+      const aspect = (target.photoWidth && target.photoHeight)
+        ? target.photoWidth / target.photoHeight : 1.6;
+      const planeGeom = new THREE.PlaneGeometry(1, 1 / aspect);
+
+      // Video element for this target
+      const vid = document.createElement('video');
+      vid.src = target.videoUrl;
+      vid.loop = true;
+      vid.muted = true;
+      vid.playsInline = true;
+      vid.crossOrigin = 'anonymous';
+      vid.preload = 'auto';
+
+      const vidTexture = new THREE.VideoTexture(vid);
+      const mat = new THREE.MeshBasicMaterial({ map: vidTexture, side: THREE.DoubleSide });
+      const plane = new THREE.Mesh(planeGeom, mat);
+      anchor.group.add(plane);
+
+      anchor.onTargetFound = () => {
+        vid.play().catch(() => {});
+        logScan(target.id);
+        spawnArTarget(target.id, target.videoUrl, null); // overlay handled by 3D plane
+      };
+      anchor.onTargetLost = () => {
+        vid.pause();
+        removeArTarget(target.id);
+      };
+    });
+
     document.getElementById('loading').classList.add('hidden');
+    statusText.textContent = 'Point at a registered photo';
+
+    renderer.setAnimationLoop(() => {
+      renderer.render(scene, camera);
+    });
+
+    await mindar.start();
+    pill.className = 'status-pill scanning';
 
   } catch (err) {
     console.error('AR init failed:', err);
-    document.getElementById('statusText').textContent = 'Failed to load. Please reload.';
+    statusText.textContent = 'Failed to start AR. Please reload.';
     document.getElementById('loading').classList.add('hidden');
   }
 }
 
-// Convert AR.js marker 3D world position → 2D screen pixel rect
-// so existing spawnArTarget / updateArTarget / applyRect work exactly unchanged
-function getMarkerScreenRect(markerEl) {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  try {
-    const obj = markerEl.object3D;
-    if (!obj || !obj.visible) return null;
-
-    const pos = new THREE.Vector3();
-    obj.getWorldPosition(pos);
-
-    const camEl = document.querySelector('[camera]');
-    if (!camEl) return null;
-    const camera = camEl.getObject3D('camera');
-    if (!camera) return null;
-
-    const projected = pos.clone().project(camera);
-    const screenX = (projected.x + 1) / 2 * vw;
-    const screenY = (-projected.y + 1) / 2 * vh;
-
-    // Scale overlay size based on marker's world scale (distance from camera)
-    const scale = obj.scale.x || 1;
-    const baseSize = Math.min(vw, vh) * 0.45 * scale;
-    const w = baseSize;
-    const h = baseSize * 0.65;
-
-    const rotation = THREE.MathUtils.radToDeg(obj.rotation.z) || 0;
-
-    return { x: screenX - w / 2, y: screenY - h / 2, width: w, height: h, rotation };
-  } catch (e) {
-    return null;
-  }
-}
 
 // Fire and forget — log scan to backend for analytics
 async function logScan(memoryId) {
