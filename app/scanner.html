@@ -878,8 +878,8 @@ async function beginMindAR(mindUrl) {
   mindarThree = new window.MINDAR.IMAGE.MindARThree({
     container: document.getElementById('ar-container'),
     imageTargetSrc: mindUrl,
-    maxTrack: Math.min(_targets.length, 8),
-    filterMinCF: 0.0001,
+    maxTrack: Math.min(_targets.length, 2),
+    filterMinCF: 0.001,
     filterBeta: 0.01,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
@@ -1002,15 +1002,28 @@ function spawnArTarget(id, targetIndex, target, anchor){
   const video=document.createElement('video');
   video.className='ar-video';
   video.loop=true; video.playsInline=true;
-  // Sound: browsers block autoplay-with-sound until the page has had a user
-  // gesture (a tap/click). The very first poster found right after "Open
-  // camera & scan" was tapped still counts as "recent enough" in most
-  // browsers, so this plays with sound from the start in that flow. If a
-  // browser still blocks it, the video keeps playing muted rather than not
-  // playing at all, and unmutes itself on the next tap anywhere on screen.
-  video.muted = false;
+  // Always start muted — this guarantees the very first play() call succeeds
+  // under every browser's autoplay policy (autoplay-with-sound is frequently
+  // blocked, and a blocked first attempt was previously failing silently
+  // with no visible retry). armUnmuteOnNextTap() (already defined below)
+  // unmutes on the next tap anywhere on screen, which is a real user gesture
+  // every browser accepts — so sound still comes on almost immediately in
+  // normal use, but the video itself is never gated on that succeeding.
+  video.muted = true;
   video.volume = 1;
-  video.src=target.videoUrl;
+  video.preload = 'auto';
+  video.src = target.videoUrl;
+  // DIAGNOSTIC — if a video genuinely never plays (vs. just delayed by
+  // buffering), this is what tells you why: wrong videoUrl, dead backend
+  // link, CORS block, or an unsupported codec/container on this device.
+  // Without this, "video not playing" gave zero signal to debug from.
+  video.addEventListener('error', () => {
+    const mediaErr = video.error;
+    console.error('[Memoria] AR video failed to load', id, target.videoUrl, {
+      code: mediaErr && mediaErr.code, message: mediaErr && mediaErr.message,
+    });
+  });
+  video.load();
   wrapper.appendChild(video);
 
   wrapper.addEventListener('click',()=>openFullscreen(id));
@@ -1105,15 +1118,27 @@ function onTargetFound(id){
     });
   });
 
-  entry.video.play().catch(()=>{
-    // Some browser/state combo blocked play-with-sound — fall back to muted
-    // so the video still plays instead of staying frozen, then arm a
-    // one-time unmute on the next tap anywhere (a real gesture satisfies
-    // every browser's autoplay-with-sound rule).
-    entry.video.muted = true;
-    entry.video.play().catch(()=>{});
-    armUnmuteOnNextTap();
+  // Video starts muted (set in spawnArTarget) so this play() call is never
+  // blocked by autoplay-with-sound policy — but it can still legitimately
+  // fail if the video has 0 bytes buffered yet (readyState 0, e.g. cold
+  // network, large file, slow connection). HAVE_CURRENT_DATA (2) is the
+  // minimum readyState play() actually needs; below that, wait for the
+  // 'canplay' event instead of firing play() blind and swallowing the
+  // rejection with no retry — that silent swallow is what looked like
+  // "detects fine, video just never plays."
+  const tryPlay = () => entry.video.play().catch((err) => {
+    console.error('[Memoria] video.play() rejected', id, err && err.name, err && err.message);
   });
+  if (entry.video.readyState >= 2) {
+    tryPlay();
+  } else {
+    entry.video.addEventListener('canplay', tryPlay, { once: true });
+    // Safety net: if 'canplay' never fires (e.g. truly broken/dead URL —
+    // the 'error' listener in spawnArTarget will log why), don't leave a
+    // dangling listener forever once the poster is no longer being tracked.
+    setTimeout(() => entry.video.removeEventListener('canplay', tryPlay), 8000);
+  }
+  armUnmuteOnNextTap();
   logScan(id);
   refreshStatusPill();
 }
