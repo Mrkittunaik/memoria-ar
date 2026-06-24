@@ -1090,38 +1090,49 @@ function spawnArTarget(id, targetIndex, target, anchor){
   video.style.width  = rect.width  + '%';
   video.style.height = rect.height + '%';
 
-  // ── SCALE — this was the actual bug behind "sound plays, video invisible" ──
-  // MindAR applies TWO scale factors to CSS anchors, not one: postMatrix
-  // (scale = markerWidth, the compiled target's pixel width — e.g. ~1200 for
-  // a 1200px-wide photo) AND, only for CSS anchors specifically, an
-  // additional cssScaleDownMatrix that multiplies by 0.001 on top of that
-  // (both confirmed directly in MindARThree's source: this.postMatrixs[...]
-  // composed with scale.set(markerWidth,markerWidth,markerWidth), then
-  // m.multiply(cssScaleDownMatrix) where cssScaleDownMatrix is itself
-  // composed with scale (0.001,0.001,0.001), gated on `if (anchor.css)`).
-  // Net scale ends up ≈ markerWidth × 0.001 — e.g. ≈1.2 for a 1200px photo —
-  // NOT exactly 1, and NOT the plain normalized 0–1 unit space that the
-  // non-CSS addAnchor()/PlaneGeometry(1, aspect) convention uses. A previous
-  // version of this file assumed the CSS path used that same plain
-  // convention and set SCALE = 1/PLANE_PX (0.001), which after MindAR's own
-  // extra ×0.001 on top left the video rendering at roughly 1/1000th its
-  // correct size — technically on screen, just shrunk to a near-invisible
-  // speck. Solving for the scale that lands our PLANE_PX-pixel wrapper at
-  // the SAME final size MindAR's own plane convention uses (markerWidth):
+  // ── SCALE + POSITION — the REAL bug behind "video floats off the poster" ──
+  // Verified directly against MindAR's source (src/image-target/three.js)
+  // and three.js's CSS3DRenderer.js — not guesswork:
+  //
+  // 1) MindAR's postMatrix (built once per target from the compiled .mind
+  //    data) does: scale = (markerWidth, markerWidth, markerWidth), then
+  //    position = (markerWidth/2, markerWidth/2 + (markerHeight-markerWidth)/2, 0).
+  //    markerWidth/markerHeight are the target image's RAW PIXEL dimensions
+  //    (e.g. 1200×900 photo → markerWidth=1200). For CSS anchors specifically,
+  //    that postMatrix is then multiplied by a cssScaleDownMatrix of
+  //    (0.001,0.001,0.001), so net scale ≈ markerWidth × 0.001 (e.g. ≈1.2 for
+  //    a 1200px photo) — NOT exactly 1.
+  //    That position offset is EXACTLY what you'd use to take a plane
+  //    centered at the origin (spanning -0.5..+0.5) and shift it so it lands
+  //    flush against the marker rectangle (0,0)-(markerWidth,markerHeight).
+  //    That matches the official non-CSS example: PlaneGeometry(1, aspect),
+  //    which THREE.js centers at the origin by default — confirming MindAR's
+  //    anchor convention expects CHILDREN AUTHORED CENTERED AT THE ORIGIN,
+  //    not top-left.
+  //
+  // 2) CSS3DObject/CSS3DRenderer.js bakes `translate(-50%,-50%)` into every
+  //    element's CSS transform automatically (see getObjectCSSMatrix). That
+  //    means a CSS3DObject's local (0,0,0) ALREADY maps to the CENTER of the
+  //    wrapper div, not its top-left corner.
+  //
+  // Putting these together: the wrapper, once scaled, is already centered
+  // exactly where the anchor's postMatrix expects a centered plane to sit.
+  // NO extra position offset is needed at all — the previous version's
+  // `cssObject.position.set(0, PLANE_PX * aspect * SCALE, 0)` shifted the
+  // already-correctly-centered wrapper up by its own full height, which is
+  // precisely the floating-in-the-air-above-the-poster bug visible in
+  // testing. Removing that offset is the fix.
+  //
+  // Scale derivation (unchanged, this part was already correct): solving
+  // for the scale that lands our PLANE_PX-pixel-wide wrapper at the same
+  // final size MindAR's own convention uses:
   //   PLANE_PX × SCALE × markerWidth × 0.001 = markerWidth
   //   SCALE = 1 / (PLANE_PX × 0.001) = 1000 / PLANE_PX
   const cssObject = new CSS3DObject(wrapper);
   const SCALE = 1000 / PLANE_PX;
   cssObject.scale.set(SCALE, SCALE, SCALE);
-  // Anchor origin sits at the photo's top-left corner with +y pointing UP
-  // (Three.js convention), while our wrapper's own (0,0) is its top-left
-  // corner with +y pointing DOWN (CSS convention) before any 3D transform.
-  // CSS3DObject keeps the element's own top-left as its local origin, so we
-  // shift it up by its full height to land the wrapper's visual top-left at
-  // the anchor's true top-left once the y-axis flip is accounted for. This
-  // offset must be expressed in the SAME final units as the corrected scale
-  // above (markerWidth-equivalent units), so it uses the same conversion.
-  cssObject.position.set(0, PLANE_PX * aspect * SCALE, 0);
+  // No position offset — CSS3DObject's built-in centering already lines up
+  // with the anchor's expected centered-plane convention. See note above.
   anchor.group.add(cssObject);
 
   const entry={wrapper,inner,video,cssObject,anchor,lastSeen:0,visible:false};
