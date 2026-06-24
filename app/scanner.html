@@ -381,6 +381,13 @@ html,body{
   }
 }
 </script>
+<!-- Two MindAR bundles are needed:
+     - mindar-image.prod.js       → exposes window.MINDAR.IMAGE.Compiler (used to compile .mind data on the fly)
+     - mindar-image-three.prod.js → exposes window.MINDAR.IMAGE.MindARThree (the camera+tracking+render wrapper)
+     Loading only the -three bundle (as an earlier version of this file did) leaves Compiler
+     undefined, which throws immediately inside beginMindAR() — that was the actual bug
+     behind the scanner hanging on "Starting camera" with no visible error. -->
+<script type="module" src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
 <script type="module" src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
@@ -580,7 +587,10 @@ async function initScanner() {
         if (status.state === 'granted') localStorage.setItem(PERM_KEY, 'true');
         if (status.state === 'denied')  localStorage.removeItem(PERM_KEY);
       };
-    } catch (_) {}
+    } catch (_) {
+      // Firefox throws here (camera/microphone unsupported in permissions.query) —
+      // that's expected, just fall back to the localStorage flag set above.
+    }
   }
   if (alreadyGranted) {
     document.getElementById('demo-overlay').classList.add('hidden');
@@ -594,27 +604,98 @@ async function startScanner() {
   setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
   document.getElementById('loading').classList.remove('hidden');
   try {
-    // Just a quick permission probe — MindARThree opens the real camera stream itself.
-    const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    // MindARThree requests the camera itself internally, but its own error
+    // handling throws away the real error object (it calls reject() with no
+    // argument on failure) — so on its own we'd never know WHY it failed.
+    // We probe with our own getUserMedia call first purely to capture the
+    // real error (NotAllowedError, NotFoundError, NotReadableError, etc),
+    // then release it before MindAR opens its own stream.
+    let probe;
+    try {
+      probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    } catch (probeErr) {
+      throw probeErr; // has a real .name (NotAllowedError etc) — let the catch below classify it
+    }
     probe.getTracks().forEach(t => t.stop());
-    localStorage.setItem(PERM_KEY, 'true');
 
     await wakeBackend();
     await beginMindAR();
+    localStorage.setItem(PERM_KEY, 'true');
     document.getElementById('loading').classList.add('hidden');
   } catch (err) {
-    localStorage.removeItem(PERM_KEY);
-    document.getElementById('loading').innerHTML = `
-      <div style="text-align:center;padding:40px">
-        <div style="font-size:32px;margin-bottom:16px">📷</div>
-        <h3 style="color:#fff;margin-bottom:8px">Camera access needed</h3>
-        <p style="color:rgba(255,255,255,.5);font-size:14px;line-height:1.6">
-          Please allow camera access in your browser settings and reload.</p>
-        <button onclick="location.reload()"
-          style="margin-top:20px;padding:12px 24px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
-          Try again</button>
-      </div>`;
+    console.error('[Memoria] startScanner failed:', err);
+    showCameraErrorScreen(err);
   }
+}
+
+/* Once a person has clicked "Block" on the native camera prompt, no website
+   can ever re-trigger that prompt — browsers do this deliberately, for
+   security, and there is no API workaround. The only real fix is the person
+   changing it themselves in their browser's site settings. So instead of
+   pretending we can re-ask, we detect that specific case (getUserMedia throws
+   NotAllowedError / PermissionDeniedError) and show exact, browser-aware
+   steps — then let them hit "Try again" right here, no full page reload,
+   which re-runs beginMindAR() directly so it picks up the change instantly. */
+function showCameraErrorScreen(err) {
+  localStorage.removeItem(PERM_KEY);
+  const name = err && err.name;
+  const isBlocked = name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError';
+  const isNoCamera = name === 'NotFoundError' || name === 'DevicesNotFoundError';
+  const isInUse = name === 'NotReadableError' || name === 'TrackStartError';
+
+  let title, body;
+  if (isBlocked) {
+    title = 'Camera access is blocked';
+    body = `You previously blocked camera access for this site. Browsers don't let
+            websites re-ask once blocked — you'll need to allow it manually:
+            <br><br>
+            <b>On phone (Chrome/Safari):</b> tap the icon left of the address bar (🔒 or ⓘ) →
+            Permissions / Site settings → set Camera to Allow.<br>
+            <b>On desktop Chrome:</b> click the 🔒 / ⓘ icon in the address bar → Site settings →
+            Camera → Allow.<br>
+            <b>On desktop Safari:</b> Safari menu → Settings → Websites → Camera → set this
+            site to Allow.`;
+  } else if (isNoCamera) {
+    title = 'No camera found';
+    body = `This device doesn't have a usable camera, or it's disabled at the OS level.
+            Check your device's camera settings and try again.`;
+  } else if (isInUse) {
+    title = 'Camera is busy';
+    body = `Another app or browser tab seems to be using the camera right now.
+            Close it and try again.`;
+  } else {
+    title = 'Camera access needed';
+    body = `Something went wrong starting the camera. Please allow camera access
+            for this site and try again.`;
+  }
+
+  document.getElementById('loading').innerHTML = `
+    <div style="text-align:center;padding:40px;max-width:360px">
+      <div style="font-size:32px;margin-bottom:16px">📷</div>
+      <h3 style="color:#fff;margin-bottom:8px">${title}</h3>
+      <p style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">${body}</p>
+      <p style="color:rgba(255,80,80,.65);font-size:11px;margin-top:10px;word-break:break-word">
+        ${name ? '(' + name + ')' : ''}</p>
+      <button id="cameraRetryBtn"
+        style="margin-top:22px;padding:12px 28px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
+        Try again</button>
+    </div>`;
+  document.getElementById('cameraRetryBtn').addEventListener('click', retryStartScanner);
+}
+
+/* In-place retry — re-attempts startup directly instead of reloading the whole
+   page, so it works the instant the person fixes the permission in settings
+   and comes back to this tab (no manual refresh needed). */
+async function retryStartScanner() {
+  document.getElementById('loading').innerHTML = `
+    <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
+    <div class="loading-spinner"></div>
+    <div id="loading-text">
+      <h3 id="loading-title">Starting camera</h3>
+      <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
+      <p id="loading-counter" style="text-align:center"></p>
+    </div>`;
+  await startScanner();
 }
 
 /* ============================================================
