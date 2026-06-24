@@ -101,8 +101,9 @@ html,body{
 }
 .ar-video-inner{
   position:absolute;inset:0;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06);
   opacity:0;
-  transition:opacity .25s ease;
+  transition:opacity .25s,box-shadow .12s ease;
   pointer-events:none;
   /* Same fast-movement fix as the wrapper — this is the element that's
      actually visible (wrapper itself has no paint), so it needs its own
@@ -143,72 +144,23 @@ html,body{
   -webkit-transform:translateZ(0);
   border-radius:3px;
 }
-/* CORNER BRACKET OVERLAY — sits on top of the video inner, covers the full
-   wrapper size, never participates in layout. The 4 corner brackets are
-   drawn as ::before/::after on .ar-corner-tl/.ar-corner-br etc, each a
-   fixed-size L-shape. They appear instantly on tracking lock (.08s) and
-   vanish on lose, so they read as a hard "target acquired" snap — not a
-   slow glow. Using a separate sibling element (not pseudo-elements on
-   .ar-video-inner itself) means CSS3DRenderer's display:none stomps on the
-   parent wrapper, not on these — they survive visibility toggling cleanly. */
-.ar-corners{
-  position:absolute;inset:0;
-  pointer-events:none;
-  opacity:0;
-  transition:opacity .08s ease;
-  /* GPU layer — same matrix3d() will-change context as the wrapper */
-  will-change:opacity;
-  backface-visibility:hidden;
-  -webkit-backface-visibility:hidden;
+/* FULL DETECTION BORDER — wraps the entire matched photo, not just the video
+   crop, and snaps on fast (.12s, no fade-in delay) the instant tracking
+   locks, so it reads as an immediate "found it" confirmation rather than a
+   slow reveal. box-shadow (not border) is used so it doesn't add to the
+   wrapper's box size or shift the video's object-fit:cover crop. */
+.ar-video-inner.tracking{
+  box-shadow:0 0 0 3px var(--gold),0 0 16px 2px rgba(201,147,58,.5);
 }
-.ar-video-inner.tracking ~ .ar-corners,
-.ar-corners.tracking{
-  opacity:1;
+/* Thin gold corner ticks on top of the full border, for extra "locked on" detail */
+.ar-video-inner::before,.ar-video-inner::after{
+  content:'';position:absolute;width:14px;height:14px;
+  border:2px solid #fff;opacity:0;
+  transition:opacity .12s;pointer-events:none;
 }
-/* Each corner is a small L-bracket. The wrapper is always PLANE_PX=1000px
-   wide before CSS3D scaling, so absolute px values here are stable — after
-   CSS3D scale they render at the right physical size on screen regardless of
-   the poster's actual on-screen dimensions. 60px arm = ~6% of 1000px, which
-   reads as a clean corner bracket at any typical photo viewing distance. */
-.ar-corner{
-  position:absolute;
-  width:60px;height:60px;
-  border-color:var(--gold);
-  border-style:solid;
-  border-width:0;
-  /* Subtle gold glow so the bracket reads clearly over any video content */
-  filter:drop-shadow(0 0 6px rgba(201,147,58,.9)) drop-shadow(0 0 2px rgba(201,147,58,1));
-}
-.ar-corner-tl{
-  top:0;left:0;
-  border-top-width:4px;border-left-width:4px;
-  border-top-left-radius:3px;
-}
-.ar-corner-tr{
-  top:0;right:0;
-  border-top-width:4px;border-right-width:4px;
-  border-top-right-radius:3px;
-}
-.ar-corner-bl{
-  bottom:0;left:0;
-  border-bottom-width:4px;border-left-width:4px;
-  border-bottom-left-radius:3px;
-}
-.ar-corner-br{
-  bottom:0;right:0;
-  border-bottom-width:4px;border-right-width:4px;
-  border-bottom-right-radius:3px;
-}
-/* Scan-lock animation — tiny inward pulse on the bracket arm lengths the
-   frame tracking is first acquired. Gives the "locking on" click feel. */
-@keyframes bracketLock{
-  0%{width:80px;height:80px;opacity:.6}
-  60%{width:54px;height:54px;opacity:1}
-  100%{width:60px;height:60px;opacity:1}
-}
-.ar-corners.lock-anim .ar-corner{
-  animation:bracketLock .22s cubic-bezier(.22,.9,.32,1) both;
-}
+.ar-video-inner.tracking::before,.ar-video-inner.tracking::after{opacity:.9}
+.ar-video-inner::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.ar-video-inner::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
 
 /* CLEAN CAMERA UI — plain viewfinder, no frame/brackets/scanline */
 #scan-ui{
@@ -1023,24 +975,15 @@ async function beginMindAR(mindUrl) {
     container: document.getElementById('ar-container'),
     imageTargetSrc: mindUrl,
     maxTrack: Math.min(_targets.length, 2),
-    // ── JITTER FIX ──────────────────────────────────────────────────────
-    // MindAR smooths every tracked corner point through a One Euro filter
-    // (src/libs/one-euro-filter.js) before it ever becomes a worldMatrix.
-    // Its own library defaults are filterMinCF=0.001, filterBeta=1000 —
-    // the previous values here (filterMinCF:0.001, filterBeta:0.01) had
-    // beta set ~100,000× BELOW that default.
-    // What beta actually does: effective cutoff = minCutOff + beta×|velocity|.
-    // With beta this tiny, the cutoff stays pinned near the minimum almost
-    // all the time regardless of motion — which sounds like "more
-    // smoothing" but is actually the opposite: a near-zero cutoff lets
-    // high-frequency noise through with very little resistance, which is
-    // exactly the visible shake you were seeing, worst right when the
-    // phone is nearly still (the most common case).
-    // These values stay closer to the library's own tuned defaults, with
-    // minCutOff nudged down a bit for a calmer hold-still state — good for
-    // "video glued to a printed photo" rather than fast game-style motion:
-    filterMinCF: 0.0005,
-    filterBeta: 200,
+    // ── MAXIMUM STABILITY FILTER PARAMS ────────────────────────────────
+    // MindAR's OneEuroFilter: filterMinCF controls noise cutoff at rest,
+    // filterBeta controls how fast the cutoff opens up during movement.
+    // MindAR's own official Three.js example uses filterMinCF:1, filterBeta:10000
+    // for most stable tracking. We use slightly lower minCF so still frames
+    // are rock-solid, with very high beta so it snaps tight during movement
+    // instead of drifting. This is the primary fix for shaking.
+    filterMinCF: 0.0001,
+    filterBeta: 10000,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
 
@@ -1062,108 +1005,52 @@ async function beginMindAR(mindUrl) {
     anchor.onTargetLost  = () => onTargetLost(String(target.id));
   });
 
-  // ── SMOOTHING LOOP ──────────────────────────────────────────────────
-  // Runs every frame BEFORE the two renders below. For each tracked target,
-  // reads anchor.group's raw matrix (MindAR's own filtered tracking output,
-  // overwritten every frame — see _startAR's onUpdate in MindAR's source)
-  // and eases our standalone `smoothed` object toward it instead of
-  // snapping straight to it. This is a simple exponential ease (lerp for
-  // position/scale, slerp for rotation), framerate-independent via the
-  // per-frame dt so it behaves consistently regardless of device FPS.
-  //
-  // VELOCITY-ADAPTIVE HALF-LIFE — fixes the "fast move = video distorts/
-  // glitches" complaint at its root. A single fixed half-life is a
-  // compromise: tuned calm enough to kill jitter when the poster is held
-  // still, that SAME slowness then makes the smoothed plane visibly lag
-  // behind the raw tracked corners during a fast pan — and because the
-  // video crop is locked to the smoothed transform while MindAR's camera
-  // feed underneath updates every real frame, that lag reads as the video
-  // "swimming"/warping relative to the photo, not just trailing it. Fix:
-  // measure how fast the raw position is actually moving each frame and
-  // shrink the half-life (snap tighter/faster) proportionally — fast
-  // motion gets near-instant tracking (matches the photo edge-for-edge,
-  // no warping), while near-zero motion keeps the long, calm half-life
-  // that kills micro-jitter. This is exactly how professional AR/video
-  // overlay compositors (the Hotstar/Netflix-grade smoothing you asked
-  // for) avoid the classic "smoothing looks great still, terrible moving"
-  // tradeoff.
-  const SMOOTHING_HALF_LIFE_MS_IDLE = 70;   // calm, jitter-free when (near) still
-  const SMOOTHING_HALF_LIFE_MS_FAST = 14;   // tight, glued-on when moving fast
-  const FAST_VELOCITY_THRESHOLD = 0.45;     // marker-space units/sec where "fast" kicks in fully
-  let _lastFrameTime = performance.now();
-  const _rawPos = new THREE.Vector3();
-  const _rawQuat = new THREE.Quaternion();
-  const _rawScale = new THREE.Vector3();
-  const _prevRawPos = new THREE.Vector3();
-
+  // ── RENDER LOOP ─────────────────────────────────────────────────────
+  // NO custom lerp/slerp smoothing pass here anymore. MindAR's OneEuroFilter
+  // (configured above with filterMinCF:0.0001, filterBeta:10000) already
+  // handles all stabilization at the tracking level — adding a SECOND
+  // smoothing pass on top caused the "one corner fixed, rest swimming"
+  // artifact: the smoothed Object3D lagged behind anchor.group by different
+  // amounts for position vs rotation, making the plane appear to pivot
+  // around a single point while the rest drifted. Removing it means the
+  // CSS3DObject follows anchor.group directly, which is the correctly-
+  // filtered single source of truth. The render-loop now just drives the
+  // two renderers and updates the screen-space corner brackets.
   mindarThree.renderer.setAnimationLoop(() => {
-    const now = performance.now();
-    const dt = Math.max(0, now - _lastFrameTime);
-    _lastFrameTime = now;
-    const dtSec = dt / 1000;
-
     arTargets.forEach((entry) => {
-      const { anchor, smoothed, inner } = entry;
+      const { anchor, inner } = entry;
       const rawVisible = anchor.visible;
 
-      // Visibility now driven here, since cssObject no longer lives inside
-      // anchor.group (MindAR's own per-frame visibility write — see
-      // onUpdate in its source — targets anchor.group.children, which our
-      // object is no longer a member of).
-      const wasVisible = smoothed.userData.wasVisible === true;
+      // Sync visibility directly from anchor — no smoothed proxy needed
       entry.cssObject.element.style.visibility = rawVisible ? 'visible' : 'hidden';
-      smoothed.userData.wasVisible = rawVisible;
 
-      if (!rawVisible) return; // no fresh matrix to ease toward while lost
-
-      anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
-
-      if (!wasVisible) {
-        // Snap on the very frame tracking is (re)acquired — easing in from
-        // a stale or identity transform here would itself look like a
-        // jitter/teleport, the opposite of what we want.
-        smoothed.position.copy(_rawPos);
-        smoothed.quaternion.copy(_rawQuat);
-        smoothed.scale.copy(_rawScale);
-        entry.userVel = 0;
-      } else {
-        // Estimate current motion speed from raw-position delta since last
-        // frame (marker-space units/sec). entry.userVel itself is smoothed
-        // a little (simple EMA) so one single noisy frame can't yank the
-        // half-life around — we want this to react to genuine fast hand
-        // movement, not per-frame tracking noise.
-        const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
-        const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
-        entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.7 + instVel * 0.3;
-        entry._prevRawPos.copy(_rawPos);
-
-        const fastT = Math.min(1, entry.userVel / FAST_VELOCITY_THRESHOLD);
-        const halfLife = SMOOTHING_HALF_LIFE_MS_IDLE + (SMOOTHING_HALF_LIFE_MS_FAST - SMOOTHING_HALF_LIFE_MS_IDLE) * fastT;
-        const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / halfLife) : 1;
-
-        // ── QUATERNION HEMISPHERE FIX — the real source of fast-move
-        // visual "distortion"/warping. THREE.Quaternion.slerp (instance
-        // method, used below) does NOT auto-correct for the double-cover
-        // of rotation quaternions: q and -q represent the IDENTICAL
-        // rotation, but slerping toward whichever one happens to have a
-        // negative dot product takes the long way around the 4D unit
-        // sphere instead of the short way. MindAR's per-frame homography
-        // decomposition can and does flip this sign frame-to-frame,
-        // especially under fast rotation/perspective change — exactly
-        // when this bug bites hardest. Flipping the raw quaternion's sign
-        // when the dot product goes negative makes it take the correct,
-        // shortest path every time, which is what removes the warping/
-        // "disturbed" look during fast moves rather than just papering
-        // over it with more smoothing.
-        if (smoothed.quaternion.dot(_rawQuat) < 0) {
-          _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
+      // ── SCREEN-SPACE CORNER BRACKETS ──────────────────────────────────
+      // The corner overlay div (#ar-corners-overlay) lives in the page's
+      // normal DOM, not inside the CSS3DObject. Each frame we read the
+      // wrapper's REAL on-screen bounding rect (after CSS3DRenderer has
+      // applied the tracking matrix3d() to it) and reposition 4 fixed
+      // corner bracket elements to match those exact corners. This means
+      // the brackets sit in screen pixels — they move 1:1 with the poster
+      // without any 3D transform jitter affecting their shape/position, so
+      // they always appear as clean right-angle L-shapes exactly on the
+      // poster's 4 corners even during fast movement.
+      if (rawVisible) {
+        const rect = entry.wrapper.getBoundingClientRect();
+        if (rect.width > 10 && rect.height > 10) {
+          const arm = Math.min(Math.max(rect.width * 0.12, 14), 40);
+          const bw  = 3; // bracket border width px
+          entry.corners.style.display = 'block';
+          entry.corners.style.left   = rect.left   + 'px';
+          entry.corners.style.top    = rect.top    + 'px';
+          entry.corners.style.width  = rect.width  + 'px';
+          entry.corners.style.height = rect.height + 'px';
+          // Update CSS var so corner arm lengths scale with poster size
+          entry.corners.style.setProperty('--arm', arm + 'px');
+          entry.corners.style.setProperty('--bw',  bw  + 'px');
         }
-
-        smoothed.position.lerp(_rawPos, alpha);
-        smoothed.quaternion.slerp(_rawQuat, alpha);
-        smoothed.scale.lerp(_rawScale, alpha);
+      } else {
+        entry.corners.style.display = 'none';
       }
-      smoothed.updateMatrix();
     });
 
     mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
@@ -1305,20 +1192,6 @@ function spawnArTarget(id, targetIndex, target, anchor){
   inner.appendChild(video);
   wrapper.appendChild(inner);
 
-  // ── CORNER BRACKET OVERLAY ─────────────────────────────────────────────
-  // Four L-shaped gold corner brackets that sit over the full wrapper area
-  // (not just the cropped video rect) so they visually lock onto the poster
-  // corners — exactly the "scanning a TV" effect: bracket arms hug the 4
-  // corners of the recognised photo, video plays within, both track together.
-  const corners = document.createElement('div');
-  corners.className = 'ar-corners';
-  ['tl','tr','bl','br'].forEach(pos => {
-    const c = document.createElement('div');
-    c.className = `ar-corner ar-corner-${pos}`;
-    corners.appendChild(c);
-  });
-  wrapper.appendChild(corners);
-
   wrapper.addEventListener('click',()=>openFullscreen(id));
 
   // Position the video within the poster using the saved videoRect (percentages
@@ -1439,7 +1312,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   smoothed.quaternion.setFromRotationMatrix(anchor.group.matrix);
   smoothed.scale.setFromMatrixScale(anchor.group.matrix);
 
-  const entry={wrapper,inner,corners,video,cssObject,smoothed,anchor,lastSeen:0,visible:false};
+  const entry={wrapper,inner,video,cssObject,smoothed,anchor,lastSeen:0,visible:false};
   arTargets.set(id,entry);
 }
 
@@ -1449,21 +1322,6 @@ function onTargetFound(id){
   entry.visible=true;
   entry.lastSeen=performance.now();
   entry.inner.classList.add('visible','tracking');
-
-  // Snap corner brackets on — animate the "lock-on" pulse only on the very
-  // first found frame (wasTracking false), not on every re-detect after
-  // a brief occlusion blink, so it doesn't feel spammy during normal use.
-  const wasTracking = entry.corners.classList.contains('tracking');
-  entry.corners.classList.add('tracking');
-  if (!wasTracking) {
-    entry.corners.classList.remove('lock-anim');
-    // Force reflow so removing+re-adding the class restarts the animation
-    void entry.corners.offsetWidth;
-    entry.corners.classList.add('lock-anim');
-    // Remove the animation class once it's done — the 'tracking' class keeps
-    // the brackets visible; this just prevents re-triggering next frame.
-    setTimeout(() => entry.corners.classList.remove('lock-anim'), 300);
-  }
 
   // DIAGNOSTIC — actual rendered box sizes at the moment of detection. If
   // wrapperRect or videoRect below come back as 0×0 (or absurdly
@@ -1561,7 +1419,6 @@ function onTargetLost(id){
   entry.visible=false;
   entry.inner.classList.remove('tracking');
   entry.inner.classList.add('losing');
-  entry.corners.classList.remove('tracking','lock-anim');
   entry.video.pause();
   setTimeout(()=>{
     if(!entry.visible) entry.inner.classList.remove('visible','losing');
