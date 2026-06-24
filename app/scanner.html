@@ -429,7 +429,7 @@ html,body{
      preview first for instant visual feedback, then swap to MindAR's own
      video+canvases the moment mindarThree.start() resolves (tracking-ready). -->
 <video id="instant-preview" autoplay muted playsinline
-       style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:1"></video>
+       style="position:fixed;top:0;left:0;object-fit:cover;background:#000;z-index:1"></video>
 
 <!-- AR CONTAINER
      MindARThree mounts its OWN <video> (camera feed) + WebGL canvas + CSS3D layer
@@ -663,6 +663,27 @@ async function startScanner() {
   }
   const previewVideo = document.getElementById('instant-preview');
   previewVideo.srcObject = previewStream;
+
+  // Explicit PIXEL sizing instead of CSS %/vh — set via JS against
+  // window.innerWidth/innerHeight, which reflects the real visual viewport.
+  // A <video> with percentage width/height can fail to reflow correctly on
+  // some mobile Chrome builds if its layout box gets computed before the
+  // video stream's own metadata (intrinsic dimensions) has loaded — the
+  // element can stick to whatever partial size it first computed, which is
+  // consistent with "camera feed fills only the top half, solid black
+  // below" with a clean cut (not a stretch/distortion artifact, which is
+  // what a wrong-but-reflowing size would look like). Re-applying this on
+  // resize/orientationchange/loadedmetadata covers address-bar show/hide,
+  // rotation, and the moment real video dimensions are known.
+  function sizePreview() {
+    previewVideo.style.width  = window.innerWidth  + 'px';
+    previewVideo.style.height = window.innerHeight + 'px';
+  }
+  sizePreview();
+  previewVideo.addEventListener('loadedmetadata', sizePreview);
+  window.addEventListener('resize', sizePreview);
+  window.addEventListener('orientationchange', sizePreview);
+
   document.getElementById('loading').classList.add('hidden');
   localStorage.setItem(PERM_KEY, 'true');
 
@@ -937,9 +958,24 @@ function getSessionId() {
 const PLANE_SIZE = 1; // MindAR's anchor group is sized to the poster's own width=1 unit (see postMatrix in MindARThree)
 
 function spawnArTarget(id, targetIndex, target, anchor){
+  // DIAGNOSTIC — logs exactly what the backend sent for this target plus the
+  // computed sizing, so if the video still doesn't show after the validation
+  // fixes below, the real cause (bad backend data vs something else) is
+  // visible in the device console instead of needing another guess.
+  console.log('[Memoria] spawning target', id, {
+    photoWidth: target.photoWidth, photoHeight: target.photoHeight,
+    videoRect: target.videoRect, videoUrl: target.videoUrl,
+  });
+
   // Real aspect ratio of the uploaded photo (height/width). Falls back to a
-  // square if dimensions are missing for some reason — better than a wrong guess.
-  const aspect = (target.photoHeight && target.photoWidth) ? target.photoHeight/target.photoWidth : 1;
+  // square if dimensions are missing OR non-numeric/zero — checking truthiness
+  // alone (the old `target.photoHeight && target.photoWidth` form) would pass
+  // for any non-zero value including malformed ones, and a NaN aspect here
+  // would make wrapper.style.height below invalid CSS, collapsing the whole
+  // wrapper to zero height — another way to get an invisible-but-playing video.
+  const pw = target.photoWidth, ph = target.photoHeight;
+  const aspect = (typeof pw === 'number' && pw > 0 && typeof ph === 'number' && ph > 0)
+    ? ph / pw : 1;
 
   // MindAR's own marker-space convention (confirmed against its official Three.js
   // examples, which do `new THREE.PlaneGeometry(1, realAspectRatio)` with no extra
@@ -977,7 +1013,26 @@ function spawnArTarget(id, targetIndex, target, anchor){
   // upload/crop editor. Now computed against the wrapper's TRUE aspect-ratio
   // shape (set above), not a square, so this lines up correctly on any photo
   // shape, not just square ones.
-  const rect = target.videoRect || { x:50, y:50, width:45, height:80 };
+  //
+  // VALIDATED PER-FIELD, not all-or-nothing: target.videoRect || {defaults}
+  // only falls back if videoRect is entirely missing/falsy. If the backend
+  // ever returns a videoRect object that's present but has a missing or
+  // non-numeric field (e.g. {x:50, y:50} with no width/height), that object
+  // is still truthy, so the || never triggers — and an inline style like
+  // `width: NaN%` or `width: undefined%` is invalid CSS that gets silently
+  // DROPPED by the browser. With width/height/left/top all dropped and
+  // position:absolute still set, the video has no size constraint left, no
+  // intrinsic CSS size, and can render at 0×0 until something else forces
+  // dimensions — a second, independent way to get "video plays, doesn't
+  // show" beyond the CSS3D scale bug fixed earlier. This validates every
+  // field independently so a partially-malformed videoRect can't silently
+  // zero out the video.
+  const rawRect = target.videoRect || {};
+  const numOr = (v, fallback) => (typeof v === 'number' && isFinite(v)) ? v : fallback;
+  const rect = {
+    x: numOr(rawRect.x, 50), y: numOr(rawRect.y, 50),
+    width: numOr(rawRect.width, 45), height: numOr(rawRect.height, 80),
+  };
   video.style.position='absolute';
   video.style.left   = (rect.x - rect.width/2)  + '%';
   video.style.top    = (rect.y - rect.height/2) + '%';
@@ -1028,6 +1083,21 @@ function onTargetFound(id){
   entry.visible=true;
   entry.lastSeen=performance.now();
   entry.wrapper.classList.add('visible','tracking');
+
+  // DIAGNOSTIC — actual rendered box sizes at the moment of detection. If
+  // wrapperRect or videoRect below come back as 0×0 (or absurdly
+  // small/large), that confirms a real sizing bug rather than e.g. a
+  // z-index/stacking issue, which would show normal-looking dimensions but
+  // still render nothing visible. Cheap to leave in; only logs on detection.
+  requestAnimationFrame(() => {
+    const wrapperRect = entry.wrapper.getBoundingClientRect();
+    const videoRect = entry.video.getBoundingClientRect();
+    console.log('[Memoria] target found, rendered size', id, {
+      wrapper: { w: wrapperRect.width, h: wrapperRect.height, top: wrapperRect.top, left: wrapperRect.left },
+      video:   { w: videoRect.width,   h: videoRect.height,   readyState: entry.video.readyState, paused: entry.video.paused },
+    });
+  });
+
   entry.video.play().catch(()=>{
     // Some browser/state combo blocked play-with-sound — fall back to muted
     // so the video still plays instead of staying frozen, then arm a
