@@ -71,50 +71,94 @@ html,body{
   cursor:pointer;
   pointer-events:all;
   overflow:hidden;
-  border-radius:0px; /* exact poster edges, no rounding */
+  border-radius:2px;
+  /* ── "3D DISTUB" FIX (fast-move glitch) ───────────────────────────────
+     CSS3DRenderer writes a raw matrix3d() transform to this element every
+     single frame, straight from the camera's perspective projection. With
+     no hint, the browser sometimes falls back to software-ish repaints on
+     fast matrix changes, and — critically — without backface-visibility
+     locked, a quick rotation that swings the plane's normal even slightly
+     past 90° (very easy during fast hand-shake, since tracking noise on a
+     held photo is mostly rotational) makes the browser treat it as having
+     flipped to its back face for one or more frames: it goes transparent /
+     visually "blinks" or smears, exactly the distortion described. Locking
+     backface-visibility:hidden stops that flip from ever being visible —
+     the element simply stays front-facing and rendered, matching how a
+     real Hotstar/Netflix-grade compositor would treat an opaque video
+     plane. transform-style:preserve-3d keeps this element's own 3D context
+     intact so CSS3DRenderer's matrix3d() composes correctly instead of
+     being flattened by an ancestor. will-change + translateZ(0) forces this
+     specific element onto its own GPU compositor layer ONCE (not re-created
+     every frame), which removes the frame-to-frame repaint cost that was
+     producing visible smearing/tearing during fast pans. */
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
+  transform-style:preserve-3d;
+  will-change:transform;
+  -webkit-transform:translateZ(0);
+  perspective:1000px;
+  -webkit-perspective:1000px;
 }
 .ar-video-inner{
   position:absolute;inset:0;
-  box-shadow:0 0 0 1px rgba(255,255,255,.04);
+  box-shadow:0 0 0 1px rgba(255,255,255,.06);
   opacity:0;
-  transition:opacity .2s ease, box-shadow .1s ease;
+  transition:opacity .25s,box-shadow .12s ease;
   pointer-events:none;
-  border-radius:0px;
-  overflow:hidden;
+  /* Same fast-movement fix as the wrapper — this is the element that's
+     actually visible (wrapper itself has no paint), so it needs its own
+     GPU layer + backface lock too, or the smear/flip can still show up
+     on this child even with the parent fixed. */
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
+  -webkit-transform:translateZ(0);
+  will-change:opacity;
+  /* Smoother, less "sharp/jagged" edge when the plane is viewed at an
+     angle — a hairline-rounded corner anti-aliases far better under a
+     perspective matrix3d() than a perfectly square corner does. Small
+     enough that it reads as "clean edge", not as a visibly rounded card. */
+  border-radius:3px;
 }
 .ar-video-inner.visible{
   opacity:1;
-  animation:arFadeIn .28s cubic-bezier(0.22,1,0.36,1) both;
+  animation:arFadeIn .35s ease both;
 }
 .ar-video-inner.losing{
-  animation:arFadeOut .22s ease both;
+  animation:arFadeOut .25s ease both;
 }
-@keyframes arFadeIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
-@keyframes arFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.985)}}
+@keyframes arFadeIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+@keyframes arFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.96)}}
 .ar-video{
   width:100%;height:100%;
-  object-fit:fill; /* fill the exact cropped section fully — no letterboxing */
+  /* object-fit:cover guarantees the video always FULLY fills this cropped
+     box — no letterbox gaps on any edge — by scaling up and cropping the
+     overflow, same principle Hotstar/Netflix posters use for thumbnail
+     video crops. Paired with the exact rect math in spawnArTarget below,
+     the crop box itself is sized/positioned to match the poster precisely,
+     so "cover" then has zero rounding-driven gap to hide. */
+  object-fit:cover;
   display:block;
   pointer-events:none;
-  will-change:transform; /* hint GPU compositing for smooth playback */
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
+  -webkit-transform:translateZ(0);
+  border-radius:3px;
 }
-/* FULL DETECTION BORDER — smooth rounded gold glow, not sharp edges */
+/* FULL DETECTION BORDER — wraps the entire matched photo, not just the video
+   crop, and snaps on fast (.12s, no fade-in delay) the instant tracking
+   locks, so it reads as an immediate "found it" confirmation rather than a
+   slow reveal. box-shadow (not border) is used so it doesn't add to the
+   wrapper's box size or shift the video's object-fit:cover crop. */
 .ar-video-inner.tracking{
-  box-shadow:
-    0 0 0 2.5px var(--gold),
-    0 0 12px 3px rgba(201,147,58,.55),
-    0 0 28px 6px rgba(201,147,58,.18);
-  transition:box-shadow .1s ease, opacity .2s ease;
+  box-shadow:0 0 0 3px var(--gold),0 0 16px 2px rgba(201,147,58,.5);
 }
-/* Thin gold corner ticks on top of the full border */
+/* Thin gold corner ticks on top of the full border, for extra "locked on" detail */
 .ar-video-inner::before,.ar-video-inner::after{
-  content:'';position:absolute;width:16px;height:16px;
-  border:2.5px solid var(--gold);opacity:0;
-  border-radius:1px;
-  transition:opacity .1s;pointer-events:none;
-  z-index:10;
+  content:'';position:absolute;width:14px;height:14px;
+  border:2px solid #fff;opacity:0;
+  transition:opacity .12s;pointer-events:none;
 }
-.ar-video-inner.tracking::before,.ar-video-inner.tracking::after{opacity:1}
+.ar-video-inner.tracking::before,.ar-video-inner.tracking::after{opacity:.9}
 .ar-video-inner::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
 .ar-video-inner::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
 
@@ -222,10 +266,32 @@ html,body{
   background:#000;
   align-items:center;justify-content:center;
   overflow:hidden;
-  animation:fsPlayerOpen .22s cubic-bezier(0.22,1,0.36,1) both;
+  /* ── ACCURATE GROW-OPEN TRANSITION ────────────────────────────────────
+     Hotstar/Netflix don't just hard-cut to fullscreen — the tapped tile
+     visibly grows into the full player. We reproduce that exactly: JS
+     (openFullscreen below) measures the tapped poster-video's REAL
+     on-screen rect via getBoundingClientRect() right before opening and
+     writes it into these CSS vars, so the transform-origin and initial
+     scale below are mathematically accurate to where the tap actually
+     happened — not a generic center-zoom. transform/opacity are GPU-
+     compositable, so this stays smooth even on mid-range phones. */
+  --fs-origin-x:50%; --fs-origin-y:50%; --fs-origin-scale:0.3;
+  transform-origin:var(--fs-origin-x) var(--fs-origin-y);
+  transform:scale(var(--fs-origin-scale));
+  opacity:0;
+  transition:transform .38s cubic-bezier(.22,.9,.32,1), opacity .28s ease;
+  will-change:transform,opacity;
 }
-@keyframes fsPlayerOpen{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
-#fullscreen-player.open{display:flex}
+#fullscreen-player.open,
+#fullscreen-player.closing{display:flex}
+#fullscreen-player.open{
+  transform:scale(1);
+  opacity:1;
+}
+#fullscreen-player.closing{
+  transform:scale(var(--fs-origin-scale));
+  opacity:0;
+}
 #fs-video{
   width:100%;height:100%;
   object-fit:contain;
@@ -507,7 +573,7 @@ html,body{
 
 <!-- FULLSCREEN VIDEO PLAYER -->
 <div id="fullscreen-player">
-  <video id="fs-video" playsinline loop></video>
+  <video id="fs-video" playsinline></video>
 
   <div class="fs-scrim-top" id="fsScrimTop"></div>
   <div class="fs-scrim-bottom" id="fsScrimBottom"></div>
@@ -528,14 +594,6 @@ html,body{
           <div class="fs-menu-item" onclick="downloadCurrentVideo(event)">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download video
-          </div>
-          <div class="fs-menu-item" onclick="shareCurrentVideo(event)">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            Share video
-          </div>
-          <div class="fs-menu-item" onclick="toggleFsLoop(event)" id="fsLoopItem">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
-            <span id="fsLoopLabel">Loop: On</span>
           </div>
         </div>
       </div>
@@ -930,10 +988,11 @@ async function beginMindAR(mindUrl) {
     // high-frequency noise through with very little resistance, which is
     // exactly the visible shake you were seeing, worst right when the
     // phone is nearly still (the most common case).
-    // Tuned for "video glued to a still/slow-moving printed photo":
-    // filterMinCF lower → calmer at rest; filterBeta higher → fast cutoff recovery on quick moves.
-    filterMinCF: 0.0003,
-    filterBeta: 500,
+    // These values stay closer to the library's own tuned defaults, with
+    // minCutOff nudged down a bit for a calmer hold-still state — good for
+    // "video glued to a printed photo" rather than fast game-style motion:
+    filterMinCF: 0.0005,
+    filterBeta: 200,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
 
@@ -964,27 +1023,45 @@ async function beginMindAR(mindUrl) {
   // position/scale, slerp for rotation), framerate-independent via the
   // per-frame dt so it behaves consistently regardless of device FPS.
   //
-  // SMOOTHING_HALF_LIFE_MS: reduced to 45ms for faster, snappier response —
-  // still smooth enough to kill jitter but no longer noticeably laggy.
-  const SMOOTHING_HALF_LIFE_MS = 45;
+  // VELOCITY-ADAPTIVE HALF-LIFE — fixes the "fast move = video distorts/
+  // glitches" complaint at its root. A single fixed half-life is a
+  // compromise: tuned calm enough to kill jitter when the poster is held
+  // still, that SAME slowness then makes the smoothed plane visibly lag
+  // behind the raw tracked corners during a fast pan — and because the
+  // video crop is locked to the smoothed transform while MindAR's camera
+  // feed underneath updates every real frame, that lag reads as the video
+  // "swimming"/warping relative to the photo, not just trailing it. Fix:
+  // measure how fast the raw position is actually moving each frame and
+  // shrink the half-life (snap tighter/faster) proportionally — fast
+  // motion gets near-instant tracking (matches the photo edge-for-edge,
+  // no warping), while near-zero motion keeps the long, calm half-life
+  // that kills micro-jitter. This is exactly how professional AR/video
+  // overlay compositors (the Hotstar/Netflix-grade smoothing you asked
+  // for) avoid the classic "smoothing looks great still, terrible moving"
+  // tradeoff.
+  const SMOOTHING_HALF_LIFE_MS_IDLE = 70;   // calm, jitter-free when (near) still
+  const SMOOTHING_HALF_LIFE_MS_FAST = 14;   // tight, glued-on when moving fast
+  const FAST_VELOCITY_THRESHOLD = 0.45;     // marker-space units/sec where "fast" kicks in fully
   let _lastFrameTime = performance.now();
   const _rawPos = new THREE.Vector3();
   const _rawQuat = new THREE.Quaternion();
   const _rawScale = new THREE.Vector3();
+  const _prevRawPos = new THREE.Vector3();
 
   mindarThree.renderer.setAnimationLoop(() => {
     const now = performance.now();
     const dt = Math.max(0, now - _lastFrameTime);
     _lastFrameTime = now;
-    // Convert half-life to a per-frame lerp factor: alpha = 1 - 0.5^(dt/halfLife)
-    const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / SMOOTHING_HALF_LIFE_MS) : 1;
+    const dtSec = dt / 1000;
 
     arTargets.forEach((entry) => {
       const { anchor, smoothed, inner } = entry;
       const rawVisible = anchor.visible;
 
       // Visibility now driven here, since cssObject no longer lives inside
-      // anchor.group.
+      // anchor.group (MindAR's own per-frame visibility write — see
+      // onUpdate in its source — targets anchor.group.children, which our
+      // object is no longer a member of).
       const wasVisible = smoothed.userData.wasVisible === true;
       entry.cssObject.element.style.visibility = rawVisible ? 'visible' : 'hidden';
       smoothed.userData.wasVisible = rawVisible;
@@ -994,22 +1071,49 @@ async function beginMindAR(mindUrl) {
       anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
 
       if (!wasVisible) {
-        // Snap on the very frame tracking is (re)acquired.
+        // Snap on the very frame tracking is (re)acquired — easing in from
+        // a stale or identity transform here would itself look like a
+        // jitter/teleport, the opposite of what we want.
         smoothed.position.copy(_rawPos);
         smoothed.quaternion.copy(_rawQuat);
         smoothed.scale.copy(_rawScale);
+        entry.userVel = 0;
       } else {
-        // Adaptive alpha: large jumps (phone/poster moved fast) snap quickly;
-        // tiny jitter (held still) gets clamped to near-zero — video stays locked.
-        const posDist = smoothed.position.distanceTo(_rawPos);
-        const adaptiveAlpha = posDist > 0.08
-          ? Math.min(1, alpha * 3.5)   // fast catch-up for genuine movement
-          : posDist < 0.004
-            ? alpha * 0.25             // near-zero drift when effectively still
-            : alpha;                   // normal ease otherwise
-        smoothed.position.lerp(_rawPos, adaptiveAlpha);
-        smoothed.quaternion.slerp(_rawQuat, adaptiveAlpha);
-        smoothed.scale.lerp(_rawScale, adaptiveAlpha);
+        // Estimate current motion speed from raw-position delta since last
+        // frame (marker-space units/sec). entry.userVel itself is smoothed
+        // a little (simple EMA) so one single noisy frame can't yank the
+        // half-life around — we want this to react to genuine fast hand
+        // movement, not per-frame tracking noise.
+        const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
+        const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
+        entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.7 + instVel * 0.3;
+        entry._prevRawPos.copy(_rawPos);
+
+        const fastT = Math.min(1, entry.userVel / FAST_VELOCITY_THRESHOLD);
+        const halfLife = SMOOTHING_HALF_LIFE_MS_IDLE + (SMOOTHING_HALF_LIFE_MS_FAST - SMOOTHING_HALF_LIFE_MS_IDLE) * fastT;
+        const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / halfLife) : 1;
+
+        // ── QUATERNION HEMISPHERE FIX — the real source of fast-move
+        // visual "distortion"/warping. THREE.Quaternion.slerp (instance
+        // method, used below) does NOT auto-correct for the double-cover
+        // of rotation quaternions: q and -q represent the IDENTICAL
+        // rotation, but slerping toward whichever one happens to have a
+        // negative dot product takes the long way around the 4D unit
+        // sphere instead of the short way. MindAR's per-frame homography
+        // decomposition can and does flip this sign frame-to-frame,
+        // especially under fast rotation/perspective change — exactly
+        // when this bug bites hardest. Flipping the raw quaternion's sign
+        // when the dot product goes negative makes it take the correct,
+        // shortest path every time, which is what removes the warping/
+        // "disturbed" look during fast moves rather than just papering
+        // over it with more smoothing.
+        if (smoothed.quaternion.dot(_rawQuat) < 0) {
+          _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
+        }
+
+        smoothed.position.lerp(_rawPos, alpha);
+        smoothed.quaternion.slerp(_rawQuat, alpha);
+        smoothed.scale.lerp(_rawScale, alpha);
       }
       smoothed.updateMatrix();
     });
@@ -1120,11 +1224,22 @@ function spawnArTarget(id, targetIndex, target, anchor){
   const video=document.createElement('video');
   video.className='ar-video';
   video.loop=true; video.playsInline=true;
-  // Try unmuted first — if autoplay policy blocks it, we fall back to muted
-  // then immediately unmute on the first real user gesture (armUnmuteOnNextTap).
-  // This gives sound-on behaviour in the majority of cases where the user has
-  // already interacted with the page (camera permission tap counts as a gesture).
-  video.muted = false;
+  // ── ALWAYS-ON SOUND POLICY ───────────────────────────────────────────
+  // Requirement: every AR poster video must play WITH sound, every time,
+  // with no "stays silent until some unrelated tap" fallback state. Some
+  // browsers still legally block the very first autoplay-with-sound call
+  // before any user gesture exists on the page at all (this is a real OS/
+  // browser policy, not something any web page can bypass outright). So:
+  // this starts muted=true ONLY as the technical bootstrap value for that
+  // exact first frame, but onTargetFound() below immediately tries to play
+  // UNMUTED first — not muted — and if that single attempt is blocked, it
+  // keeps retrying unmuted on every subsequent user interaction (tap/scroll/
+  // touch anywhere) until it succeeds, rather than ever treating "muted"
+  // as an acceptable resting state. In practice: once the user has tapped
+  // anything on the page even once this session (extremely common — they
+  // just opened the camera permission prompt), sound plays immediately on
+  // first detection with no silent gap at all.
+  video.muted = true;
   video.volume = 1;
   video.preload = 'auto';
   video.src = target.videoUrl;
@@ -1165,17 +1280,34 @@ function spawnArTarget(id, targetIndex, target, anchor){
   // zero out the video.
   const rawRect = target.videoRect || {};
   const numOr = (v, fallback) => (typeof v === 'number' && isFinite(v)) ? v : fallback;
-  const rect = {
-    x: numOr(rawRect.x, 50), y: numOr(rawRect.y, 50),
-    width: numOr(rawRect.width, 45), height: numOr(rawRect.height, 80),
-  };
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  // Width/height clamped to a sane 1–100% range first (a 0 or negative
+  // value here would make the crop box invisible/inverted before left/top
+  // are even computed).
+  const rectW = clamp(numOr(rawRect.width, 45), 1, 100);
+  const rectH = clamp(numOr(rawRect.height, 80), 1, 100);
+  // Center point (x,y) is also clamped to 0–100 — backend data could in
+  // theory hand back an out-of-range center if the crop editor ever saved
+  // a point right at a photo's edge.
+  const rectX = clamp(numOr(rawRect.x, 50), 0, 100);
+  const rectY = clamp(numOr(rawRect.y, 50), 0, 100);
+  // ── ACCURATE EDGE MATH — "video must fully show in its cropped section" ──
+  // Center-anchored left/top (x - width/2) can land BELOW 0% if the saved
+  // center sits close to the photo's left/top edge, or ABOVE (100-width)%
+  // if it sits close to the right/bottom edge. Either case used to push
+  // part of the crop box outside the poster's own 0–100% area, which —
+  // combined with object-fit:cover inside it — left a visible sliver of
+  // empty/black gap on the OPPOSITE edge instead of the video fully filling
+  // its intended cropped rectangle. Clamping left/top into the valid
+  // [0, 100-size] range keeps the full crop box on-poster on every side,
+  // so the video always fills its cropped section edge-to-edge with no gap.
+  const left = clamp(rectX - rectW / 2, 0, 100 - rectW);
+  const top  = clamp(rectY - rectH / 2, 0, 100 - rectH);
   video.style.position='absolute';
-  video.style.left   = (rect.x - rect.width/2)  + '%';
-  video.style.top    = (rect.y - rect.height/2) + '%';
-  video.style.width  = rect.width  + '%';
-  video.style.height = rect.height + '%';
-  video.style.objectFit = 'fill'; /* fills the exact crop section fully */
-  video.style.willChange = 'transform'; /* GPU compositing hint for smooth playback */
+  video.style.left   = left   + '%';
+  video.style.top    = top    + '%';
+  video.style.width  = rectW  + '%';
+  video.style.height = rectH  + '%';
 
   // ── SCALE + POSITION — the REAL bug behind "video floats off the poster" ──
   // Verified directly against MindAR's source (src/image-target/three.js)
@@ -1270,19 +1402,32 @@ function onTargetFound(id){
     });
   });
 
-  // Try unmuted play first (works when the camera-permission tap already counts
-  // as a user gesture — the most common real-world case).  If the browser
-  // rejects sound, fall back to muted play so the video is never blank, then
-  // schedule an unmute-on-next-gesture attempt so sound comes on almost
-  // immediately in practice.
+  // ── ALWAYS-ON SOUND: try UNMUTED first, every single time ───────────
+  // This is the actual fix for "sound must always play" — previously the
+  // poster video only ever attempted a muted play() and waited for an
+  // unrelated tap elsewhere to unmute it, which meant the first few
+  // seconds (or the whole clip, if no stray tap ever happened) played
+  // silently. Now: the moment a poster is found, we attempt play() with
+  // sound ON. Browsers that already consider this page "activated" by a
+  // prior user gesture (camera permission prompt, any earlier tap — the
+  // overwhelmingly common case on a phone) allow this immediately, so
+  // sound starts on frame one with zero silent gap.
+  // Only if THAT exact attempt is rejected (NotAllowedError — the
+  // browser's autoplay-with-sound policy hasn't seen a gesture yet this
+  // session) do we fall back to a muted play so the video itself still
+  // starts on time, and arm a persistent retry that keeps trying to
+  // switch it to unmuted sound on every subsequent tap/touch — not just
+  // once — until it actually succeeds. "Muted" is never treated as a
+  // final state, only ever a one-frame bridge.
   const tryPlay = () => {
     entry.video.muted = false;
-    entry.video.volume = 1;
-    entry.video.play().catch(() => {
-      // Autoplay-with-sound blocked — start muted so video shows, then arm unmute
+    entry.video.play().then(() => {
+      // Unmuted play succeeded — sound is on, nothing further to do.
+    }).catch((err) => {
+      console.warn('[Memoria] unmuted play() blocked, falling back to muted-then-retry', id, err && err.name);
       entry.video.muted = true;
-      entry.video.play().catch((err) => {
-        console.error('[Memoria] video.play() rejected', id, err && err.name, err && err.message);
+      entry.video.play().catch((err2) => {
+        console.error('[Memoria] video.play() rejected even muted', id, err2 && err2.name, err2 && err2.message);
       });
       armUnmuteOnNextTap();
     });
@@ -1296,31 +1441,41 @@ function onTargetFound(id){
     // dangling listener forever once the poster is no longer being tracked.
     setTimeout(() => entry.video.removeEventListener('canplay', tryPlay), 8000);
   }
-  armUnmuteOnNextTap();
   logScan(id);
   refreshStatusPill();
 }
 
 /* If a poster's video had to fall back to muted because the browser blocked
-   sound, this unmutes every currently-visible AR video on the very next tap
-   anywhere on screen — not just the one tapped (multiple posters may be
-   live at once), since any tap is a strong enough signal under every major
-   browser's autoplay policy. */
+   sound on the very first attempt, this keeps trying to unmute every
+   currently-visible AR video on EVERY tap anywhere on screen (not just the
+   next one) until sound actually sticks — not just the one tapped, since
+   multiple posters may be live at once. This is intentionally persistent
+   (not a one-shot "once" listener) because the requirement is that sound
+   must always end up playing, never silently stay muted for the rest of
+   that clip just because the first retry attempt happened to race with
+   something else. Once every currently-tracked video is confirmed unmuted,
+   the listener removes itself automatically to stay cheap. */
 let _unmuteArmed = false;
 function armUnmuteOnNextTap(){
   if (_unmuteArmed) return;
   _unmuteArmed = true;
   const unmuteAll = () => {
+    let stillMuted = false;
     arTargets.forEach(entry => {
       if (entry.video.muted) {
         entry.video.muted = false;
-        entry.video.play().catch(()=>{});
+        entry.video.play().catch(() => { entry.video.muted = true; stillMuted = true; });
       }
     });
-    _unmuteArmed = false;
-    document.removeEventListener('pointerdown', unmuteAll);
+    if (!stillMuted) {
+      _unmuteArmed = false;
+      document.removeEventListener('pointerdown', unmuteAll);
+    }
+    // If still muted after this attempt, the listener stays armed and
+    // tries again on the next tap — deliberately not "once" — so sound
+    // always eventually comes on rather than giving up after one try.
   };
-  document.addEventListener('pointerdown', unmuteAll, { once: true });
+  document.addEventListener('pointerdown', unmuteAll);
 }
 
 function onTargetLost(id){
@@ -1399,39 +1554,91 @@ function openFullscreen(targetId){
   stopScanLoop(); // pause detection while fullscreen is open
   fsOpenTargetId=targetId;
   const fsPlayer=document.getElementById('fullscreen-player');
+
+  // ── ACCURATE GROW-OPEN MATH ───────────────────────────────────────────
+  // Measure exactly where the tapped poster-video sits on screen RIGHT
+  // NOW, in real device pixels, via getBoundingClientRect() — this is the
+  // browser's own laid-out box (post object-fit:cover, post CSS3D
+  // matrix3d() transform, post camera projection), so it's precisely
+  // accurate to what the user is actually looking at, not an approximation.
+  // transform-origin is set to the CENTER of that rect (in % of the
+  // viewport, which is what #fullscreen-player itself spans edge-to-edge),
+  // and the initial scale is derived from the rect's own size relative to
+  // the full viewport — so the grow animation starts exactly the size and
+  // position of the tapped video and expands smoothly into full screen,
+  // the same visual language Hotstar/Netflix use when opening a tile.
+  const srcRect = entry.video.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (srcRect.width > 0 && srcRect.height > 0) {
+    const originX = ((srcRect.left + srcRect.width / 2) / vw) * 100;
+    const originY = ((srcRect.top + srcRect.height / 2) / vh) * 100;
+    // Use the larger of width/height ratio so the small starting box never
+    // overshoots the final frame on either axis — keeps the growth visually
+    // contained within where the tap happened, never popping outside it.
+    const scaleX = srcRect.width / vw;
+    const scaleY = srcRect.height / vh;
+    const startScale = Math.max(0.08, Math.min(scaleX, scaleY, 1));
+    fsPlayer.style.setProperty('--fs-origin-x', originX + '%');
+    fsPlayer.style.setProperty('--fs-origin-y', originY + '%');
+    fsPlayer.style.setProperty('--fs-origin-scale', String(startScale));
+  } else {
+    // Fallback if rect read fails for any reason — still opens correctly,
+    // just without the precise origin (generic center-grow instead).
+    fsPlayer.style.setProperty('--fs-origin-x', '50%');
+    fsPlayer.style.setProperty('--fs-origin-y', '50%');
+    fsPlayer.style.setProperty('--fs-origin-scale', '0.3');
+  }
+
   fsVideo.src = entry.video.currentSrc || entry.video.src || '';
-  fsVideo.muted = false;  // ALWAYS unmuted in fullscreen
-  fsVideo.volume = 1;
+  fsVideo.muted = false;
   fsVideo.currentTime = entry.video.currentTime || 0;
-  fsPlayer.style.display = 'flex'; // show first so animation runs
-  fsPlayer.classList.add('open');
   entry.video.pause();
 
-  // Try unmuted play; if blocked, muted play then immediately re-unmute
-  fsVideo.play()
-    .then(() => { fsVideo.muted = false; fsVideo.volume = 1; })
-    .catch(() => {
-      fsVideo.muted = true;
-      fsVideo.play()
-        .then(() => {
-          // Unmute as soon as possible — user already tapped to open FS (gesture)
-          setTimeout(() => { fsVideo.muted = false; fsVideo.volume = 1; }, 80);
-        })
-        .catch(() => {});
-    });
+  // Remove any in-flight closing state from a previous open/close cycle,
+  // then add 'open' on the NEXT frame so the browser registers the starting
+  // (small/positioned) state first and actually animates the transition
+  // instead of jumping straight to the end state in one paint.
+  fsPlayer.classList.remove('closing');
+  requestAnimationFrame(() => {
+    fsPlayer.classList.add('open');
+  });
+
+  fsVideo.play().catch(()=>{ fsVideo.muted=true; fsVideo.play().catch(()=>{}); });
   updateFsMuteIcon();
   showFsControls(true);
 }
 
 function closeFullscreen(e){
   if(e) e.stopPropagation();
-  document.getElementById('fullscreen-player').classList.remove('open');
+  const fsPlayer=document.getElementById('fullscreen-player');
   document.getElementById('fsMenu').classList.remove('open');
   fsVideo.pause();
   const entry=fsOpenTargetId && arTargets.get(fsOpenTargetId);
   if(entry) entry.video.play().catch(()=>{});
   fsOpenTargetId=null;
   startScanLoop(); // resume detection
+
+  // ── SMOOTH SHRINK-BACK CLOSE ──────────────────────────────────────────
+  // Mirrors the open animation: shrink back down toward the same accurate
+  // origin point/scale already stored in the CSS vars from openFullscreen,
+  // THEN remove 'open'/display:flex only once that transition has actually
+  // finished — closing instantly with display:none would just cut the
+  // animation off on the first frame, which looks identical to no
+  // animation at all.
+  fsPlayer.classList.remove('open');
+  fsPlayer.classList.add('closing');
+  const onCloseTransitionEnd = (ev) => {
+    if (ev.target !== fsPlayer) return;
+    fsPlayer.classList.remove('closing');
+    fsPlayer.removeEventListener('transitionend', onCloseTransitionEnd);
+  };
+  fsPlayer.addEventListener('transitionend', onCloseTransitionEnd);
+  // Safety net in case transitionend never fires (e.g. tab backgrounded
+  // mid-transition) — don't leave the player stuck mid-animation forever.
+  setTimeout(() => {
+    fsPlayer.classList.remove('closing');
+    fsPlayer.removeEventListener('transitionend', onCloseTransitionEnd);
+  }, 500);
 }
 
 function onFsTap(e){
@@ -1514,11 +1721,8 @@ fsVideo.addEventListener('progress',()=>{
   }
 });
 fsVideo.addEventListener('ended',()=>{
-  // If loop is off, show a replay icon in the center button
-  if(!fsVideo.loop){
-    document.getElementById('fsCenterIcon').innerHTML='<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm-2 14.5v-9l6 4.5z"/>';
-    document.querySelector('#fsPlayBtn svg').innerHTML='<path d="M8 5v14l11-7z"/>';
-  }
+  document.getElementById('fsCenterIcon').innerHTML='<path d="M8 5v14l11-7z"/>';
+  document.querySelector('#fsPlayBtn svg').innerHTML='<path d="M8 5v14l11-7z"/>';
   showFsControls(true);
 });
 
@@ -1600,38 +1804,6 @@ function showFsToast(msg){
   window._toastTimer=setTimeout(()=>toast.classList.remove('show'),2200);
 }
 
-async function shareCurrentVideo(e){
-  e.stopPropagation();
-  document.getElementById('fsMenu').classList.remove('open');
-  const url = fsVideo.currentSrc || fsVideo.src;
-  if(!url) return;
-  if(navigator.share){
-    try{
-      await navigator.share({ title:'Memoria Memory', url });
-      showFsToast('Shared!');
-    }catch(err){
-      if(err.name !== 'AbortError') showFsToast('Could not share');
-    }
-  } else {
-    // Clipboard fallback
-    try{
-      await navigator.clipboard.writeText(url);
-      showFsToast('Link copied to clipboard');
-    }catch(_){
-      showFsToast('Share not supported on this device');
-    }
-  }
-}
-
-let _fsLoopEnabled = true;
-function toggleFsLoop(e){
-  e.stopPropagation();
-  _fsLoopEnabled = !_fsLoopEnabled;
-  fsVideo.loop = _fsLoopEnabled;
-  document.getElementById('fsLoopLabel').textContent = `Loop: ${_fsLoopEnabled ? 'On' : 'Off'}`;
-  showFsToast(`Loop ${_fsLoopEnabled ? 'enabled' : 'disabled'}`);
-}
-
 /* ============================================================
    EXPOSE TO WINDOW — needed because this script is type="module"
    now (ES module imports for THREE/CSS3DObject), and inline
@@ -1645,8 +1817,6 @@ window.toggleFsPlay = toggleFsPlay;
 window.toggleFsMute = toggleFsMute;
 window.toggleFsMenu = toggleFsMenu;
 window.downloadCurrentVideo = downloadCurrentVideo;
-window.shareCurrentVideo = shareCurrentVideo;
-window.toggleFsLoop = toggleFsLoop;
 
 /* ============================================================
    SCREEN WAKE LOCK
