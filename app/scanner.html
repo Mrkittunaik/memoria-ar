@@ -174,14 +174,45 @@ html,body{
    CSS3D scale they render at the right physical size on screen regardless of
    the poster's actual on-screen dimensions. 60px arm = ~6% of 1000px, which
    reads as a clean corner bracket at any typical photo viewing distance. */
+.ar-corners{
+  /* CONFIDENCE RETICLE — --stab is written every frame from entry.stability
+     (0..1, already computed in the smoothing loop for the debug HUD; now
+     also drives what the user actually sees). 1 = rock-solid lock, full
+     bright glow, crisp edge. Lower values dim/soften the whole reticle —
+     this is what real AR-glasses overlays do: the lock visual itself is
+     the confidence readout, not a separate indicator the user has to
+     glance at. Default 1 so a target that hasn't reported yet still draws
+     at full strength rather than invisible. */
+  --stab:1;
+}
 .ar-corner{
   position:absolute;
   width:60px;height:60px;
   border-color:var(--gold);
   border-style:solid;
   border-width:0;
-  /* Subtle gold glow so the bracket reads clearly over any video content */
-  filter:drop-shadow(0 0 6px rgba(201,147,58,.9)) drop-shadow(0 0 2px rgba(201,147,58,1));
+  /* Glow intensity now scales with tracking confidence instead of being a
+     fixed value — a shaky/low-confidence lock visibly dims, a solid lock
+     glows bright, so the border itself communicates lock quality. */
+  filter:drop-shadow(0 0 calc(2px + var(--stab) * 4px) rgba(201,147,58,calc(.55 + var(--stab) * .45)))
+         drop-shadow(0 0 calc(1px + var(--stab) * 1px) rgba(201,147,58,calc(.7 + var(--stab) * .3)));
+  transition:filter .12s linear;
+}
+/* CONTINUOUS EDGE TRACE — a thin full-perimeter outline beneath the corner
+   brackets, opacity-driven by --stab. Corner brackets alone read as "scan
+   markers"; this added edge is what makes the WHOLE rectangle feel locked,
+   the way a HoloLens/Vision-Pro passthrough outline hugs a recognised
+   surface rather than just flagging its corners. Sits behind .ar-corner
+   (same stacking context, declared first in markup) so the brighter corner
+   brackets still read as the focal accent on top of it. */
+.ar-edge{
+  position:absolute;inset:0;
+  border-radius:3px;
+  pointer-events:none;
+  border:1.5px solid var(--gold);
+  opacity:calc(var(--stab) * .5);
+  filter:drop-shadow(0 0 calc(3px + var(--stab) * 7px) rgba(201,147,58,calc(var(--stab) * .8)));
+  transition:opacity .15s linear, filter .15s linear;
 }
 .ar-corner-tl{
   top:0;left:0;
@@ -212,6 +243,22 @@ html,body{
 }
 .ar-corners.lock-anim .ar-corner{
   animation:bracketLock .22s cubic-bezier(.22,.9,.32,1) both;
+}
+/* PRE-OPEN CONFIRM PULSE — fired the instant a tap is registered, BEFORE
+   the fullscreen grow-open animation actually starts (see
+   triggerOpenWithConfirm in the script below). Gives a short, deliberate
+   "target acquired → opening" beat instead of an instant cut to
+   fullscreen — the same confirm-then-commit feel real AR glasses use
+   before executing a gaze/pinch selection, so the action reads as
+   intentional rather than a flat tap response. */
+@keyframes confirmPulse{
+  0%{filter:brightness(1)}
+  40%{filter:brightness(1.9)}
+  100%{filter:brightness(1)}
+}
+.ar-corners.confirm-pulse,
+.ar-corners.confirm-pulse .ar-edge{
+  animation:confirmPulse .18s ease-out both;
 }
 
 /* CLEAN CAMERA UI — plain viewfinder, no frame/brackets/scanline */
@@ -1212,6 +1259,20 @@ async function beginMindAR(mindUrl) {
   const _rawQuat = new THREE.Quaternion();
   const _rawScale = new THREE.Vector3();
   const _identityQuat = new THREE.Quaternion();
+  const _leadPos = new THREE.Vector3();
+  // ── PREDICTIVE MICRO-LEAD ────────────────────────────────────────────
+  // Even with velocity-adaptive smoothing, the smoothed pose is always
+  // easing TOWARD a sample that's already one frame old by the time it's
+  // rendered — on a fast pan that shows up as the border trailing very
+  // slightly behind the photo's true edge, however small. Real AR-glasses
+  // compositors fix this with short-horizon prediction: extrapolate a tiny
+  // bit ahead using the measured velocity, so the target the smoothing
+  // eases toward is roughly "where the corner will be by render time", not
+  // "where it was last frame". LEAD_MS is intentionally tiny — just enough
+  // to cancel one frame's worth of latency, not a full prediction model —
+  // because over-leading on a sudden direction change (hand reverses
+  // mid-pan) would overshoot and look worse than the lag it's fixing.
+  const LEAD_MS = 18;
 
   mindarThree.renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -1276,6 +1337,7 @@ async function beginMindAR(mindUrl) {
           smoothed.quaternion.copy(_rawQuat);
           smoothed.scale.copy(_rawScale);
           entry.userVel = 0;
+          entry._velVec = null;
           entry.stability = 1;
         } else {
           // Estimate current motion speed from raw-position delta since last
@@ -1286,6 +1348,18 @@ async function beginMindAR(mindUrl) {
           const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
           const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
           entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.7 + instVel * 0.3;
+
+          // Velocity VECTOR (not just scalar speed) for the predictive
+          // lead below — direction matters here, magnitude alone can't
+          // tell us which way to extrapolate. Smoothed the same gentle way
+          // as the scalar so one noisy frame can't fling the lead off in
+          // the wrong direction.
+          if (dtSec > 0) {
+            const instVelVec = _rawPos.clone().sub(prevRaw).divideScalar(dtSec);
+            entry._velVec = entry._velVec
+              ? entry._velVec.lerp(instVelVec, 0.4)
+              : instVelVec;
+          }
           entry._prevRawPos.copy(_rawPos);
 
           const STILL_VELOCITY_THRESHOLD = 0.012; // marker-space units/sec — below this counts as "not actually moving"
@@ -1318,7 +1392,17 @@ async function beginMindAR(mindUrl) {
               _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
             }
 
-            smoothed.position.lerp(_rawPos, alpha);
+            // Lead target = raw position nudged a tiny bit further along
+            // the current velocity vector, so the smoothing eases toward
+            // "about where the corner will be by render time" rather than
+            // strictly last frame's sample. Scaled down further as fastT
+            // approaches 1 isn't needed — LEAD_MS is already small enough
+            // that even at max velocity the nudge stays sub-pixel-class
+            // relative to the marker, just enough to cancel render latency.
+            _leadPos.copy(_rawPos);
+            if (entry._velVec) _leadPos.addScaledVector(entry._velVec, LEAD_MS / 1000);
+
+            smoothed.position.lerp(_leadPos, alpha);
             smoothed.quaternion.slerp(_rawQuat, alpha);
             smoothed.scale.lerp(_rawScale, alpha);
 
@@ -1330,6 +1414,7 @@ async function beginMindAR(mindUrl) {
           }
         }
         smoothed.updateMatrix();
+        entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability === undefined ? 1 : entry.stability))));
 
       } else {
         // ── TARGET NOT VISIBLE THIS FRAME ──
@@ -1395,6 +1480,7 @@ async function beginMindAR(mindUrl) {
           : Math.min(1, (lostMs - LOST_FADE_START_MS) / LOST_FADE_DURATION_MS);
         entry.inner.style.opacity = String(1 - fadeT * 0.85); // never fully invisible while still holding — avoids a hard flicker right at recovery
         entry.stability = entry.stability === undefined ? 0.5 : entry.stability * 0.9; // diagnostic only
+        entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability))));
       }
     });
 
@@ -1589,6 +1675,9 @@ function spawnArTarget(id, targetIndex, target, anchor){
   // corners of the recognised photo, video plays within, both track together.
   const corners = document.createElement('div');
   corners.className = 'ar-corners';
+  const edge = document.createElement('div');
+  edge.className = 'ar-edge';
+  corners.appendChild(edge); // behind the corner brackets — same DOM, drawn first
   ['tl','tr','bl','br'].forEach(pos => {
     const c = document.createElement('div');
     c.className = `ar-corner ar-corner-${pos}`;
@@ -1596,7 +1685,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   });
   wrapper.appendChild(corners);
 
-  wrapper.addEventListener('click',()=>openFullscreen(id));
+  wrapper.addEventListener('click',()=>triggerOpenWithConfirm(id));
 
   // Position the video within the poster using the saved videoRect (percentages
   // of the photo's own size, center-anchored) — same numbers set in your
@@ -1921,6 +2010,34 @@ let fsControlsTimer=null;
 let fsWasMuted=false;
 let fsScrubbing=false;
 let fsOpenTargetId=null;
+
+/* ── PRE-OPEN CONFIRM ─────────────────────────────────────────────────
+   Tapping a tracked poster used to call openFullscreen() immediately —
+   correct, but the cut to fullscreen was instant with nothing acknowledging
+   the tap landed. Real AR-glasses/gaze-select UIs always show a brief
+   "confirmed" beat before committing to the action (a flash/pulse on the
+   thing you just selected), so the action reads as deliberate rather than
+   an instant teleport. This fires the corner-bracket brightness pulse +
+   a short haptic tick (silently skipped on devices/browsers without
+   Vibration API support — not fatal), then opens fullscreen after the
+   pulse has had time to actually be seen rather than overlapping it. */
+function triggerOpenWithConfirm(targetId){
+  const entry = arTargets.get(targetId);
+  if (!entry) { openFullscreen(targetId); return; }
+
+  entry.corners.classList.remove('confirm-pulse');
+  void entry.corners.offsetWidth; // force reflow so the animation restarts on rapid re-taps
+  entry.corners.classList.add('confirm-pulse');
+  setTimeout(() => entry.corners.classList.remove('confirm-pulse'), 200);
+
+  if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
+
+  // Slight delay so the pulse is visible before the screen cuts to
+  // fullscreen — long enough to register as a deliberate confirm, short
+  // enough that the open still feels immediate/responsive overall.
+  setTimeout(() => openFullscreen(targetId), 90);
+}
+window.triggerOpenWithConfirm = triggerOpenWithConfirm;
 
 function openFullscreen(targetId){
   const entry=arTargets.get(targetId);
