@@ -61,8 +61,6 @@
 
         /* ============================================================
                    AR VIDEO WRAPPER — per-detected-poster container
-                   CSS3DRenderer writes matrix3d() to this element every frame.
-                   We keep it lightweight: only layout + GPU acceleration flags.
                 ============================================================ */
         .ar-video-wrapper {
             pointer-events: all;
@@ -75,14 +73,10 @@
             -webkit-transform: translateZ(0);
             perspective: 1000px;
             -webkit-perspective: 1000px;
-            /* Touch events pass through to the wrapper, but the inner video
-                       is pointer-events:none so taps hit the wrapper directly */
         }
 
         /* ============================================================
                    AR VIDEO INNER — carries fade + visibility.
-                   CSS3DRenderer never touches this element directly,
-                   so our opacity transitions are safe from being stomped.
                 ============================================================ */
         .ar-video-inner {
             position: absolute;
@@ -112,7 +106,7 @@
         }
 
         /* ============================================================
-                   AR VIDEO ELEMENT — the actual video player inside the crop box
+                   AR VIDEO ELEMENT
                 ============================================================ */
         .ar-video {
             width: 100%;
@@ -127,8 +121,7 @@
         }
 
         /* ============================================================
-                   CORNER BRACKET OVERLAY — sits on top of video,
-                   shows tracking lock status with confidence-driven glow.
+                   CORNER BRACKET OVERLAY
                 ============================================================ */
         .ar-corners {
             position: absolute;
@@ -234,7 +227,7 @@
         }
 
         /* ============================================================
-                   SCAN UI — top bar, status pill, camera controls
+                   SCAN UI
                 ============================================================ */
         #scan-ui {
             position: fixed;
@@ -419,7 +412,7 @@
         }
 
         /* ============================================================
-                   INSTANT PREVIEW — raw camera feed shown before MindAR is ready
+                   INSTANT PREVIEW
                 ============================================================ */
         #instant-preview {
             position: fixed;
@@ -431,7 +424,7 @@
         }
 
         /* ============================================================
-                   FULLSCREEN VIDEO PLAYER — Netflix/Hotstar style
+                   FULLSCREEN VIDEO PLAYER
                 ============================================================ */
         #fullscreen-player {
             display: none;
@@ -837,7 +830,7 @@
         }
 
         /* ============================================================
-                   DEBUG HUD — professional telemetry panel
+                   DEBUG HUD
                 ============================================================ */
         #debug-hud {
             position: fixed;
@@ -918,1796 +911,1764 @@
                 }
             }
         </script>
-        <!-- FIX: Load MindAR as regular scripts (not modules) to expose window.MINDAR -->
-        <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js">
-        </script>
-        <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js">
-        </script>
-</head>
+        <!-- MindAR scripts are now loaded dynamically via the loader below -->
+    </head>
 
-<body>
-    <!-- LOADING -->
-    <div id="loading">
-        <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
-        <div class="loading-spinner"></div>
-        <div id="loading-text">
-            <h3 id="loading-title">Starting camera</h3>
-            <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
-            <p id="loading-counter" style="text-align:center"></p>
-        </div>
-    </div>
-
-    <!-- INSTANT PREVIEW -->
-    <video id="instant-preview" autoplay muted playsinline></video>
-
-    <!-- AR CONTAINER -->
-    <div id="ar-container"></div>
-    <div id="ar-layer" style="display:none"></div>
-
-    <!-- SCAN UI -->
-    <div id="scan-ui">
-        <div class="scan-topbar">
-            <div class="scan-logo" id="scanLogo" onclick="onLogoTap()">Memo<span>ria</span></div>
-            <a href="dashboard.html" class="scan-close">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </a>
-        </div>
-
-        <div id="debug-hud"></div>
-
-        <div class="finder"></div>
-
-        <div class="status-area">
-            <div class="status-pill ready" id="statusPill">
-                <div class="dot"></div>
-                <span id="statusText">Scanning for photo…</span>
-            </div>
-            <div class="bottom-actions">
-                <div class="fab" onclick="toggleTorch()" id="torchBtn" title="Torch">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                </div>
-                <div class="fab" onclick="switchCamera()" title="Flip camera">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3l-4-4-4 4"/><path d="M8 3h8"/></svg>
-                </div>
+    <body>
+        <!-- LOADING -->
+        <div id="loading">
+            <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
+            <div class="loading-spinner"></div>
+            <div id="loading-text">
+                <h3 id="loading-title">Starting camera</h3>
+                <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
+                <p id="loading-counter" style="text-align:center"></p>
             </div>
         </div>
-    </div>
 
-    <!-- FULLSCREEN VIDEO PLAYER -->
-    <div id="fullscreen-player">
-        <video id="fs-video" playsinline></video>
+        <!-- INSTANT PREVIEW -->
+        <video id="instant-preview" autoplay muted playsinline></video>
 
-        <div class="fs-scrim-top" id="fsScrimTop"></div>
-        <div class="fs-scrim-bottom" id="fsScrimBottom"></div>
+        <!-- AR CONTAINER -->
+        <div id="ar-container"></div>
+        <div id="ar-layer" style="display:none"></div>
 
-        <div id="fs-tap-zone" onclick="onFsTap(event)"></div>
-
-        <div id="fs-controls">
-            <div class="fs-top-row fs-hit">
-                <button class="fs-icon-btn" onclick="closeFullscreen(event)" aria-label="Close">
+        <!-- SCAN UI -->
+        <div id="scan-ui">
+            <div class="scan-topbar">
+                <div class="scan-logo" id="scanLogo" onclick="onLogoTap()">Memo<span>ria</span></div>
+                <a href="dashboard.html" class="scan-close">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-                <div class="fs-top-actions">
-                    <button class="fs-icon-btn" onclick="toggleFsMenu(event)" aria-label="More options">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                </a>
+            </div>
+
+            <div id="debug-hud"></div>
+
+            <div class="finder"></div>
+
+            <div class="status-area">
+                <div class="status-pill ready" id="statusPill">
+                    <div class="dot"></div>
+                    <span id="statusText">Scanning for photo…</span>
+                </div>
+                <div class="bottom-actions">
+                    <div class="fab" onclick="toggleTorch()" id="torchBtn" title="Torch">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    </div>
+                    <div class="fab" onclick="switchCamera()" title="Flip camera">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3l-4-4-4 4"/><path d="M8 3h8"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FULLSCREEN VIDEO PLAYER -->
+        <div id="fullscreen-player">
+            <video id="fs-video" playsinline></video>
+
+            <div class="fs-scrim-top" id="fsScrimTop"></div>
+            <div class="fs-scrim-bottom" id="fsScrimBottom"></div>
+
+            <div id="fs-tap-zone" onclick="onFsTap(event)"></div>
+
+            <div id="fs-controls">
+                <div class="fs-top-row fs-hit">
+                    <button class="fs-icon-btn" onclick="closeFullscreen(event)" aria-label="Close">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
-                    <div class="fs-menu" id="fsMenu">
-                        <div class="fs-menu-item" onclick="downloadCurrentVideo(event)">
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            Download video
+                    <div class="fs-top-actions">
+                        <button class="fs-icon-btn" onclick="toggleFsMenu(event)" aria-label="More options">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                        </button>
+                        <div class="fs-menu" id="fsMenu">
+                            <div class="fs-menu-item" onclick="downloadCurrentVideo(event)">
+                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Download video
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="fs-center-play fs-hit" id="fsCenterPlay" onclick="toggleFsPlay(event)" aria-label="Play">
+                    <svg id="fsCenterIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </button>
+
+                <div class="fs-bottom fs-hit">
+                    <div class="fs-scrub-row">
+                        <span class="fs-time" id="fsTimeCurrent">0:00</span>
+                        <div class="fs-scrub-track" id="fsScrubTrack">
+                            <div class="fs-scrub-buffer" id="fsScrubBuffer"></div>
+                            <div class="fs-scrub-fill" id="fsScrubFill"></div>
+                            <div class="fs-scrub-handle" id="fsScrubHandle"></div>
+                        </div>
+                        <span class="fs-time" id="fsTimeDuration">0:00</span>
+                    </div>
+                    <div class="fs-controls-row">
+                        <div class="fs-controls-left">
+                            <button class="fs-ctrl-btn" onclick="toggleFsPlay(event)" id="fsPlayBtn" aria-label="Play/pause">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            </button>
+                        </div>
+                        <div class="fs-controls-right">
+                            <button class="fs-ctrl-btn" onclick="toggleFsMute(event)" id="fsMuteBtn" aria-label="Mute/unmute">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <button class="fs-center-play fs-hit" id="fsCenterPlay" onclick="toggleFsPlay(event)" aria-label="Play">
-                <svg id="fsCenterIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-
-            <div class="fs-bottom fs-hit">
-                <div class="fs-scrub-row">
-                    <span class="fs-time" id="fsTimeCurrent">0:00</span>
-                    <div class="fs-scrub-track" id="fsScrubTrack">
-                        <div class="fs-scrub-buffer" id="fsScrubBuffer"></div>
-                        <div class="fs-scrub-fill" id="fsScrubFill"></div>
-                        <div class="fs-scrub-handle" id="fsScrubHandle"></div>
-                    </div>
-                    <span class="fs-time" id="fsTimeDuration">0:00</span>
-                </div>
-                <div class="fs-controls-row">
-                    <div class="fs-controls-left">
-                        <button class="fs-ctrl-btn" onclick="toggleFsPlay(event)" id="fsPlayBtn" aria-label="Play/pause">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                        </button>
-                    </div>
-                    <div class="fs-controls-right">
-                        <button class="fs-ctrl-btn" onclick="toggleFsMute(event)" id="fsMuteBtn" aria-label="Mute/unmute">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <div id="fs-toast"></div>
         </div>
 
-        <div id="fs-toast"></div>
-    </div>
-
-    <!-- DEMO OVERLAY -->
-    <div id="demo-overlay">
-        <div class="demo-card">
-            <h2>AR Scanner</h2>
-            <p>This is the scanner your recipients open when they receive a Memoria photo. Here's how it works in production:</p>
-            <div class="demo-steps">
-                <div class="demo-step">
-                    <div class="step-num-circle">1</div>
-                    <p>Camera opens and continuously analyses the live feed — no scan button, fully automatic</p>
+        <!-- DEMO OVERLAY -->
+        <div id="demo-overlay">
+            <div class="demo-card">
+                <h2>AR Scanner</h2>
+                <p>This is the scanner your recipients open when they receive a Memoria photo. Here's how it works in production:</p>
+                <div class="demo-steps">
+                    <div class="demo-step">
+                        <div class="step-num-circle">1</div>
+                        <p>Camera opens and continuously analyses the live feed — no scan button, fully automatic</p>
+                    </div>
+                    <div class="demo-step">
+                        <div class="step-num-circle">2</div>
+                        <p>Every registered photo in view gets its own video, fitted exactly to that photo and tracking its position, size and angle</p>
+                    </div>
+                    <div class="demo-step">
+                        <div class="step-num-circle">3</div>
+                        <p>Tap any playing video to open it fullscreen with audio. Tracking resumes when you close it</p>
+                    </div>
                 </div>
-                <div class="demo-step">
-                    <div class="step-num-circle">2</div>
-                    <p>Every registered photo in view gets its own video, fitted exactly to that photo and tracking its position, size and angle</p>
-                </div>
-                <div class="demo-step">
-                    <div class="step-num-circle">3</div>
-                    <p>Tap any playing video to open it fullscreen with audio. Tracking resumes when you close it</p>
-                </div>
+                <button class="btn-demo-start" id="demoStartBtn">Open camera & scan</button>
             </div>
-            <button class="btn-demo-start" onclick="startScanner()">Open camera & scan</button>
+            <button class="btn-demo-close" onclick="document.getElementById('demo-overlay').classList.add('hidden')">Skip intro</button>
         </div>
-        <button class="btn-demo-close" onclick="document.getElementById('demo-overlay').classList.add('hidden')">Skip intro</button>
-    </div>
 
-    <script type="module">
-        // ================================================================
-        // IMPORTS
-        // ================================================================
-        import * as THREE from 'three';
-        import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
-
-        // ================================================================
-        // CONSTANTS
-        // ================================================================
-        const BACKEND_URL = 'https://memoria-ar-backend.onrender.com';
-        const PLANE_SIZE = 1;
-        const PLANE_PX = 1000;
-        const SCALE = 1000 / PLANE_PX;
-
-        // Pose history length
-        const POSE_HISTORY_LEN = 15;
-
-        // Anchor lock: seconds of stability before locking
-        const ANCHOR_LOCK_SECONDS = 1.0;
-
-        // Lost-target recovery
-        const LOST_HOLD_MAX_MS = 5000;
-        const LOST_FADE_START_MS = 300;
-        const LOST_FADE_DURATION_MS = 1000;
-
-        // Kalman tuning
-        const KALMAN_Q_POS = 0.003;
-        const KALMAN_R_POS = 0.04;
-        const KALMAN_Q_ROT = 0.002;
-        const KALMAN_R_ROT = 0.03;
-        const KALMAN_Q_SCALE = 0.001;
-        const KALMAN_R_SCALE = 0.02;
-
-        // Confidence thresholds
-        const CONF_HIGH = 0.85;
-        const CONF_MID = 0.50;
-        const CONF_LOW = 0.25;
-
-        // ================================================================
-        // STATE
-        // ================================================================
-        let torchOn = false;
-        let mindarThree = null;
-        let videoTrack = null;
-        const arTargets = new Map();
-
-        const PERM_KEY = 'memoria_camera_granted';
-        let _backendReady = false;
-        let _targets = [];
-        let _lastMindUrl = null;
-        let _cameraStoppedForVisibility = false;
-        let _wakeLock = null;
-        let _unmuteArmed = false;
-        let _logoTapCount = 0,
-            _logoTapTimer = null;
-        let _lastFrameTime = performance.now();
-        let _frameCount = 0,
-            _fpsAccum = 0,
-            _fps = 0,
-            _lastFpsUpdate = performance.now();
-
-        // Gyroscope state
-        let _orientAvailable = false;
-        let _lastOrient = null;
-        const _orientEuler = new THREE.Euler();
-        const _orientQuat = new THREE.Quaternion();
-        const _prevOrientQuat = new THREE.Quaternion();
-        const _orientDeltaQuat = new THREE.Quaternion();
-        const _identityQuat = new THREE.Quaternion();
-
-        // Fullscreen state
-        const fsVideo = document.getElementById('fs-video');
-        let fsControlsTimer = null;
-        let fsScrubbing = false;
-        let fsOpenTargetId = null;
-
-        // ================================================================
-        // KALMAN FILTER — 1D scalar with adaptive Q/R based on confidence
-        // ================================================================
-        class Kalman1D {
-            constructor(q = 0.01, r = 0.1, init = 0) {
-                this.q = q;
-                this.r = r;
-                this.x = init;
-                this.p = 1.0;
-                this.k = 0;
+        <script type="module">
+            // ================================================================
+            // DYNAMIC SCRIPT LOADER — ensures MindAR is 100% ready before we start
+            // ================================================================
+            function loadScript(src) {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.crossOrigin = 'anonymous';
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error(`Failed to load: ${src}`));
+                    document.head.appendChild(script);
+                });
             }
 
-            update(z, confidence = 1.0) {
-                // Adaptive Q/R: high confidence → trust measurement more (lower R)
-                const adjR = this.r / (0.3 + 0.7 * confidence);
-                const adjQ = this.q * (0.5 + 0.5 * (1 - confidence));
-                const p_pred = this.p + adjQ;
-                this.k = p_pred / (p_pred + adjR);
-                this.x = this.x + this.k * (z - this.x);
-                this.p = (1 - this.k) * p_pred;
-                return this.x;
-            }
+            async function loadMindAR() {
+                // Load both MindAR scripts sequentially (order matters)
+                await loadScript('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js');
+                await loadScript('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
 
-            reset(z) {
-                this.x = z;
-                this.p = 1.0;
-                this.k = 0;
-            }
-        }
-
-        // ================================================================
-        // 3D KALMAN FILTER — position, rotation (quaternion), scale
-        // ================================================================
-        class KalmanPose {
-            constructor(qPos = KALMAN_Q_POS, rPos = KALMAN_R_POS,
-                qRot = KALMAN_Q_ROT, rRot = KALMAN_R_ROT,
-                qScale = KALMAN_Q_SCALE, rScale = KALMAN_R_SCALE) {
-                this.kx = new Kalman1D(qPos, rPos, 0);
-                this.ky = new Kalman1D(qPos, rPos, 0);
-                this.kz = new Kalman1D(qPos, rPos, 0);
-                this.kqw = new Kalman1D(qRot, rRot, 1);
-                this.kqx = new Kalman1D(qRot, rRot, 0);
-                this.kqy = new Kalman1D(qRot, rRot, 0);
-                this.kqz = new Kalman1D(qRot, rRot, 0);
-                this.ksx = new Kalman1D(qScale, rScale, 1);
-                this.ksy = new Kalman1D(qScale, rScale, 1);
-                this.ksz = new Kalman1D(qScale, rScale, 1);
-                this._hasInit = false;
-            }
-
-            init(pos, quat, scale) {
-                this.kx.reset(pos.x);
-                this.ky.reset(pos.y);
-                this.kz.reset(pos.z);
-                this.kqw.reset(quat.w);
-                this.kqx.reset(quat.x);
-                this.kqy.reset(quat.y);
-                this.kqz.reset(quat.z);
-                this.ksx.reset(scale.x);
-                this.ksy.reset(scale.y);
-                this.ksz.reset(scale.z);
-                this._hasInit = true;
-            }
-
-            update(pos, quat, scale, confidence = 1.0) {
-                if (!this._hasInit) {
-                    this.init(pos, quat, scale);
-                    return { pos: pos.clone(), quat: quat.clone(), scale: scale.clone() };
+                // Verify the global object is available
+                if (!window.MINDAR || !window.MINDAR.IMAGE || !window.MINDAR.IMAGE.Compiler || !window.MINDAR.IMAGE
+                    .MindARThree) {
+                    throw new Error('MindAR failed to initialize properly');
                 }
-                // Quaternion double-cover fix: ensure shortest path
-                const dot = quat.w * this.kqw.x + quat.x * this.kqx.x +
-                    quat.y * this.kqy.x + quat.z * this.kqz.x;
-                const qIn = dot < 0 ? quat.clone().negate() : quat;
-
-                const outPos = new THREE.Vector3(
-                    this.kx.update(pos.x, confidence),
-                    this.ky.update(pos.y, confidence),
-                    this.kz.update(pos.z, confidence)
-                );
-                const outQuat = new THREE.Quaternion(
-                    this.kqx.update(qIn.x, confidence),
-                    this.kqy.update(qIn.y, confidence),
-                    this.kqz.update(qIn.z, confidence),
-                    this.kqw.update(qIn.w, confidence)
-                ).normalize();
-                const outScale = new THREE.Vector3(
-                    this.ksx.update(scale.x, confidence),
-                    this.ksy.update(scale.y, confidence),
-                    this.ksz.update(scale.z, confidence)
-                );
-                return { pos: outPos, quat: outQuat, scale: outScale };
+                console.log('[Memoria] MindAR loaded successfully');
             }
 
-            reset(pos, quat, scale) {
-                this.kx.reset(pos.x);
-                this.ky.reset(pos.y);
-                this.kz.reset(pos.z);
-                this.kqw.reset(quat.w);
-                this.kqx.reset(quat.x);
-                this.kqy.reset(quat.y);
-                this.kqz.reset(quat.z);
-                this.ksx.reset(scale.x);
-                this.ksy.reset(scale.y);
-                this.ksz.reset(scale.z);
-                this._hasInit = true;
-            }
-        }
+            // ================================================================
+            // IMPORTS
+            // ================================================================
+            import * as THREE from 'three';
+            import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 
-        // ================================================================
-        // POSE HISTORY — weighted average with outlier rejection
-        // ================================================================
-        class PoseHistory {
-            constructor(maxLen = POSE_HISTORY_LEN) {
-                this.maxLen = maxLen;
-                this.positions = [];
-                this.quaternions = [];
-                this.scales = [];
-                this.timestamps = [];
-            }
+            // ================================================================
+            // CONSTANTS
+            // ================================================================
+            const BACKEND_URL = 'https://memoria-ar-backend.onrender.com';
+            const PLANE_PX = 1000;
+            const SCALE = 1000 / PLANE_PX;
 
-            push(pos, quat, scale, ts) {
-                this.positions.push(pos.clone());
-                this.quaternions.push(quat.clone());
-                this.scales.push(scale.clone());
-                this.timestamps.push(ts);
-                if (this.positions.length > this.maxLen) {
-                    this.positions.shift();
-                    this.quaternions.shift();
-                    this.scales.shift();
-                    this.timestamps.shift();
+            // Pose history length
+            const POSE_HISTORY_LEN = 15;
+
+            // Lost-target recovery
+            const LOST_HOLD_MAX_MS = 5000;
+            const LOST_FADE_START_MS = 300;
+            const LOST_FADE_DURATION_MS = 1000;
+
+            // Kalman tuning
+            const KALMAN_Q_POS = 0.003;
+            const KALMAN_R_POS = 0.04;
+            const KALMAN_Q_ROT = 0.002;
+            const KALMAN_R_ROT = 0.03;
+            const KALMAN_Q_SCALE = 0.001;
+            const KALMAN_R_SCALE = 0.02;
+
+            // Confidence thresholds
+            const CONF_HIGH = 0.85;
+            const CONF_MID = 0.50;
+
+            // ================================================================
+            // STATE
+            // ================================================================
+            let torchOn = false;
+            let mindarThree = null;
+            let videoTrack = null;
+            const arTargets = new Map();
+
+            const PERM_KEY = 'memoria_camera_granted';
+            let _backendReady = false;
+            let _targets = [];
+            let _lastMindUrl = null;
+            let _cameraStoppedForVisibility = false;
+            let _wakeLock = null;
+            let _unmuteArmed = false;
+            let _logoTapCount = 0,
+                _logoTapTimer = null;
+            let _lastFrameTime = performance.now();
+            let _frameCount = 0,
+                _fpsAccum = 0,
+                _fps = 0,
+                _lastFpsUpdate = performance.now();
+
+            // Gyroscope state
+            let _orientAvailable = false;
+            let _lastOrient = null;
+            const _orientEuler = new THREE.Euler();
+            const _orientQuat = new THREE.Quaternion();
+            const _prevOrientQuat = new THREE.Quaternion();
+            const _orientDeltaQuat = new THREE.Quaternion();
+            const _identityQuat = new THREE.Quaternion();
+
+            // Fullscreen state
+            const fsVideo = document.getElementById('fs-video');
+            let fsControlsTimer = null;
+            let fsScrubbing = false;
+            let fsOpenTargetId = null;
+
+            // ================================================================
+            // KALMAN FILTER — 1D scalar with adaptive Q/R based on confidence
+            // ================================================================
+            class Kalman1D {
+                constructor(q = 0.01, r = 0.1, init = 0) {
+                    this.q = q;
+                    this.r = r;
+                    this.x = init;
+                    this.p = 1.0;
+                    this.k = 0;
+                }
+
+                update(z, confidence = 1.0) {
+                    const adjR = this.r / (0.3 + 0.7 * confidence);
+                    const adjQ = this.q * (0.5 + 0.5 * (1 - confidence));
+                    const p_pred = this.p + adjQ;
+                    this.k = p_pred / (p_pred + adjR);
+                    this.x = this.x + this.k * (z - this.x);
+                    this.p = (1 - this.k) * p_pred;
+                    return this.x;
+                }
+
+                reset(z) {
+                    this.x = z;
+                    this.p = 1.0;
+                    this.k = 0;
                 }
             }
 
-            getWeightedAverage() {
-                if (this.positions.length === 0) return null;
-                const n = this.positions.length;
-                // Exponential weights: newer frames get higher weight
-                const weights = [];
-                let totalW = 0;
-                for (let i = 0; i < n; i++) {
-                    const w = Math.exp(i / n * 2.5);
-                    weights.push(w);
-                    totalW += w;
-                }
-                const avgPos = new THREE.Vector3();
-                const avgQuat = new THREE.Quaternion();
-                const avgScale = new THREE.Vector3();
-                // For quaternions, use weighted average in 4D then normalize
-                const qAccum = new THREE.Quaternion();
-                for (let i = 0; i < n; i++) {
-                    const w = weights[i] / totalW;
-                    avgPos.x += this.positions[i].x * w;
-                    avgPos.y += this.positions[i].y * w;
-                    avgPos.z += this.positions[i].z * w;
-                    qAccum.x += this.quaternions[i].x * w;
-                    qAccum.y += this.quaternions[i].y * w;
-                    qAccum.z += this.quaternions[i].z * w;
-                    qAccum.w += this.quaternions[i].w * w;
-                    avgScale.x += this.scales[i].x * w;
-                    avgScale.y += this.scales[i].y * w;
-                    avgScale.z += this.scales[i].z * w;
-                }
-                avgQuat.copy(qAccum).normalize();
-                return { pos: avgPos, quat: avgQuat, scale: avgScale };
-            }
-
-            getVelocity(dt) {
-                if (this.positions.length < 2) return null;
-                const n = this.positions.length;
-                const idx = Math.max(0, n - 3);
-                const p1 = this.positions[idx];
-                const p2 = this.positions[this.positions.length - 1];
-                const t1 = this.timestamps[idx];
-                const t2 = this.timestamps[this.timestamps.length - 1];
-                const dtActual = (t2 - t1) / 1000;
-                if (dtActual < 0.001) return null;
-                const vel = p2.clone().sub(p1).divideScalar(dtActual);
-                // Rotational velocity: approximate from quaternion delta
-                const q1 = this.quaternions[idx];
-                const q2 = this.quaternions[this.quaternions.length - 1];
-                const deltaQ = q2.clone().multiply(q1.clone().invert());
-                const angle = 2 * Math.acos(Math.min(1, Math.max(-1, deltaQ.w)));
-                const rotVel = angle / dtActual;
-                return { pos: vel, rot: rotVel };
-            }
-
-            clear() {
-                this.positions = [];
-                this.quaternions = [];
-                this.scales = [];
-                this.timestamps = [];
-            }
-        }
-
-        // ================================================================
-        // CONFIDENCE SCORING
-        // ================================================================
-        function computeConfidence(entry) {
-            // Factors:
-            // - Pose stability (low velocity = high confidence)
-            // - Tracking consistency (how many consecutive frames detected)
-            // - Feature quality (from MindAR's internal state — approximated)
-            // - Motion blur (high velocity can indicate blur)
-
-            let score = 0.5;
-            let factors = 0;
-
-            // 1. Velocity: lower is better
-            if (entry.userVel !== undefined) {
-                const velScore = Math.max(0, 1 - entry.userVel / 0.8);
-                score += velScore * 0.35;
-                factors += 0.35;
-            }
-
-            // 2. Stability (from the smoothing loop's own stability estimate)
-            if (entry.stability !== undefined) {
-                score += entry.stability * 0.30;
-                factors += 0.30;
-            }
-
-            // 3. Consecutive frames: the longer we've been tracking, the higher
-            if (entry._consecutiveFrames !== undefined) {
-                const cf = Math.min(entry._consecutiveFrames, 60);
-                const cfScore = cf / 60;
-                score += cfScore * 0.20;
-                factors += 0.20;
-            }
-
-            // 4. Raw visibility from MindAR
-            if (entry.anchor && entry.anchor.visible) {
-                score += 0.15;
-                factors += 0.15;
-            }
-
-            // Normalize
-            if (factors > 0) score = score / factors;
-            return Math.max(0, Math.min(1, score));
-        }
-
-        // ================================================================
-        // ANCHOR LOCK SYSTEM
-        // ================================================================
-        class AnchorLock {
-            constructor() {
-                this.locked = false;
-                this.lockPos = new THREE.Vector3();
-                this.lockQuat = new THREE.Quaternion();
-                this.lockScale = new THREE.Vector3(1, 1, 1);
-                this.lockStartTime = 0;
-                this.stableFrames = 0;
-                this.requiredStableFrames = 30; // ~0.5s at 60fps
-                this.isStable = false;
-            }
-
-            update(pos, quat, scale, confidence, dt) {
-                // Only consider locking if confidence is high
-                if (confidence < CONF_HIGH) {
-                    this.stableFrames = 0;
-                    this.isStable = false;
-                    this.locked = false;
-                    return false;
+            // ================================================================
+            // 3D KALMAN FILTER
+            // ================================================================
+            class KalmanPose {
+                constructor(qPos = KALMAN_Q_POS, rPos = KALMAN_R_POS,
+                    qRot = KALMAN_Q_ROT, rRot = KALMAN_R_ROT,
+                    qScale = KALMAN_Q_SCALE, rScale = KALMAN_R_SCALE) {
+                    this.kx = new Kalman1D(qPos, rPos, 0);
+                    this.ky = new Kalman1D(qPos, rPos, 0);
+                    this.kz = new Kalman1D(qPos, rPos, 0);
+                    this.kqw = new Kalman1D(qRot, rRot, 1);
+                    this.kqx = new Kalman1D(qRot, rRot, 0);
+                    this.kqy = new Kalman1D(qRot, rRot, 0);
+                    this.kqz = new Kalman1D(qRot, rRot, 0);
+                    this.ksx = new Kalman1D(qScale, rScale, 1);
+                    this.ksy = new Kalman1D(qScale, rScale, 1);
+                    this.ksz = new Kalman1D(qScale, rScale, 1);
+                    this._hasInit = false;
                 }
 
-                this.stableFrames++;
-                if (this.stableFrames >= this.requiredStableFrames) {
-                    this.isStable = true;
-                    if (!this.locked) {
-                        this.lockPos.copy(pos);
-                        this.lockQuat.copy(quat);
-                        this.lockScale.copy(scale);
-                        this.lockStartTime = performance.now();
-                        this.locked = true;
-                        return true;
+                init(pos, quat, scale) {
+                    this.kx.reset(pos.x);
+                    this.ky.reset(pos.y);
+                    this.kz.reset(pos.z);
+                    this.kqw.reset(quat.w);
+                    this.kqx.reset(quat.x);
+                    this.kqy.reset(quat.y);
+                    this.kqz.reset(quat.z);
+                    this.ksx.reset(scale.x);
+                    this.ksy.reset(scale.y);
+                    this.ksz.reset(scale.z);
+                    this._hasInit = true;
+                }
+
+                update(pos, quat, scale, confidence = 1.0) {
+                    if (!this._hasInit) {
+                        this.init(pos, quat, scale);
+                        return { pos: pos.clone(), quat: quat.clone(), scale: scale.clone() };
+                    }
+                    const dot = quat.w * this.kqw.x + quat.x * this.kqx.x +
+                        quat.y * this.kqy.x + quat.z * this.kqz.x;
+                    const qIn = dot < 0 ? quat.clone().negate() : quat;
+
+                    const outPos = new THREE.Vector3(
+                        this.kx.update(pos.x, confidence),
+                        this.ky.update(pos.y, confidence),
+                        this.kz.update(pos.z, confidence)
+                    );
+                    const outQuat = new THREE.Quaternion(
+                        this.kqx.update(qIn.x, confidence),
+                        this.kqy.update(qIn.y, confidence),
+                        this.kqz.update(qIn.z, confidence),
+                        this.kqw.update(qIn.w, confidence)
+                    ).normalize();
+                    const outScale = new THREE.Vector3(
+                        this.ksx.update(scale.x, confidence),
+                        this.ksy.update(scale.y, confidence),
+                        this.ksz.update(scale.z, confidence)
+                    );
+                    return { pos: outPos, quat: outQuat, scale: outScale };
+                }
+
+                reset(pos, quat, scale) {
+                    this.kx.reset(pos.x);
+                    this.ky.reset(pos.y);
+                    this.kz.reset(pos.z);
+                    this.kqw.reset(quat.w);
+                    this.kqx.reset(quat.x);
+                    this.kqy.reset(quat.y);
+                    this.kqz.reset(quat.z);
+                    this.ksx.reset(scale.x);
+                    this.ksy.reset(scale.y);
+                    this.ksz.reset(scale.z);
+                    this._hasInit = true;
+                }
+            }
+
+            // ================================================================
+            // POSE HISTORY
+            // ================================================================
+            class PoseHistory {
+                constructor(maxLen = POSE_HISTORY_LEN) {
+                    this.maxLen = maxLen;
+                    this.positions = [];
+                    this.quaternions = [];
+                    this.scales = [];
+                    this.timestamps = [];
+                }
+
+                push(pos, quat, scale, ts) {
+                    this.positions.push(pos.clone());
+                    this.quaternions.push(quat.clone());
+                    this.scales.push(scale.clone());
+                    this.timestamps.push(ts);
+                    if (this.positions.length > this.maxLen) {
+                        this.positions.shift();
+                        this.quaternions.shift();
+                        this.scales.shift();
+                        this.timestamps.shift();
                     }
                 }
-                return false;
+
+                getWeightedAverage() {
+                    if (this.positions.length === 0) return null;
+                    const n = this.positions.length;
+                    const weights = [];
+                    let totalW = 0;
+                    for (let i = 0; i < n; i++) {
+                        const w = Math.exp(i / n * 2.5);
+                        weights.push(w);
+                        totalW += w;
+                    }
+                    const avgPos = new THREE.Vector3();
+                    const avgQuat = new THREE.Quaternion();
+                    const avgScale = new THREE.Vector3();
+                    const qAccum = new THREE.Quaternion();
+                    for (let i = 0; i < n; i++) {
+                        const w = weights[i] / totalW;
+                        avgPos.x += this.positions[i].x * w;
+                        avgPos.y += this.positions[i].y * w;
+                        avgPos.z += this.positions[i].z * w;
+                        qAccum.x += this.quaternions[i].x * w;
+                        qAccum.y += this.quaternions[i].y * w;
+                        qAccum.z += this.quaternions[i].z * w;
+                        qAccum.w += this.quaternions[i].w * w;
+                        avgScale.x += this.scales[i].x * w;
+                        avgScale.y += this.scales[i].y * w;
+                        avgScale.z += this.scales[i].z * w;
+                    }
+                    avgQuat.copy(qAccum).normalize();
+                    return { pos: avgPos, quat: avgQuat, scale: avgScale };
+                }
+
+                getVelocity(dt) {
+                    if (this.positions.length < 2) return null;
+                    const n = this.positions.length;
+                    const idx = Math.max(0, n - 3);
+                    const p1 = this.positions[idx];
+                    const p2 = this.positions[this.positions.length - 1];
+                    const t1 = this.timestamps[idx];
+                    const t2 = this.timestamps[this.timestamps.length - 1];
+                    const dtActual = (t2 - t1) / 1000;
+                    if (dtActual < 0.001) return null;
+                    const vel = p2.clone().sub(p1).divideScalar(dtActual);
+                    return { pos: vel };
+                }
+
+                clear() {
+                    this.positions = [];
+                    this.quaternions = [];
+                    this.scales = [];
+                    this.timestamps = [];
+                }
             }
 
-            apply(pos, quat, scale, threshold = 0.02) {
-                if (!this.locked) {
-                    pos.copy(pos);
-                    quat.copy(quat);
-                    scale.copy(scale);
+            // ================================================================
+            // CONFIDENCE SCORING
+            // ================================================================
+            function computeConfidence(entry) {
+                let score = 0.5;
+                let factors = 0;
+
+                if (entry.userVel !== undefined) {
+                    const velScore = Math.max(0, 1 - entry.userVel / 0.8);
+                    score += velScore * 0.35;
+                    factors += 0.35;
+                }
+
+                if (entry.stability !== undefined) {
+                    score += entry.stability * 0.30;
+                    factors += 0.30;
+                }
+
+                if (entry._consecutiveFrames !== undefined) {
+                    const cf = Math.min(entry._consecutiveFrames, 60);
+                    const cfScore = cf / 60;
+                    score += cfScore * 0.20;
+                    factors += 0.20;
+                }
+
+                if (entry.anchor && entry.anchor.visible) {
+                    score += 0.15;
+                    factors += 0.15;
+                }
+
+                if (factors > 0) score = score / factors;
+                return Math.max(0, Math.min(1, score));
+            }
+
+            // ================================================================
+            // ANCHOR LOCK SYSTEM
+            // ================================================================
+            class AnchorLock {
+                constructor() {
+                    this.locked = false;
+                    this.lockPos = new THREE.Vector3();
+                    this.lockQuat = new THREE.Quaternion();
+                    this.lockScale = new THREE.Vector3(1, 1, 1);
+                    this.lockStartTime = 0;
+                    this.stableFrames = 0;
+                    this.requiredStableFrames = 30;
+                    this.isStable = false;
+                }
+
+                update(pos, quat, scale, confidence, dt) {
+                    if (confidence < CONF_HIGH) {
+                        this.stableFrames = 0;
+                        this.isStable = false;
+                        this.locked = false;
+                        return false;
+                    }
+
+                    this.stableFrames++;
+                    if (this.stableFrames >= this.requiredStableFrames) {
+                        this.isStable = true;
+                        if (!this.locked) {
+                            this.lockPos.copy(pos);
+                            this.lockQuat.copy(quat);
+                            this.lockScale.copy(scale);
+                            this.lockStartTime = performance.now();
+                            this.locked = true;
+                            return true;
+                        }
+                    }
                     return false;
                 }
 
-                // Check if movement exceeds threshold; if so, unlock and re-lock
-                const dPos = pos.distanceTo(this.lockPos);
-                const dRot = quat.angleTo(this.lockQuat);
-                const dScale = scale.distanceTo(this.lockScale);
+                apply(pos, quat, scale, threshold = 0.02) {
+                    if (!this.locked) {
+                        pos.copy(pos);
+                        quat.copy(quat);
+                        scale.copy(scale);
+                        return false;
+                    }
 
-                if (dPos > threshold * 3 || dRot > 0.08 || dScale > threshold * 2) {
+                    const dPos = pos.distanceTo(this.lockPos);
+                    const dRot = quat.angleTo(this.lockQuat);
+                    const dScale = scale.distanceTo(this.lockScale);
+
+                    if (dPos > threshold * 3 || dRot > 0.08 || dScale > threshold * 2) {
+                        this.locked = false;
+                        this.isStable = false;
+                        this.stableFrames = 0;
+                        pos.copy(pos);
+                        quat.copy(quat);
+                        scale.copy(scale);
+                        return false;
+                    }
+
+                    pos.copy(this.lockPos);
+                    quat.copy(this.lockQuat);
+                    scale.copy(this.lockScale);
+                    return true;
+                }
+
+                reset() {
                     this.locked = false;
                     this.isStable = false;
                     this.stableFrames = 0;
-                    pos.copy(pos);
-                    quat.copy(quat);
-                    scale.copy(scale);
-                    return false;
                 }
-
-                // Use locked pose
-                pos.copy(this.lockPos);
-                quat.copy(this.lockQuat);
-                scale.copy(this.lockScale);
-                return true;
             }
 
-            reset() {
-                this.locked = false;
-                this.isStable = false;
-                this.stableFrames = 0;
+            // ================================================================
+            // UTILITY FUNCTIONS
+            // ================================================================
+            function loadImage(url) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = url;
+                });
             }
-        }
 
-        // ================================================================
-        // UTILITY FUNCTIONS
-        // ================================================================
-        function loadImage(url) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => resolve(img);
-                img.onerror = reject;
-                img.src = url;
-            });
-        }
-
-        function getSessionId() {
-            let sid = localStorage.getItem('memoria_session');
-            if (!sid) {
-                sid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-                localStorage.setItem('memoria_session', sid);
+            function getSessionId() {
+                let sid = localStorage.getItem('memoria_session');
+                if (!sid) {
+                    sid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+                    localStorage.setItem('memoria_session', sid);
+                }
+                return sid;
             }
-            return sid;
-        }
 
-        function fmtTime(t) {
-            if (!isFinite(t) || t < 0) t = 0;
-            const m = Math.floor(t / 60),
-                s = Math.floor(t % 60);
-            return m + ':' + String(s).padStart(2, '0');
-        }
+            function fmtTime(t) {
+                if (!isFinite(t) || t < 0) t = 0;
+                const m = Math.floor(t / 60),
+                    s = Math.floor(t % 60);
+                return m + ':' + String(s).padStart(2, '0');
+            }
 
-        function scoreClass(v) {
-            return v > 0.75 ? 'hud-good' : v > 0.45 ? 'hud-warn' : 'hud-bad';
-        }
+            function scoreClass(v) {
+                return v > 0.75 ? 'hud-good' : v > 0.45 ? 'hud-warn' : 'hud-bad';
+            }
 
-        // ================================================================
-        // SET LOADING STATE
-        // ================================================================
-        function setLoadingState(title, sub, counter) {
-            document.getElementById('loading-title').textContent = title;
-            document.getElementById('loading-sub').textContent = sub;
-            document.getElementById('loading-counter').textContent = counter || '';
-        }
+            function setLoadingState(title, sub, counter) {
+                document.getElementById('loading-title').textContent = title;
+                document.getElementById('loading-sub').textContent = sub;
+                document.getElementById('loading-counter').textContent = counter || '';
+            }
 
-        // ================================================================
-        // BACKEND WAKE
-        // ================================================================
-        async function wakeBackend() {
-            if (_backendReady) return;
-            const statusText = document.getElementById('statusText');
-            try {
-                const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(4000) });
-                if (res.ok) { _backendReady = true; return; }
-            } catch (_) {}
-
-            if (statusText) statusText.textContent = 'Waking up server… this can take 30–60s on first scan';
-            let secs = 0;
-            const timer = setInterval(() => {
-                secs++;
-                if (statusText) statusText.textContent = `Waking up server… ${secs}s elapsed`;
-            }, 1000);
-            const deadline = Date.now() + 90000;
-            while (Date.now() < deadline) {
+            // ================================================================
+            // BACKEND WAKE
+            // ================================================================
+            async function wakeBackend() {
+                if (_backendReady) return;
+                const statusText = document.getElementById('statusText');
                 try {
-                    const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(5000) });
-                    if (res.ok) { _backendReady = true; break; }
+                    const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(4000) });
+                    if (res.ok) { _backendReady = true; return; }
                 } catch (_) {}
-                await new Promise(r => setTimeout(r, 2000));
-            }
-            clearInterval(timer);
-        }
 
-        // ================================================================
-        // CAMERA ERROR SCREEN
-        // ================================================================
-        function showCameraErrorScreen(err) {
-            localStorage.removeItem(PERM_KEY);
-            const name = err && err.name;
-            const isBlocked = name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError';
-            const isNoCamera = name === 'NotFoundError' || name === 'DevicesNotFoundError';
-            const isInUse = name === 'NotReadableError' || name === 'TrackStartError';
-
-            let title, body;
-            if (isBlocked) {
-                title = 'Camera access is blocked';
-                body =
-                    `You previously blocked camera access for this site. Browsers don't let websites re-ask once blocked — you'll need to allow it manually:<br><br><b>On phone (Chrome/Safari):</b> tap the icon left of the address bar (🔒 or ⓘ) → Permissions / Site settings → set Camera to Allow.<br><b>On desktop Chrome:</b> click the 🔒 / ⓘ icon in the address bar → Site settings → Camera → Allow.<br><b>On desktop Safari:</b> Safari menu → Settings → Websites → Camera → set this site to Allow.`;
-            } else if (isNoCamera) {
-                title = 'No camera found';
-                body =
-                    `This device doesn't have a usable camera, or it's disabled at the OS level. Check your device's camera settings and try again.`;
-            } else if (isInUse) {
-                title = 'Camera is busy';
-                body = `Another app or browser tab seems to be using the camera right now. Close it and try again.`;
-            } else {
-                title = 'Camera access needed';
-                body = `Something went wrong starting the camera. Please allow camera access for this site and try again.`;
-            }
-
-            document.getElementById('loading').innerHTML = `
-                <div style="text-align:center;padding:40px;max-width:360px">
-                    <div style="font-size:32px;margin-bottom:16px">📷</div>
-                    <h3 style="color:#fff;margin-bottom:8px">${title}</h3>
-                    <p style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">${body}</p>
-                    <p style="color:rgba(255,80,80,.65);font-size:11px;margin-top:10px;word-break:break-word">
-                        ${name ? '(' + name + ')' : ''}</p>
-                    <button id="cameraRetryBtn"
-                        style="margin-top:22px;padding:12px 28px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
-                        Try again</button>
-                </div>`;
-            document.getElementById('cameraRetryBtn').addEventListener('click', retryStartScanner);
-        }
-
-        async function retryStartScanner() {
-            document.getElementById('loading').innerHTML = `
-                <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
-                <div class="loading-spinner"></div>
-                <div id="loading-text">
-                    <h3 id="loading-title">Starting camera</h3>
-                    <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
-                    <p id="loading-counter" style="text-align:center"></p>
-                </div>`;
-            await startScanner();
-        }
-
-        // ================================================================
-        // FETCH & COMPILE TARGETS
-        // ================================================================
-        async function fetchAndCompileTargets() {
-            const statusText = document.getElementById('statusText');
-            const pill = document.getElementById('statusPill');
-            pill.className = 'status-pill ready';
-            statusText.textContent = 'Loading memories…';
-
-            const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
-            if (!res.ok) throw new Error(`Backend ${res.status}`);
-            const data = await res.json();
-
-            if (!data.success || !data.data.targets || data.data.targets.length === 0) {
-                statusText.textContent = 'No memories uploaded yet.';
-                return null;
-            }
-            _targets = data.data.targets;
-
-            statusText.textContent = `Preparing AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
-
-            const { Compiler } = window.MINDAR.IMAGE;
-            const compiler = new Compiler();
-            const images = await Promise.all(_targets.map(t => loadImage(t.photoUrl)));
-            await compiler.compileImageTargets(images, (progress) => {
-                statusText.textContent = `Preparing AR tracking… ${Math.round(progress)}%`;
-            });
-            const mindBuffer = compiler.exportData();
-            const mindBlob = new Blob([mindBuffer]);
-
-            // Preload all videos
-            _targets.forEach(t => {
-                const v = document.createElement('video');
-                v.src = t.videoUrl;
-                v.preload = 'auto';
-                v.muted = true;
-                v.playsInline = true;
-                v.load();
-            });
-
-            _lastMindUrl = URL.createObjectURL(mindBlob);
-            return _lastMindUrl;
-        }
-
-        // ================================================================
-        // TEARDOWN MINDAR
-        // ================================================================
-        function teardownMindAR() {
-            if (!mindarThree) return;
-            if (_wakeLock) { try { _wakeLock.release(); } catch (_) {} _wakeLock = null; }
-            try { if (mindarThree.controller) mindarThree.controller.dispose(); } catch (_) {}
-            try {
-                if (mindarThree.video && mindarThree.video.srcObject) {
-                    mindarThree.video.srcObject.getTracks().forEach(t => t.stop());
+                if (statusText) statusText.textContent = 'Waking up server… this can take 30–60s on first scan';
+                let secs = 0;
+                const timer = setInterval(() => {
+                    secs++;
+                    if (statusText) statusText.textContent = `Waking up server… ${secs}s elapsed`;
+                }, 1000);
+                const deadline = Date.now() + 90000;
+                while (Date.now() < deadline) {
+                    try {
+                        const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(5000) });
+                        if (res.ok) { _backendReady = true; break; }
+                    } catch (_) {}
+                    await new Promise(r => setTimeout(r, 2000));
                 }
-                if (mindarThree.video) mindarThree.video.remove();
-            } catch (_) {}
-            try {
-                mindarThree.renderer.setAnimationLoop(null);
-                mindarThree.renderer.dispose();
-                mindarThree.renderer.forceContextLoss();
-                if (mindarThree.renderer.domElement) mindarThree.renderer.domElement.remove();
-            } catch (_) {}
-            try {
-                if (mindarThree.cssRenderer.domElement) mindarThree.cssRenderer.domElement.remove();
-            } catch (_) {}
-            mindarThree = null;
-            videoTrack = null;
-        }
-
-        // ================================================================
-        // WAKE LOCK
-        // ================================================================
-        async function acquireWakeLock() {
-            if (!('wakeLock' in navigator)) return;
-            try {
-                _wakeLock = await navigator.wakeLock.request('screen');
-                _wakeLock.addEventListener('release', () => { _wakeLock = null; });
-            } catch (_) {}
-        }
-
-        async function reacquireWakeLockIfNeeded() {
-            if (!document.hidden && !_wakeLock && mindarThree) {
-                await acquireWakeLock();
+                clearInterval(timer);
             }
-        }
-        document.addEventListener('visibilitychange', reacquireWakeLockIfNeeded);
 
-        // ================================================================
-        // VISIBILITY CHANGE — full teardown/rebuild
-        // ================================================================
-        async function handleVisibilityChange() {
-            if (!mindarThree) return;
-            if (fsOpenTargetId !== null) return;
+            // ================================================================
+            // CAMERA ERROR SCREEN
+            // ================================================================
+            function showCameraErrorScreen(err) {
+                localStorage.removeItem(PERM_KEY);
+                const name = err && err.name;
+                const isBlocked = name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError';
+                const isNoCamera = name === 'NotFoundError' || name === 'DevicesNotFoundError';
+                const isInUse = name === 'NotReadableError' || name === 'TrackStartError';
 
-            if (document.hidden) {
-                if (_cameraStoppedForVisibility) return;
-                _cameraStoppedForVisibility = true;
-                teardownMindAR();
-            } else {
-                if (!_cameraStoppedForVisibility) return;
-                _cameraStoppedForVisibility = false;
+                let title, body;
+                if (isBlocked) {
+                    title = 'Camera access is blocked';
+                    body =
+                        `You previously blocked camera access for this site. Browsers don't let websites re-ask once blocked — you'll need to allow it manually:<br><br><b>On phone (Chrome/Safari):</b> tap the icon left of the address bar (🔒 or ⓘ) → Permissions / Site settings → set Camera to Allow.<br><b>On desktop Chrome:</b> click the 🔒 / ⓘ icon in the address bar → Site settings → Camera → Allow.<br><b>On desktop Safari:</b> Safari menu → Settings → Websites → Camera → set this site to Allow.`;
+                } else if (isNoCamera) {
+                    title = 'No camera found';
+                    body =
+                        `This device doesn't have a usable camera, or it's disabled at the OS level. Check your device's camera settings and try again.`;
+                } else if (isInUse) {
+                    title = 'Camera is busy';
+                    body = `Another app or browser tab seems to be using the camera right now. Close it and try again.`;
+                } else {
+                    title = 'Camera access needed';
+                    body = `Something went wrong starting the camera. Please allow camera access for this site and try again.`;
+                }
+
+                document.getElementById('loading').innerHTML = `
+                    <div style="text-align:center;padding:40px;max-width:360px">
+                        <div style="font-size:32px;margin-bottom:16px">📷</div>
+                        <h3 style="color:#fff;margin-bottom:8px">${title}</h3>
+                        <p style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">${body}</p>
+                        <p style="color:rgba(255,80,80,.65);font-size:11px;margin-top:10px;word-break:break-word">
+                            ${name ? '(' + name + ')' : ''}</p>
+                        <button id="cameraRetryBtn"
+                            style="margin-top:22px;padding:12px 28px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
+                            Try again</button>
+                    </div>`;
+                document.getElementById('cameraRetryBtn').addEventListener('click', retryStartScanner);
+            }
+
+            async function retryStartScanner() {
+                document.getElementById('loading').innerHTML = `
+                    <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
+                    <div class="loading-spinner"></div>
+                    <div id="loading-text">
+                        <h3 id="loading-title">Starting camera</h3>
+                        <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
+                        <p id="loading-counter" style="text-align:center"></p>
+                    </div>`;
+                await startScanner();
+            }
+
+            // ================================================================
+            // FETCH & COMPILE TARGETS
+            // ================================================================
+            async function fetchAndCompileTargets() {
+                const statusText = document.getElementById('statusText');
+                const pill = document.getElementById('statusPill');
+                pill.className = 'status-pill ready';
+                statusText.textContent = 'Loading memories…';
+
+                const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
+                if (!res.ok) throw new Error(`Backend ${res.status}`);
+                const data = await res.json();
+
+                if (!data.success || !data.data.targets || data.data.targets.length === 0) {
+                    statusText.textContent = 'No memories uploaded yet.';
+                    return null;
+                }
+                _targets = data.data.targets;
+
+                statusText.textContent = `Preparing AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+
+                const { Compiler } = window.MINDAR.IMAGE;
+                const compiler = new Compiler();
+                const images = await Promise.all(_targets.map(t => loadImage(t.photoUrl)));
+                await compiler.compileImageTargets(images, (progress) => {
+                    statusText.textContent = `Preparing AR tracking… ${Math.round(progress)}%`;
+                });
+                const mindBuffer = compiler.exportData();
+                const mindBlob = new Blob([mindBuffer]);
+
+                _targets.forEach(t => {
+                    const v = document.createElement('video');
+                    v.src = t.videoUrl;
+                    v.preload = 'auto';
+                    v.muted = true;
+                    v.playsInline = true;
+                    v.load();
+                });
+
+                _lastMindUrl = URL.createObjectURL(mindBlob);
+                return _lastMindUrl;
+            }
+
+            // ================================================================
+            // TEARDOWN MINDAR
+            // ================================================================
+            function teardownMindAR() {
+                if (!mindarThree) return;
+                if (_wakeLock) { try { _wakeLock.release(); } catch (_) {} _wakeLock = null; }
+                try { if (mindarThree.controller) mindarThree.controller.dispose(); } catch (_) {}
                 try {
-                    arTargets.forEach(entry => { try { entry.wrapper.remove(); } catch (_) {} });
-                    arTargets.clear();
-                    await beginMindAR(_lastMindUrl);
-                    refreshStatusPill();
+                    if (mindarThree.video && mindarThree.video.srcObject) {
+                        mindarThree.video.srcObject.getTracks().forEach(t => t.stop());
+                    }
+                    if (mindarThree.video) mindarThree.video.remove();
+                } catch (_) {}
+                try {
+                    mindarThree.renderer.setAnimationLoop(null);
+                    mindarThree.renderer.dispose();
+                    mindarThree.renderer.forceContextLoss();
+                    if (mindarThree.renderer.domElement) mindarThree.renderer.domElement.remove();
+                } catch (_) {}
+                try {
+                    if (mindarThree.cssRenderer.domElement) mindarThree.cssRenderer.domElement.remove();
+                } catch (_) {}
+                mindarThree = null;
+                videoTrack = null;
+            }
+
+            // ================================================================
+            // WAKE LOCK
+            // ================================================================
+            async function acquireWakeLock() {
+                if (!('wakeLock' in navigator)) return;
+                try {
+                    _wakeLock = await navigator.wakeLock.request('screen');
+                    _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+                } catch (_) {}
+            }
+
+            async function reacquireWakeLockIfNeeded() {
+                if (!document.hidden && !_wakeLock && mindarThree) {
+                    await acquireWakeLock();
+                }
+            }
+            document.addEventListener('visibilitychange', reacquireWakeLockIfNeeded);
+
+            // ================================================================
+            // VISIBILITY CHANGE
+            // ================================================================
+            async function handleVisibilityChange() {
+                if (!mindarThree) return;
+                if (fsOpenTargetId !== null) return;
+
+                if (document.hidden) {
+                    if (_cameraStoppedForVisibility) return;
+                    _cameraStoppedForVisibility = true;
+                    teardownMindAR();
+                } else {
+                    if (!_cameraStoppedForVisibility) return;
+                    _cameraStoppedForVisibility = false;
+                    try {
+                        arTargets.forEach(entry => { try { entry.wrapper.remove(); } catch (_) {} });
+                        arTargets.clear();
+                        await beginMindAR(_lastMindUrl);
+                        refreshStatusPill();
+                    } catch (err) {
+                        console.error('[Memoria] camera restart on return failed:', err);
+                        showCameraErrorScreen(err);
+                    }
+                }
+            }
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
+            // ================================================================
+            // BEGIN MINDAR
+            // ================================================================
+            async function beginMindAR(mindUrl) {
+                const statusText = document.getElementById('statusText');
+
+                mindarThree = new window.MINDAR.IMAGE.MindARThree({
+                    container: document.getElementById('ar-container'),
+                    imageTargetSrc: mindUrl,
+                    maxTrack: Math.min(_targets.length, 4),
+                    filterMinCF: 0.00015,
+                    filterBeta: 180,
+                    uiLoading: 'no',
+                    uiScanning: 'no',
+                    uiError: 'no',
+                });
+
+                await mindarThree.start();
+
+                try {
+                    videoTrack = mindarThree.video.srcObject.getVideoTracks()[0];
+                } catch (_) {}
+
+                acquireWakeLock();
+
+                statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+
+                _targets.forEach((target, index) => {
+                    const anchor = mindarThree.addCSSAnchor(index);
+                    spawnArTarget(String(target.id), index, target, anchor);
+
+                    anchor.onTargetFound = () => onTargetFound(String(target.id));
+                    anchor.onTargetLost = () => onTargetLost(String(target.id));
+                });
+
+                // ---- Gyroscope ----
+                function onDeviceOrientation(e) {
+                    if (e.alpha == null) return;
+                    _orientAvailable = true;
+                    _lastOrient = { alpha: e.alpha, beta: e.beta, gamma: e.gamma };
+                }
+                window.addEventListener('deviceorientation', onDeviceOrientation, true);
+
+                function currentOrientQuat(out) {
+                    if (!_lastOrient) return null;
+                    _orientEuler.set(
+                        THREE.MathUtils.degToRad(_lastOrient.beta || 0),
+                        THREE.MathUtils.degToRad(_lastOrient.alpha || 0),
+                        -THREE.MathUtils.degToRad(_lastOrient.gamma || 0),
+                        'YXZ'
+                    );
+                    return out.setFromEuler(_orientEuler);
+                }
+
+                // ---- Main render loop ----
+                const _rawPos = new THREE.Vector3();
+                const _rawQuat = new THREE.Quaternion();
+                const _rawScale = new THREE.Vector3();
+                const _leadPos = new THREE.Vector3();
+
+                mindarThree.renderer.setAnimationLoop(() => {
+                    const now = performance.now();
+                    const dt = Math.max(0, now - _lastFrameTime);
+                    _lastFrameTime = now;
+                    const dtSec = dt / 1000;
+
+                    _frameCount++;
+                    _fpsAccum += dt;
+                    if (now - _lastFpsUpdate > 500) {
+                        _fps = Math.round((_frameCount * 1000) / _fpsAccum);
+                        _frameCount = 0;
+                        _fpsAccum = 0;
+                        _lastFpsUpdate = now;
+                    }
+
+                    const curOrientQuat = _orientAvailable ? currentOrientQuat(_orientQuat) : null;
+
+                    arTargets.forEach((entry) => {
+                        const { anchor, smoothed, inner, kalman, history, anchorLock } = entry;
+                        const rawVisible = anchor.visible;
+                        const wasVisible = smoothed.userData.wasVisible === true;
+
+                        if (rawVisible) {
+                            anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
+
+                            let accept = true;
+                            if (entry._lastGoodRawPos && wasVisible) {
+                                const posJump = entry._lastGoodRawPos.distanceTo(_rawPos);
+                                const rotJump = entry._lastGoodRawQuat ? entry._lastGoodRawQuat.angleTo(
+                                _rawQuat) : 0;
+                                const posLimit = 1.2 * Math.max(dtSec, 1 / 120);
+                                const rotLimit = 12 * Math.max(dtSec, 1 / 120);
+                                if (posJump > posLimit || rotJump > rotLimit) {
+                                    entry._rejectStreak = (entry._rejectStreak || 0) + 1;
+                                    if (entry._rejectStreak <= 3) accept = false;
+                                } else {
+                                    entry._rejectStreak = 0;
+                                }
+                            }
+                            entry._rejectedLastFrame = !accept;
+
+                            if (!accept) {
+                                entry._rejectCount = (entry._rejectCount || 0) + 1;
+                                entry.cssObject.element.style.visibility = 'visible';
+                                smoothed.userData.wasVisible = true;
+                                entry._consecutiveFrames = (entry._consecutiveFrames || 0) + 1;
+                                entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry
+                                    .stability || 0.5))));
+                                return;
+                            }
+
+                            entry._lastGoodRawPos = (entry._lastGoodRawPos || new THREE.Vector3()).copy(_rawPos);
+                            entry._lastGoodRawQuat = (entry._lastGoodRawQuat || new THREE.Quaternion()).copy(
+                            _rawQuat);
+                            entry._lostSince = null;
+                            entry._holdOrientQuat = null;
+
+                            entry.cssObject.element.style.visibility = 'visible';
+                            entry.inner.style.opacity = '';
+                            smoothed.userData.wasVisible = true;
+                            entry._consecutiveFrames = (entry._consecutiveFrames || 0) + 1;
+
+                            const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
+                            const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
+                            entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.65 +
+                                instVel * 0.35;
+
+                            if (dtSec > 0) {
+                                const instVelVec = _rawPos.clone().sub(prevRaw).divideScalar(dtSec);
+                                entry._velVec = entry._velVec ?
+                                    entry._velVec.lerp(instVelVec, 0.2) :
+                                    instVelVec;
+                            }
+                            entry._prevRawPos.copy(_rawPos);
+
+                            entry.history.push(_rawPos, _rawQuat, _rawScale, now);
+
+                            const confidence = computeConfidence(entry);
+                            entry.confidence = confidence;
+
+                            const kalmanResult = entry.kalman.update(_rawPos, _rawQuat, _rawScale, confidence);
+                            const avgResult = entry.history.getWeightedAverage();
+
+                            let fusedPos, fusedQuat, fusedScale;
+                            if (avgResult && confidence > CONF_MID) {
+                                const kWeight = 0.4 + 0.4 * confidence;
+                                const hWeight = 1 - kWeight;
+                                fusedPos = kalmanResult.pos.clone().lerp(avgResult.pos, hWeight);
+                                fusedQuat = kalmanResult.quat.clone().slerp(avgResult.quat, hWeight);
+                                fusedScale = kalmanResult.scale.clone().lerp(avgResult.scale, hWeight);
+                            } else {
+                                fusedPos = kalmanResult.pos.clone();
+                                fusedQuat = kalmanResult.quat.clone();
+                                fusedScale = kalmanResult.scale.clone();
+                            }
+
+                            if (curOrientQuat && entry._lastGoodRawQuat) {
+                                const gyroWeight = 0.12 * (1 - confidence);
+                                if (gyroWeight > 0.01) {
+                                    const gyroCorrection = curOrientQuat.clone();
+                                    fusedQuat.slerp(gyroCorrection, gyroWeight);
+                                    fusedQuat.normalize();
+                                }
+                            }
+
+                            const velData = entry.history.getVelocity(dtSec);
+                            if (velData && entry.userVel > 0.02) {
+                                const leadScale = Math.min(0.025, velData.pos.length() * 0.04);
+                                _leadPos.copy(fusedPos).add(velData.pos.clone().multiplyScalar(leadScale));
+                            } else {
+                                _leadPos.copy(fusedPos);
+                            }
+
+                            entry.anchorLock.update(_leadPos, fusedQuat, fusedScale, confidence, dtSec);
+                            const isLocked = entry.anchorLock.apply(_leadPos, fusedQuat, fusedScale, 0.025);
+
+                            smoothed.position.copy(_leadPos);
+                            smoothed.quaternion.copy(fusedQuat);
+                            smoothed.scale.copy(fusedScale);
+
+                            const jitterPenalty = Math.min(1, entry.userVel / 0.6);
+                            const targetStab = 1 - jitterPenalty * 0.5;
+                            entry.stability = entry.stability === undefined ? targetStab :
+                                entry.stability * 0.88 + targetStab * 0.12;
+
+                            const minScale = 0.3;
+                            const maxScale = 3.0;
+                            smoothed.scale.x = Math.max(minScale, Math.min(maxScale, smoothed.scale.x));
+                            smoothed.scale.y = Math.max(minScale, Math.min(maxScale, smoothed.scale.y));
+                            smoothed.scale.z = Math.max(minScale, Math.min(maxScale, smoothed.scale.z));
+
+                            smoothed.updateMatrix();
+                            entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry
+                                .stability || 0.5))));
+                            entry.isAnchorLocked = isLocked;
+                            entry._lostSince = null;
+
+                        } else {
+                            if (wasVisible) {
+                                entry._lostSince = now;
+                                entry._holdOrientQuat = curOrientQuat ? curOrientQuat.clone() : null;
+                                entry._lostPos = smoothed.position.clone();
+                                entry._lostQuat = smoothed.quaternion.clone();
+                                entry._lostScale = smoothed.scale.clone();
+                            }
+
+                            const lostSince = entry._lostSince;
+                            if (lostSince == null) {
+                                entry.cssObject.element.style.visibility = 'hidden';
+                                smoothed.userData.wasVisible = false;
+                                return;
+                            }
+
+                            const lostMs = now - lostSince;
+
+                            if (lostMs > LOST_HOLD_MAX_MS) {
+                                entry.cssObject.element.style.visibility = 'hidden';
+                                smoothed.userData.wasVisible = false;
+                                entry.history.clear();
+                                entry.anchorLock.reset();
+                                return;
+                            }
+
+                            entry.cssObject.element.style.visibility = 'visible';
+                            smoothed.userData.wasVisible = true;
+
+                            if (curOrientQuat && entry._holdOrientQuat && entry._lostQuat) {
+                                _prevOrientQuat.copy(entry._holdOrientQuat).invert();
+                                _orientDeltaQuat.copy(curOrientQuat).multiply(_prevOrientQuat);
+                                const correctionAngle = _orientDeltaQuat.angleTo(_identityQuat);
+                                const MAX_CORRECTION_RAD = THREE.MathUtils.degToRad(30);
+                                if (correctionAngle > MAX_CORRECTION_RAD) {
+                                    _orientDeltaQuat.slerp(_identityQuat, 1 - MAX_CORRECTION_RAD /
+                                    correctionAngle);
+                                }
+                                const correctedQuat = entry._lostQuat.clone();
+                                correctedQuat.multiply(_orientDeltaQuat);
+                                smoothed.quaternion.copy(correctedQuat);
+                            } else if (entry._lostQuat) {
+                                smoothed.quaternion.copy(entry._lostQuat);
+                            }
+                            if (entry._lostPos) smoothed.position.copy(entry._lostPos);
+                            if (entry._lostScale) smoothed.scale.copy(entry._lostScale);
+
+                            const fadeT = lostMs <= LOST_FADE_START_MS ? 0 :
+                                Math.min(1, (lostMs - LOST_FADE_START_MS) / LOST_FADE_DURATION_MS);
+                            entry.inner.style.opacity = String(1 - fadeT * 0.82);
+                            entry.stability = entry.stability === undefined ? 0.4 : entry.stability * 0.92;
+
+                            entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry
+                                .stability))));
+                            smoothed.updateMatrix();
+                        }
+                    });
+
+                    mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
+                    mindarThree.cssRenderer.render(mindarThree.cssScene, mindarThree.camera);
+
+                    if (window.__memoriaDebug) updateDebugHud(_fps, dt, curOrientQuat !== null);
+                });
+            }
+
+            // ================================================================
+            // SPAWN AR TARGET
+            // ================================================================
+            function spawnArTarget(id, targetIndex, target, anchor) {
+                console.log('[Memoria] spawning target', id, {
+                    photoWidth: target.photoWidth,
+                    photoHeight: target.photoHeight,
+                    videoRect: target.videoRect,
+                    videoUrl: target.videoUrl,
+                });
+
+                const pw = target.photoWidth,
+                    ph = target.photoHeight;
+                const aspect = (typeof pw === 'number' && pw > 0 && typeof ph === 'number' && ph > 0) ?
+                    ph / pw : 1;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'ar-video-wrapper';
+                wrapper.dataset.targetId = id;
+                wrapper.style.width = PLANE_PX + 'px';
+                wrapper.style.height = (PLANE_PX * aspect) + 'px';
+
+                const inner = document.createElement('div');
+                inner.className = 'ar-video-inner';
+
+                const video = document.createElement('video');
+                video.className = 'ar-video';
+                video.loop = true;
+                video.playsInline = true;
+                video.muted = true;
+                video.volume = 1;
+                video.preload = 'auto';
+                video.src = target.videoUrl;
+                video.addEventListener('error', () => {
+                    const mediaErr = video.error;
+                    console.error('[Memoria] AR video failed to load', id, target.videoUrl, {
+                        code: mediaErr && mediaErr.code,
+                        message: mediaErr && mediaErr.message,
+                    });
+                });
+                video.load();
+                inner.appendChild(video);
+                wrapper.appendChild(inner);
+
+                const corners = document.createElement('div');
+                corners.className = 'ar-corners';
+                const edge = document.createElement('div');
+                edge.className = 'ar-edge';
+                corners.appendChild(edge);
+                ['tl', 'tr', 'bl', 'br'].forEach(pos => {
+                    const c = document.createElement('div');
+                    c.className = `ar-corner ar-corner-${pos}`;
+                    corners.appendChild(c);
+                });
+                wrapper.appendChild(corners);
+
+                wrapper.addEventListener('click', () => {
+                    entry_openGuard(id);
+                });
+                wrapper.addEventListener('pointerdown', (e) => {
+                    entry_openGuard(id);
+                });
+
+                function entry_openGuard(targetId) {
+                    const e = arTargets.get(targetId);
+                    if (!e) return;
+                    const now = performance.now();
+                    if (e._lastOpenTriggerAt && now - e._lastOpenTriggerAt < 600) return;
+                    e._lastOpenTriggerAt = now;
+                    triggerOpenWithConfirm(targetId);
+                }
+
+                const rawRect = target.videoRect || {};
+                const numOr = (v, fallback) => (typeof v === 'number' && isFinite(v)) ? v : fallback;
+                const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+                const rectW = clamp(numOr(rawRect.width, 45), 1, 100);
+                const rectH = clamp(numOr(rawRect.height, 80), 1, 100);
+                const rectX = clamp(numOr(rawRect.x, 50), 0, 100);
+                const rectY = clamp(numOr(rawRect.y, 50), 0, 100);
+                const left = clamp(rectX - rectW / 2, 0, 100 - rectW);
+                const top = clamp(rectY - rectH / 2, 0, 100 - rectH);
+                video.style.position = 'absolute';
+                video.style.left = left + '%';
+                video.style.top = top + '%';
+                video.style.width = rectW + '%';
+                video.style.height = rectH + '%';
+
+                const cssObject = new CSS3DObject(wrapper);
+                cssObject.scale.set(SCALE, SCALE, SCALE);
+
+                const smoothed = new THREE.Object3D();
+                smoothed.add(cssObject);
+                mindarThree.cssScene.add(smoothed);
+                smoothed.matrixAutoUpdate = true;
+                smoothed.position.setFromMatrixPosition(anchor.group.matrix);
+                smoothed.quaternion.setFromRotationMatrix(anchor.group.matrix);
+                smoothed.scale.setFromMatrixScale(anchor.group.matrix);
+
+                const entry = {
+                    wrapper,
+                    inner,
+                    corners,
+                    video,
+                    cssObject,
+                    smoothed,
+                    anchor,
+                    lastSeen: 0,
+                    visible: false,
+                    kalman: new KalmanPose(),
+                    history: new PoseHistory(POSE_HISTORY_LEN),
+                    anchorLock: new AnchorLock(),
+                    userVel: 0,
+                    _velVec: null,
+                    _prevRawPos: null,
+                    confidence: 0.5,
+                    stability: 0.5,
+                    _lostSince: null,
+                    _holdOrientQuat: null,
+                    _lostPos: null,
+                    _lostQuat: null,
+                    _lostScale: null,
+                    _lostTeardownTimer: null,
+                    _rejectStreak: 0,
+                    _rejectCount: 0,
+                    _rejectedLastFrame: false,
+                    _consecutiveFrames: 0,
+                    _lastGoodRawPos: null,
+                    _lastGoodRawQuat: null,
+                    isAnchorLocked: false,
+                    _lastOpenTriggerAt: 0,
+                };
+
+                arTargets.set(id, entry);
+            }
+
+            // ================================================================
+            // ON TARGET FOUND
+            // ================================================================
+            function onTargetFound(id) {
+                const entry = arTargets.get(id);
+                if (!entry) return;
+                entry.visible = true;
+                entry.lastSeen = performance.now();
+                entry.inner.classList.add('visible', 'tracking');
+                entry.inner.style.opacity = '';
+                clearTimeout(entry._lostTeardownTimer);
+
+                const wasTracking = entry.corners.classList.contains('tracking');
+                entry.corners.classList.add('tracking');
+                if (!wasTracking) {
+                    entry.corners.classList.remove('lock-anim');
+                    void entry.corners.offsetWidth;
+                    entry.corners.classList.add('lock-anim');
+                    setTimeout(() => entry.corners.classList.remove('lock-anim'), 300);
+                }
+
+                const tryPlay = () => {
+                    entry.video.muted = false;
+                    entry.video.play().catch((err) => {
+                        console.warn('[Memoria] unmuted play() blocked, falling back to muted-then-retry', id,
+                            err && err.name);
+                        entry.video.muted = true;
+                        entry.video.play().catch((err2) => {
+                            console.error('[Memoria] video.play() rejected even muted', id, err2 && err2
+                                .name, err2 && err2.message);
+                        });
+                        armUnmuteOnNextTap();
+                    });
+                };
+                if (entry.video.readyState >= 2) {
+                    tryPlay();
+                } else {
+                    entry.video.addEventListener('canplay', tryPlay, { once: true });
+                    setTimeout(() => entry.video.removeEventListener('canplay', tryPlay), 8000);
+                }
+
+                logScan(id);
+                refreshStatusPill();
+            }
+
+            // ================================================================
+            // ON TARGET LOST
+            // ================================================================
+            function onTargetLost(id) {
+                const entry = arTargets.get(id);
+                if (!entry) return;
+                entry.visible = false;
+                entry.corners.classList.remove('tracking', 'lock-anim');
+
+                entry.inner.classList.remove('tracking');
+                entry.inner.classList.add('losing');
+                clearTimeout(entry._lostTeardownTimer);
+                entry._lostTeardownTimer = setTimeout(() => {
+                    if (!entry.visible) {
+                        entry.inner.classList.remove('visible', 'losing');
+                        entry.inner.style.opacity = '';
+                        entry.video.pause();
+                    }
+                }, LOST_HOLD_MAX_MS + 200);
+                refreshStatusPill();
+            }
+
+            // ================================================================
+            // UNMUTE ON TAP
+            // ================================================================
+            function armUnmuteOnNextTap() {
+                if (_unmuteArmed) return;
+                _unmuteArmed = true;
+                const unmuteAll = () => {
+                    let stillMuted = false;
+                    arTargets.forEach(entry => {
+                        if (entry.video.muted) {
+                            entry.video.muted = false;
+                            entry.video.play().catch(() => { entry.video.muted = true;
+                                stillMuted = true; });
+                        }
+                    });
+                    if (!stillMuted) {
+                        _unmuteArmed = false;
+                        document.removeEventListener('pointerdown', unmuteAll);
+                    }
+                };
+                document.addEventListener('pointerdown', unmuteAll);
+            }
+
+            // ================================================================
+            // STATUS PILL
+            // ================================================================
+            function refreshStatusPill() {
+                const pill = document.getElementById('statusPill');
+                const text = document.getElementById('statusText');
+                const activeCount = [...arTargets.values()].filter(e => e.visible).length;
+                clearTimeout(window._pillTimer);
+                if (activeCount > 0) {
+                    pill.classList.remove('fade-out');
+                    pill.className = 'status-pill found';
+                    text.textContent = activeCount === 1 ? 'Memory found' : activeCount + ' memories found';
+                    window._pillTimer = setTimeout(() => pill.classList.add('fade-out'), 1800);
+                } else {
+                    pill.classList.remove('fade-out');
+                    pill.className = 'status-pill ready';
+                    text.textContent = 'Scanning for photos…';
+                }
+            }
+
+            // ================================================================
+            // LOG SCAN
+            // ================================================================
+            async function logScan(memoryId) {
+                try {
+                    await fetch(`${BACKEND_URL}/api/scan/log`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            memoryId,
+                            sessionId: getSessionId(),
+                            deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+                            userAgent: navigator.userAgent
+                        })
+                    });
+                } catch (e) { /* ignore */ }
+            }
+
+            // ================================================================
+            // TRIGGER OPEN WITH CONFIRM
+            // ================================================================
+            function triggerOpenWithConfirm(targetId) {
+                const entry = arTargets.get(targetId);
+                if (!entry) { openFullscreen(targetId); return; }
+
+                entry.corners.classList.remove('confirm-pulse');
+                void entry.corners.offsetWidth;
+                entry.corners.classList.add('confirm-pulse');
+                setTimeout(() => entry.corners.classList.remove('confirm-pulse'), 200);
+
+                if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
+                setTimeout(() => openFullscreen(targetId), 90);
+            }
+
+            // ================================================================
+            // FULLSCREEN PLAYER
+            // ================================================================
+            function openFullscreen(targetId) {
+                const entry = arTargets.get(targetId);
+                if (!entry) return;
+                stopScanLoop();
+                fsOpenTargetId = targetId;
+                const fsPlayer = document.getElementById('fullscreen-player');
+
+                const srcRect = entry.video.getBoundingClientRect();
+                const vw = window.innerWidth,
+                    vh = window.innerHeight;
+                if (srcRect.width > 0 && srcRect.height > 0) {
+                    const originX = ((srcRect.left + srcRect.width / 2) / vw) * 100;
+                    const originY = ((srcRect.top + srcRect.height / 2) / vh) * 100;
+                    const scaleX = srcRect.width / vw;
+                    const scaleY = srcRect.height / vh;
+                    const startScale = Math.max(0.08, Math.min(scaleX, scaleY, 1));
+                    fsPlayer.style.setProperty('--fs-origin-x', originX + '%');
+                    fsPlayer.style.setProperty('--fs-origin-y', originY + '%');
+                    fsPlayer.style.setProperty('--fs-origin-scale', String(startScale));
+                } else {
+                    fsPlayer.style.setProperty('--fs-origin-x', '50%');
+                    fsPlayer.style.setProperty('--fs-origin-y', '50%');
+                    fsPlayer.style.setProperty('--fs-origin-scale', '0.3');
+                }
+
+                fsVideo.src = entry.video.currentSrc || entry.video.src || '';
+                fsVideo.muted = false;
+                fsVideo.currentTime = entry.video.currentTime || 0;
+                entry.video.pause();
+
+                fsPlayer.classList.remove('closing');
+                requestAnimationFrame(() => {
+                    fsPlayer.classList.add('open');
+                });
+
+                fsVideo.play().catch(() => { fsVideo.muted = true;
+                    fsVideo.play().catch(() => {}); });
+                updateFsMuteIcon();
+                showFsControls(true);
+            }
+
+            function closeFullscreen(e) {
+                if (e) e.stopPropagation();
+                const fsPlayer = document.getElementById('fullscreen-player');
+                document.getElementById('fsMenu').classList.remove('open');
+                fsVideo.pause();
+                const entry = fsOpenTargetId && arTargets.get(fsOpenTargetId);
+                if (entry) entry.video.play().catch(() => {});
+                fsOpenTargetId = null;
+                startScanLoop();
+
+                fsPlayer.classList.remove('open');
+                fsPlayer.classList.add('closing');
+                const onCloseTransitionEnd = (ev) => {
+                    if (ev.target !== fsPlayer) return;
+                    fsPlayer.classList.remove('closing');
+                    fsPlayer.removeEventListener('transitionend', onCloseTransitionEnd);
+                };
+                fsPlayer.addEventListener('transitionend', onCloseTransitionEnd);
+                setTimeout(() => {
+                    fsPlayer.classList.remove('closing');
+                    fsPlayer.removeEventListener('transitionend', onCloseTransitionEnd);
+                }, 500);
+            }
+
+            function onFsTap(e) {
+                const controls = document.getElementById('fs-controls');
+                if (controls.classList.contains('hidden')) {
+                    showFsControls(true);
+                } else {
+                    showFsControls(false);
+                }
+            }
+
+            function showFsControls(visible) {
+                const controls = document.getElementById('fs-controls');
+                clearTimeout(fsControlsTimer);
+                if (visible) {
+                    controls.classList.remove('hidden');
+                    if (!fsVideo.paused) {
+                        fsControlsTimer = setTimeout(() => controls.classList.add('hidden'), 3200);
+                    }
+                } else {
+                    controls.classList.add('hidden');
+                    document.getElementById('fsMenu').classList.remove('open');
+                }
+            }
+
+            function toggleFsPlay(e) {
+                if (e) e.stopPropagation();
+                if (fsVideo.paused) fsVideo.play();
+                else fsVideo.pause();
+            }
+
+            function toggleFsMute(e) {
+                if (e) e.stopPropagation();
+                fsVideo.muted = !fsVideo.muted;
+                updateFsMuteIcon();
+            }
+
+            function updateFsMuteIcon() {
+                const btn = document.getElementById('fsMuteBtn');
+                btn.innerHTML = fsVideo.muted ?
+                    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>' :
+                    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>';
+            }
+
+            function toggleFsMenu(e) {
+                e.stopPropagation();
+                document.getElementById('fsMenu').classList.toggle('open');
+            }
+
+            async function downloadCurrentVideo(e) {
+                e.stopPropagation();
+                document.getElementById('fsMenu').classList.remove('open');
+                const url = fsVideo.currentSrc || fsVideo.src;
+                if (!url) return;
+                try {
+                    const res = await fetch(url);
+                    const blob = await res.blob();
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'memoria-video.mp4';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    showFsToast('Downloading video…');
                 } catch (err) {
-                    console.error('[Memoria] camera restart on return failed:', err);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'memoria-video.mp4';
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    showFsToast('Downloading video…');
+                }
+            }
+
+            function showFsToast(msg) {
+                const toast = document.getElementById('fs-toast');
+                toast.textContent = msg;
+                toast.classList.add('show');
+                clearTimeout(window._toastTimer);
+                window._toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+            }
+
+            // ---- FS video event listeners ----
+            fsVideo.addEventListener('play', () => {
+                document.getElementById('fsCenterIcon').innerHTML =
+                    '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+                document.querySelector('#fsPlayBtn svg').innerHTML =
+                    '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+                showFsControls(true);
+            });
+            fsVideo.addEventListener('pause', () => {
+                document.getElementById('fsCenterIcon').innerHTML = '<path d="M8 5v14l11-7z"/>';
+                document.querySelector('#fsPlayBtn svg').innerHTML = '<path d="M8 5v14l11-7z"/>';
+                showFsControls(true);
+                clearTimeout(fsControlsTimer);
+            });
+            fsVideo.addEventListener('loadedmetadata', () => {
+                document.getElementById('fsTimeDuration').textContent = fmtTime(fsVideo.duration);
+            });
+            fsVideo.addEventListener('timeupdate', () => {
+                if (fsScrubbing) return;
+                const pct = fsVideo.duration ? (fsVideo.currentTime / fsVideo.duration) * 100 : 0;
+                document.getElementById('fsScrubFill').style.width = pct + '%';
+                document.getElementById('fsScrubHandle').style.left = pct + '%';
+                document.getElementById('fsTimeCurrent').textContent = fmtTime(fsVideo.currentTime);
+            });
+            fsVideo.addEventListener('progress', () => {
+                if (fsVideo.buffered.length && fsVideo.duration) {
+                    const end = fsVideo.buffered.end(fsVideo.buffered.length - 1);
+                    document.getElementById('fsScrubBuffer').style.width = ((end / fsVideo.duration) * 100) + '%';
+                }
+            });
+            fsVideo.addEventListener('ended', () => {
+                document.getElementById('fsCenterIcon').innerHTML = '<path d="M8 5v14l11-7z"/>';
+                document.querySelector('#fsPlayBtn svg').innerHTML = '<path d="M8 5v14l11-7z"/>';
+                showFsControls(true);
+            });
+
+            // ---- Scrubber ----
+            const scrubTrack = document.getElementById('fsScrubTrack');
+
+            function scrubToClientX(clientX) {
+                const rect = scrubTrack.getBoundingClientRect();
+                let pct = (clientX - rect.left) / rect.width;
+                pct = Math.max(0, Math.min(1, pct));
+                if (fsVideo.duration) fsVideo.currentTime = pct * fsVideo.duration;
+                document.getElementById('fsScrubFill').style.width = (pct * 100) + '%';
+                document.getElementById('fsScrubHandle').style.left = (pct * 100) + '%';
+                document.getElementById('fsTimeCurrent').textContent = fmtTime(pct * (fsVideo.duration || 0));
+            }
+
+            function scrubStart(e) {
+                e.stopPropagation();
+                fsScrubbing = true;
+                clearTimeout(fsControlsTimer);
+                const x = e.touches ? e.touches[0].clientX : e.clientX;
+                scrubToClientX(x);
+            }
+
+            function scrubMove(e) {
+                if (!fsScrubbing) return;
+                const x = e.touches ? e.touches[0].clientX : e.clientX;
+                scrubToClientX(x);
+            }
+
+            function scrubEnd() {
+                if (!fsScrubbing) return;
+                fsScrubbing = false;
+                showFsControls(true);
+            }
+            scrubTrack.addEventListener('mousedown', scrubStart);
+            scrubTrack.addEventListener('touchstart', scrubStart, { passive: true });
+            window.addEventListener('mousemove', scrubMove);
+            window.addEventListener('touchmove', scrubMove, { passive: true });
+            window.addEventListener('mouseup', scrubEnd);
+            window.addEventListener('touchend', scrubEnd);
+
+            document.addEventListener('click', (e) => {
+                const menu = document.getElementById('fsMenu');
+                if (menu.classList.contains('open') && !menu.contains(e.target)) {
+                    menu.classList.remove('open');
+                }
+            });
+
+            // ================================================================
+            // CAMERA CONTROLS
+            // ================================================================
+            async function toggleTorch() {
+                if (!videoTrack) return;
+                if (!videoTrack.getCapabilities || !videoTrack.getCapabilities().torch) return;
+                torchOn = !torchOn;
+                await videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+                document.getElementById('torchBtn').style.color = torchOn ? 'var(--gold)' : '#fff';
+            }
+
+            async function switchCamera() {
+                if (!mindarThree) return;
+                mindarThree.switchCamera();
+                setTimeout(() => {
+                    try { videoTrack = mindarThree.video.srcObject.getVideoTracks()[0]; } catch (_) {}
+                }, 500);
+            }
+
+            function stopScanLoop() {
+                if (mindarThree && mindarThree.controller) mindarThree.controller.stopProcessVideo();
+            }
+
+            function startScanLoop() {
+                if (mindarThree && mindarThree.controller && mindarThree.video) {
+                    mindarThree.controller.processVideo(mindarThree.video);
+                }
+            }
+
+            // ================================================================
+            // DEBUG HUD
+            // ================================================================
+            function updateDebugHud(fps, frameMs, sensorFusionActive) {
+                const hud = document.getElementById('debug-hud');
+                if (!hud) return;
+                const fpsClass = fps >= 24 ? 'hud-good' : fps >= 14 ? 'hud-warn' : 'hud-bad';
+                let html =
+                    `<div class="hud-section"><div class="hud-row"><span class="hud-label">FPS</span><span class="${fpsClass}">${fps}</span></div>`;
+                html +=
+                    `<div class="hud-row"><span class="hud-label">Frame</span><span>${frameMs.toFixed(1)}ms</span></div>`;
+                html +=
+                    `<div class="hud-row"><span class="hud-label">Sensor</span><span class="${sensorFusionActive ? 'hud-good' : 'hud-warn'}">${sensorFusionActive ? 'gyro' : 'no gyro'}</span></div>`;
+                html += `<div class="hud-row"><span class="hud-label">Targets</span><span>${arTargets.size}</span></div></div>`;
+
+                arTargets.forEach((entry, id) => {
+                    const tracking = entry.anchor.visible;
+                    const holding = !tracking && entry._lostSince != null;
+                    const state = tracking ? 'TRACK' : holding ? 'HOLD' : 'LOST';
+                    const stateClass = tracking ? 'hud-good' : holding ? 'hud-warn' : 'hud-bad';
+                    const confidence = entry.confidence !== undefined ? entry.confidence : 0;
+                    const stability = entry.stability !== undefined ? entry.stability : 0;
+                    const locked = entry.isAnchorLocked ? '🔒' : '🔓';
+                    html += `<div class="hud-target">`;
+                    html +=
+                        `<div class="hud-row"><span class="hud-label">#${id} ${locked}</span><span class="${stateClass}">${state}</span></div>`;
+                    html +=
+                        `<div class="hud-row"><span class="hud-label">Conf</span><span class="${scoreClass(confidence)}">${(confidence*100).toFixed(0)}%</span></div>`;
+                    html +=
+                        `<div class="hud-row"><span class="hud-label">Stab</span><span class="${scoreClass(stability)}">${(stability*100).toFixed(0)}%</span></div>`;
+                    html +=
+                        `<div class="hud-row"><span class="hud-label">Vel</span><span>${(entry.userVel||0).toFixed(2)}</span></div>`;
+                    html +=
+                        `<div class="hud-row"><span class="hud-label">Reject</span><span>${entry._rejectCount||0}</span></div>`;
+                    html += `</div>`;
+                });
+                hud.innerHTML = html;
+            }
+
+            function onLogoTap() {
+                _logoTapCount++;
+                clearTimeout(_logoTapTimer);
+                _logoTapTimer = setTimeout(() => { _logoTapCount = 0; }, 800);
+                if (_logoTapCount >= 5) {
+                    _logoTapCount = 0;
+                    window.__memoriaDebug = !window.__memoriaDebug;
+                    document.getElementById('debug-hud').classList.toggle('on', window.__memoriaDebug);
+                }
+            }
+
+            // ================================================================
+            // START SCANNER
+            // ================================================================
+            async function startScanner() {
+                document.getElementById('demo-overlay').classList.add('hidden');
+                setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
+                document.getElementById('loading').classList.remove('hidden');
+
+                // Gyro permission (iOS)
+                if (typeof DeviceOrientationEvent !== 'undefined' &&
+                    typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    try { await DeviceOrientationEvent.requestPermission(); } catch (_) {}
+                }
+
+                // ---- Instant preview ----
+                let previewStream;
+                try {
+                    previewStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' },
+                        audio: false
+                    });
+                } catch (err) {
+                    showCameraErrorScreen(err);
+                    return;
+                }
+                const previewVideo = document.getElementById('instant-preview');
+                previewVideo.srcObject = previewStream;
+
+                function sizePreview() {
+                    previewVideo.style.width = window.innerWidth + 'px';
+                    previewVideo.style.height = window.innerHeight + 'px';
+                }
+                sizePreview();
+                previewVideo.addEventListener('loadedmetadata', sizePreview);
+                window.addEventListener('resize', sizePreview);
+                window.addEventListener('orientationchange', sizePreview);
+
+                document.getElementById('loading').classList.add('hidden');
+                localStorage.setItem(PERM_KEY, 'true');
+
+                // ---- Fetch & compile targets ----
+                let mindUrl;
+                try {
+                    await wakeBackend();
+                    mindUrl = await fetchAndCompileTargets();
+                } catch (err) {
+                    console.error('[Memoria] target prep failed:', err);
+                    const statusText = document.getElementById('statusText');
+                    if (statusText) statusText.textContent = 'Could not load memories. Pull to retry.';
+                    return;
+                }
+                if (!mindUrl) return;
+
+                // ---- Stop preview, start MindAR ----
+                previewStream.getTracks().forEach(t => t.stop());
+                previewVideo.srcObject = null;
+                previewVideo.style.display = 'none';
+
+                try {
+                    await beginMindAR(mindUrl);
+                } catch (err) {
+                    console.error('[Memoria] MindAR start failed:', err);
                     showCameraErrorScreen(err);
                 }
             }
-        }
-        document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        // ================================================================
-        // BEGIN MINDAR — the core tracking engine with professional pipeline
-        // ================================================================
-        async function beginMindAR(mindUrl) {
-            const statusText = document.getElementById('statusText');
+            // ================================================================
+            // INIT — load MindAR first, then init scanner
+            // ================================================================
+            let _mindARLoaded = false;
 
-            mindarThree = new window.MINDAR.IMAGE.MindARThree({
-                container: document.getElementById('ar-container'),
-                imageTargetSrc: mindUrl,
-                maxTrack: Math.min(_targets.length, 4),
-                filterMinCF: 0.00015,
-                filterBeta: 180,
-                uiLoading: 'no',
-                uiScanning: 'no',
-                uiError: 'no',
-            });
-
-            await mindarThree.start();
-
-            try {
-                videoTrack = mindarThree.video.srcObject.getVideoTracks()[0];
-            } catch (_) {}
-
-            acquireWakeLock();
-
-            statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
-
-            _targets.forEach((target, index) => {
-                const anchor = mindarThree.addCSSAnchor(index);
-                spawnArTarget(String(target.id), index, target, anchor);
-
-                anchor.onTargetFound = () => onTargetFound(String(target.id));
-                anchor.onTargetLost = () => onTargetLost(String(target.id));
-            });
-
-            // ---- Gyroscope ----
-            function onDeviceOrientation(e) {
-                if (e.alpha == null) return;
-                _orientAvailable = true;
-                _lastOrient = { alpha: e.alpha, beta: e.beta, gamma: e.gamma };
-            }
-            window.addEventListener('deviceorientation', onDeviceOrientation, true);
-
-            function currentOrientQuat(out) {
-                if (!_lastOrient) return null;
-                _orientEuler.set(
-                    THREE.MathUtils.degToRad(_lastOrient.beta || 0),
-                    THREE.MathUtils.degToRad(_lastOrient.alpha || 0),
-                    -THREE.MathUtils.degToRad(_lastOrient.gamma || 0),
-                    'YXZ'
-                );
-                return out.setFromEuler(_orientEuler);
-            }
-
-            // ---- Main render loop with professional spatial AR pipeline ----
-            const _rawPos = new THREE.Vector3();
-            const _rawQuat = new THREE.Quaternion();
-            const _rawScale = new THREE.Vector3();
-            const _leadPos = new THREE.Vector3();
-
-            mindarThree.renderer.setAnimationLoop(() => {
-                const now = performance.now();
-                const dt = Math.max(0, now - _lastFrameTime);
-                _lastFrameTime = now;
-                const dtSec = dt / 1000;
-
-                // FPS
-                _frameCount++;
-                _fpsAccum += dt;
-                if (now - _lastFpsUpdate > 500) {
-                    _fps = Math.round((_frameCount * 1000) / _fpsAccum);
-                    _frameCount = 0;
-                    _fpsAccum = 0;
-                    _lastFpsUpdate = now;
-                }
-
-                const curOrientQuat = _orientAvailable ? currentOrientQuat(_orientQuat) : null;
-
-                // ---- Process each target through the spatial AR pipeline ----
-                arTargets.forEach((entry) => {
-                    const { anchor, smoothed, inner, kalman, history, anchorLock } = entry;
-                    const rawVisible = anchor.visible;
-                    const wasVisible = smoothed.userData.wasVisible === true;
-
-                    // ---- Step 1: Raw detection from MindAR ----
-                    if (rawVisible) {
-                        anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
-
-                        // ---- Step 2: Feature validation & outlier rejection ----
-                        let accept = true;
-                        if (entry._lastGoodRawPos && wasVisible) {
-                            const posJump = entry._lastGoodRawPos.distanceTo(_rawPos);
-                            const rotJump = entry._lastGoodRawQuat ? entry._lastGoodRawQuat.angleTo(_rawQuat) : 0;
-                            const posLimit = 1.2 * Math.max(dtSec, 1 / 120);
-                            const rotLimit = 12 * Math.max(dtSec, 1 / 120);
-                            if (posJump > posLimit || rotJump > rotLimit) {
-                                entry._rejectStreak = (entry._rejectStreak || 0) + 1;
-                                if (entry._rejectStreak <= 3) accept = false;
-                            } else {
-                                entry._rejectStreak = 0;
-                            }
-                        }
-                        entry._rejectedLastFrame = !accept;
-
-                        if (!accept) {
-                            entry._rejectCount = (entry._rejectCount || 0) + 1;
-                            // Still render using smoothed pose (no update)
-                            entry.cssObject.element.style.visibility = 'visible';
-                            smoothed.userData.wasVisible = true;
-                            entry._consecutiveFrames = (entry._consecutiveFrames || 0) + 1;
-                            // Update corner stability
-                            entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability ||
-                                0.5))));
-                            return;
-                        }
-
-                        // ---- Step 3: Update last good raw pose ----
-                        entry._lastGoodRawPos = (entry._lastGoodRawPos || new THREE.Vector3()).copy(_rawPos);
-                        entry._lastGoodRawQuat = (entry._lastGoodRawQuat || new THREE.Quaternion()).copy(_rawQuat);
-                        entry._lostSince = null;
-                        entry._holdOrientQuat = null;
-
-                        entry.cssObject.element.style.visibility = 'visible';
-                        entry.inner.style.opacity = '';
-                        smoothed.userData.wasVisible = true;
-                        entry._consecutiveFrames = (entry._consecutiveFrames || 0) + 1;
-
-                        // ---- Step 4: Compute velocity (for prediction) ----
-                        const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
-                        const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
-                        entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.65 + instVel * 0.35;
-
-                        if (dtSec > 0) {
-                            const instVelVec = _rawPos.clone().sub(prevRaw).divideScalar(dtSec);
-                            entry._velVec = entry._velVec ?
-                                entry._velVec.lerp(instVelVec, 0.2) :
-                                instVelVec;
-                        }
-                        entry._prevRawPos.copy(_rawPos);
-
-                        // ---- Step 5: Push to pose history ----
-                        entry.history.push(_rawPos, _rawQuat, _rawScale, now);
-
-                        // ---- Step 6: Compute confidence score ----
-                        const confidence = computeConfidence(entry);
-                        entry.confidence = confidence;
-
-                        // ---- Step 7: Kalman filter update ----
-                        const kalmanResult = entry.kalman.update(_rawPos, _rawQuat, _rawScale, confidence);
-
-                        // ---- Step 8: Multi-frame weighted average ----
-                        const avgResult = entry.history.getWeightedAverage();
-
-                        // ---- Step 9: Fuse Kalman + history + raw (weighted by confidence) ----
-                        let fusedPos, fusedQuat, fusedScale;
-                        if (avgResult && confidence > CONF_MID) {
-                            // Blend Kalman with history average
-                            const kWeight = 0.4 + 0.4 * confidence;
-                            const hWeight = 1 - kWeight;
-                            fusedPos = kalmanResult.pos.clone().lerp(avgResult.pos, hWeight);
-                            fusedQuat = kalmanResult.quat.clone().slerp(avgResult.quat, hWeight);
-                            fusedScale = kalmanResult.scale.clone().lerp(avgResult.scale, hWeight);
-                        } else {
-                            fusedPos = kalmanResult.pos.clone();
-                            fusedQuat = kalmanResult.quat.clone();
-                            fusedScale = kalmanResult.scale.clone();
-                        }
-
-                        // ---- Step 10: Gyroscope fusion ----
-                        if (curOrientQuat && entry._lastGoodRawQuat) {
-                            // Use gyro to correct rotation drift
-                            const gyroWeight = 0.12 * (1 - confidence);
-                            if (gyroWeight > 0.01) {
-                                // Approximate camera rotation delta from gyro
-                                const gyroCorrection = curOrientQuat.clone();
-                                // Blend with existing quaternion
-                                fusedQuat.slerp(gyroCorrection, gyroWeight);
-                                fusedQuat.normalize();
-                            }
-                        }
-
-                        // ---- Step 11: Velocity prediction (micro-lead) ----
-                        const velData = entry.history.getVelocity(dtSec);
-                        if (velData && entry.userVel > 0.02) {
-                            const leadScale = Math.min(0.025, velData.pos.length() * 0.04);
-                            _leadPos.copy(fusedPos).add(velData.pos.clone().multiplyScalar(leadScale));
-                        } else {
-                            _leadPos.copy(fusedPos);
-                        }
-
-                        // ---- Step 12: Anchor locking (after 1s stable) ----
-                        const locked = entry.anchorLock.update(_leadPos, fusedQuat, fusedScale, confidence, dtSec);
-                        if (locked) {
-                            // Just locked — store the anchor pose
-                        }
-                        const isLocked = entry.anchorLock.apply(_leadPos, fusedQuat, fusedScale, 0.025);
-
-                        // ---- Step 13: Final pose assignment ----
-                        smoothed.position.copy(_leadPos);
-                        smoothed.quaternion.copy(fusedQuat);
-                        smoothed.scale.copy(fusedScale);
-
-                        // ---- Step 14: Stability tracking ----
-                        const jitterPenalty = Math.min(1, entry.userVel / 0.6);
-                        const targetStab = 1 - jitterPenalty * 0.5;
-                        entry.stability = entry.stability === undefined ? targetStab :
-                            entry.stability * 0.88 + targetStab * 0.12;
-
-                        // ---- Step 15: Boundary lock (keep video inside image) ----
-                        // The CSS3DObject's matrix already encodes the correct boundary
-                        // via the anchor's postMatrix. We just ensure scale is consistent.
-                        // Additional boundary enforcement: clamp scale to reasonable range
-                        const minScale = 0.3;
-                        const maxScale = 3.0;
-                        smoothed.scale.x = Math.max(minScale, Math.min(maxScale, smoothed.scale.x));
-                        smoothed.scale.y = Math.max(minScale, Math.min(maxScale, smoothed.scale.y));
-                        smoothed.scale.z = Math.max(minScale, Math.min(maxScale, smoothed.scale.z));
-
-                        // ---- Step 16: Apply final transform ----
-                        smoothed.updateMatrix();
-
-                        // ---- Step 17: Update corner bracket confidence glow ----
-                        entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability ||
-                            0.5))));
-
-                        // ---- Step 18: Update anchor lock status ----
-                        entry.isAnchorLocked = isLocked;
-
-                        // ---- Step 19: Reset lost timer ----
-                        entry._lostSince = null;
-
-                    } else {
-                        // ---- TARGET NOT VISIBLE ----
-                        if (wasVisible) {
-                            entry._lostSince = now;
-                            entry._holdOrientQuat = curOrientQuat ? curOrientQuat.clone() : null;
-                            // Store the last good pose for recovery
-                            entry._lostPos = smoothed.position.clone();
-                            entry._lostQuat = smoothed.quaternion.clone();
-                            entry._lostScale = smoothed.scale.clone();
-                        }
-
-                        const lostSince = entry._lostSince;
-                        if (lostSince == null) {
-                            entry.cssObject.element.style.visibility = 'hidden';
-                            smoothed.userData.wasVisible = false;
-                            return;
-                        }
-
-                        const lostMs = now - lostSince;
-
-                        if (lostMs > LOST_HOLD_MAX_MS) {
-                            entry.cssObject.element.style.visibility = 'hidden';
-                            smoothed.userData.wasVisible = false;
-                            entry.history.clear();
-                            entry.anchorLock.reset();
-                            return;
-                        }
-
-                        // ---- Recovery: hold last good pose with gyro correction & fade ----
-                        entry.cssObject.element.style.visibility = 'visible';
-                        smoothed.userData.wasVisible = true;
-
-                        // Gyro-correct the held pose
-                        if (curOrientQuat && entry._holdOrientQuat && entry._lostQuat) {
-                            _prevOrientQuat.copy(entry._holdOrientQuat).invert();
-                            _orientDeltaQuat.copy(curOrientQuat).multiply(_prevOrientQuat);
-                            const correctionAngle = _orientDeltaQuat.angleTo(_identityQuat);
-                            const MAX_CORRECTION_RAD = THREE.MathUtils.degToRad(30);
-                            if (correctionAngle > MAX_CORRECTION_RAD) {
-                                _orientDeltaQuat.slerp(_identityQuat, 1 - MAX_CORRECTION_RAD / correctionAngle);
-                            }
-                            const correctedQuat = entry._lostQuat.clone();
-                            correctedQuat.multiply(_orientDeltaQuat);
-                            smoothed.quaternion.copy(correctedQuat);
-                        } else if (entry._lostQuat) {
-                            smoothed.quaternion.copy(entry._lostQuat);
-                        }
-                        if (entry._lostPos) smoothed.position.copy(entry._lostPos);
-                        if (entry._lostScale) smoothed.scale.copy(entry._lostScale);
-
-                        // Fade
-                        const fadeT = lostMs <= LOST_FADE_START_MS ? 0 :
-                            Math.min(1, (lostMs - LOST_FADE_START_MS) / LOST_FADE_DURATION_MS);
-                        entry.inner.style.opacity = String(1 - fadeT * 0.82);
-                        entry.stability = entry.stability === undefined ? 0.4 : entry.stability * 0.92;
-
-                        entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability))));
-                        smoothed.updateMatrix();
-                    }
-                });
-
-                // ---- Render ----
-                mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
-                mindarThree.cssRenderer.render(mindarThree.cssScene, mindarThree.camera);
-
-                // ---- Debug HUD ----
-                if (window.__memoriaDebug) updateDebugHud(_fps, dt, curOrientQuat !== null);
-            });
-        }
-
-        // ================================================================
-        // SPAWN AR TARGET — creates video wrapper + tracking state
-        // ================================================================
-        function spawnArTarget(id, targetIndex, target, anchor) {
-            console.log('[Memoria] spawning target', id, {
-                photoWidth: target.photoWidth,
-                photoHeight: target.photoHeight,
-                videoRect: target.videoRect,
-                videoUrl: target.videoUrl,
-            });
-
-            const pw = target.photoWidth,
-                ph = target.photoHeight;
-            const aspect = (typeof pw === 'number' && pw > 0 && typeof ph === 'number' && ph > 0) ?
-                ph / pw : 1;
-
-            const wrapper = document.createElement('div');
-            wrapper.className = 'ar-video-wrapper';
-            wrapper.dataset.targetId = id;
-            wrapper.style.width = PLANE_PX + 'px';
-            wrapper.style.height = (PLANE_PX * aspect) + 'px';
-
-            const inner = document.createElement('div');
-            inner.className = 'ar-video-inner';
-
-            const video = document.createElement('video');
-            video.className = 'ar-video';
-            video.loop = true;
-            video.playsInline = true;
-            video.muted = true;
-            video.volume = 1;
-            video.preload = 'auto';
-            video.src = target.videoUrl;
-            video.addEventListener('error', () => {
-                const mediaErr = video.error;
-                console.error('[Memoria] AR video failed to load', id, target.videoUrl, {
-                    code: mediaErr && mediaErr.code,
-                    message: mediaErr && mediaErr.message,
-                });
-            });
-            video.load();
-            inner.appendChild(video);
-            wrapper.appendChild(inner);
-
-            // Corners
-            const corners = document.createElement('div');
-            corners.className = 'ar-corners';
-            const edge = document.createElement('div');
-            edge.className = 'ar-edge';
-            corners.appendChild(edge);
-            ['tl', 'tr', 'bl', 'br'].forEach(pos => {
-                const c = document.createElement('div');
-                c.className = `ar-corner ar-corner-${pos}`;
-                corners.appendChild(c);
-            });
-            wrapper.appendChild(corners);
-
-            // Click / pointerdown handlers
-            wrapper.addEventListener('click', () => {
-                entry_openGuard(id);
-            });
-            wrapper.addEventListener('pointerdown', (e) => {
-                entry_openGuard(id);
-            });
-
-            function entry_openGuard(targetId) {
-                const e = arTargets.get(targetId);
-                if (!e) return;
-                const now = performance.now();
-                if (e._lastOpenTriggerAt && now - e._lastOpenTriggerAt < 600) return;
-                e._lastOpenTriggerAt = now;
-                triggerOpenWithConfirm(targetId);
-            }
-
-            // Position video inside poster using videoRect
-            const rawRect = target.videoRect || {};
-            const numOr = (v, fallback) => (typeof v === 'number' && isFinite(v)) ? v : fallback;
-            const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-            const rectW = clamp(numOr(rawRect.width, 45), 1, 100);
-            const rectH = clamp(numOr(rawRect.height, 80), 1, 100);
-            const rectX = clamp(numOr(rawRect.x, 50), 0, 100);
-            const rectY = clamp(numOr(rawRect.y, 50), 0, 100);
-            const left = clamp(rectX - rectW / 2, 0, 100 - rectW);
-            const top = clamp(rectY - rectH / 2, 0, 100 - rectH);
-            video.style.position = 'absolute';
-            video.style.left = left + '%';
-            video.style.top = top + '%';
-            video.style.width = rectW + '%';
-            video.style.height = rectH + '%';
-
-            // CSS3DObject
-            const cssObject = new CSS3DObject(wrapper);
-            cssObject.scale.set(SCALE, SCALE, SCALE);
-
-            // Smoothed parent
-            const smoothed = new THREE.Object3D();
-            smoothed.add(cssObject);
-            mindarThree.cssScene.add(smoothed);
-            smoothed.matrixAutoUpdate = true;
-            smoothed.position.setFromMatrixPosition(anchor.group.matrix);
-            smoothed.quaternion.setFromRotationMatrix(anchor.group.matrix);
-            smoothed.scale.setFromMatrixScale(anchor.group.matrix);
-
-            // ---- Professional tracking state ----
-            const entry = {
-                wrapper,
-                inner,
-                corners,
-                video,
-                cssObject,
-                smoothed,
-                anchor,
-                lastSeen: 0,
-                visible: false,
-                // Kalman filter
-                kalman: new KalmanPose(),
-                // Pose history
-                history: new PoseHistory(POSE_HISTORY_LEN),
-                // Anchor lock
-                anchorLock: new AnchorLock(),
-                // Velocity
-                userVel: 0,
-                _velVec: null,
-                _prevRawPos: null,
-                // Confidence
-                confidence: 0.5,
-                stability: 0.5,
-                // Lost recovery
-                _lostSince: null,
-                _holdOrientQuat: null,
-                _lostPos: null,
-                _lostQuat: null,
-                _lostScale: null,
-                _lostTeardownTimer: null,
-                // Rejection
-                _rejectStreak: 0,
-                _rejectCount: 0,
-                _rejectedLastFrame: false,
-                // Consecutive frames
-                _consecutiveFrames: 0,
-                // Last good raw
-                _lastGoodRawPos: null,
-                _lastGoodRawQuat: null,
-                // Anchor lock status
-                isAnchorLocked: false,
-                // Open guard
-                _lastOpenTriggerAt: 0,
-            };
-
-            arTargets.set(id, entry);
-        }
-
-        // ================================================================
-        // ON TARGET FOUND
-        // ================================================================
-        function onTargetFound(id) {
-            const entry = arTargets.get(id);
-            if (!entry) return;
-            entry.visible = true;
-            entry.lastSeen = performance.now();
-            entry.inner.classList.add('visible', 'tracking');
-            entry.inner.style.opacity = '';
-            clearTimeout(entry._lostTeardownTimer);
-
-            const wasTracking = entry.corners.classList.contains('tracking');
-            entry.corners.classList.add('tracking');
-            if (!wasTracking) {
-                entry.corners.classList.remove('lock-anim');
-                void entry.corners.offsetWidth;
-                entry.corners.classList.add('lock-anim');
-                setTimeout(() => entry.corners.classList.remove('lock-anim'), 300);
-            }
-
-            // ---- Always-on sound: try unmuted first ----
-            const tryPlay = () => {
-                entry.video.muted = false;
-                entry.video.play().catch((err) => {
-                    console.warn('[Memoria] unmuted play() blocked, falling back to muted-then-retry', id, err &&
-                        err.name);
-                    entry.video.muted = true;
-                    entry.video.play().catch((err2) => {
-                        console.error('[Memoria] video.play() rejected even muted', id, err2 && err2.name, err2 &&
-                            err2.message);
-                    });
-                    armUnmuteOnNextTap();
-                });
-            };
-            if (entry.video.readyState >= 2) {
-                tryPlay();
-            } else {
-                entry.video.addEventListener('canplay', tryPlay, { once: true });
-                setTimeout(() => entry.video.removeEventListener('canplay', tryPlay), 8000);
-            }
-
-            logScan(id);
-            refreshStatusPill();
-        }
-
-        // ================================================================
-        // ON TARGET LOST
-        // ================================================================
-        function onTargetLost(id) {
-            const entry = arTargets.get(id);
-            if (!entry) return;
-            entry.visible = false;
-            entry.corners.classList.remove('tracking', 'lock-anim');
-
-            entry.inner.classList.remove('tracking');
-            entry.inner.classList.add('losing');
-            clearTimeout(entry._lostTeardownTimer);
-            entry._lostTeardownTimer = setTimeout(() => {
-                if (!entry.visible) {
-                    entry.inner.classList.remove('visible', 'losing');
-                    entry.inner.style.opacity = '';
-                    entry.video.pause();
-                }
-            }, LOST_HOLD_MAX_MS + 200);
-            refreshStatusPill();
-        }
-
-        // ================================================================
-        // UNMUTE ON TAP
-        // ================================================================
-        function armUnmuteOnNextTap() {
-            if (_unmuteArmed) return;
-            _unmuteArmed = true;
-            const unmuteAll = () => {
-                let stillMuted = false;
-                arTargets.forEach(entry => {
-                    if (entry.video.muted) {
-                        entry.video.muted = false;
-                        entry.video.play().catch(() => { entry.video.muted = true;
-                            stillMuted = true; });
-                    }
-                });
-                if (!stillMuted) {
-                    _unmuteArmed = false;
-                    document.removeEventListener('pointerdown', unmuteAll);
-                }
-            };
-            document.addEventListener('pointerdown', unmuteAll);
-        }
-
-        // ================================================================
-        // STATUS PILL
-        // ================================================================
-        function refreshStatusPill() {
-            const pill = document.getElementById('statusPill');
-            const text = document.getElementById('statusText');
-            const activeCount = [...arTargets.values()].filter(e => e.visible).length;
-            clearTimeout(window._pillTimer);
-            if (activeCount > 0) {
-                pill.classList.remove('fade-out');
-                pill.className = 'status-pill found';
-                text.textContent = activeCount === 1 ? 'Memory found' : activeCount + ' memories found';
-                window._pillTimer = setTimeout(() => pill.classList.add('fade-out'), 1800);
-            } else {
-                pill.classList.remove('fade-out');
-                pill.className = 'status-pill ready';
-                text.textContent = 'Scanning for photos…';
-            }
-        }
-
-        // ================================================================
-        // LOG SCAN
-        // ================================================================
-        async function logScan(memoryId) {
-            try {
-                await fetch(`${BACKEND_URL}/api/scan/log`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        memoryId,
-                        sessionId: getSessionId(),
-                        deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-                        userAgent: navigator.userAgent
-                    })
-                });
-            } catch (e) { /* ignore */ }
-        }
-
-        // ================================================================
-        // TRIGGER OPEN WITH CONFIRM
-        // ================================================================
-        function triggerOpenWithConfirm(targetId) {
-            const entry = arTargets.get(targetId);
-            if (!entry) { openFullscreen(targetId); return; }
-
-            entry.corners.classList.remove('confirm-pulse');
-            void entry.corners.offsetWidth;
-            entry.corners.classList.add('confirm-pulse');
-            setTimeout(() => entry.corners.classList.remove('confirm-pulse'), 200);
-
-            if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
-            setTimeout(() => openFullscreen(targetId), 90);
-        }
-
-        // ================================================================
-        // FULLSCREEN PLAYER
-        // ================================================================
-        function openFullscreen(targetId) {
-            const entry = arTargets.get(targetId);
-            if (!entry) return;
-            stopScanLoop();
-            fsOpenTargetId = targetId;
-            const fsPlayer = document.getElementById('fullscreen-player');
-
-            const srcRect = entry.video.getBoundingClientRect();
-            const vw = window.innerWidth,
-                vh = window.innerHeight;
-            if (srcRect.width > 0 && srcRect.height > 0) {
-                const originX = ((srcRect.left + srcRect.width / 2) / vw) * 100;
-                const originY = ((srcRect.top + srcRect.height / 2) / vh) * 100;
-                const scaleX = srcRect.width / vw;
-                const scaleY = srcRect.height / vh;
-                const startScale = Math.max(0.08, Math.min(scaleX, scaleY, 1));
-                fsPlayer.style.setProperty('--fs-origin-x', originX + '%');
-                fsPlayer.style.setProperty('--fs-origin-y', originY + '%');
-                fsPlayer.style.setProperty('--fs-origin-scale', String(startScale));
-            } else {
-                fsPlayer.style.setProperty('--fs-origin-x', '50%');
-                fsPlayer.style.setProperty('--fs-origin-y', '50%');
-                fsPlayer.style.setProperty('--fs-origin-scale', '0.3');
-            }
-
-            fsVideo.src = entry.video.currentSrc || entry.video.src || '';
-            fsVideo.muted = false;
-            fsVideo.currentTime = entry.video.currentTime || 0;
-            entry.video.pause();
-
-            fsPlayer.classList.remove('closing');
-            requestAnimationFrame(() => {
-                fsPlayer.classList.add('open');
-            });
-
-            fsVideo.play().catch(() => { fsVideo.muted = true;
-                fsVideo.play().catch(() => {}); });
-            updateFsMuteIcon();
-            showFsControls(true);
-        }
-
-        function closeFullscreen(e) {
-            if (e) e.stopPropagation();
-            const fsPlayer = document.getElementById('fullscreen-player');
-            document.getElementById('fsMenu').classList.remove('open');
-            fsVideo.pause();
-            const entry = fsOpenTargetId && arTargets.get(fsOpenTargetId);
-            if (entry) entry.video.play().catch(() => {});
-            fsOpenTargetId = null;
-            startScanLoop();
-
-            fsPlayer.classList.remove('open');
-            fsPlayer.classList.add('closing');
-            const onCloseTransitionEnd = (ev) => {
-                if (ev.target !== fsPlayer) return;
-                fsPlayer.classList.remove('closing');
-                fsPlayer.removeEventListener('transitionend', onCloseTransitionEnd);
-            };
-            fsPlayer.addEventListener('transitionend', onCloseTransitionEnd);
-            setTimeout(() => {
-                fsPlayer.classList.remove('closing');
-                fsPlayer.removeEventListener('transitionend', onCloseTransitionEnd);
-            }, 500);
-        }
-
-        function onFsTap(e) {
-            const controls = document.getElementById('fs-controls');
-            if (controls.classList.contains('hidden')) {
-                showFsControls(true);
-            } else {
-                showFsControls(false);
-            }
-        }
-
-        function showFsControls(visible) {
-            const controls = document.getElementById('fs-controls');
-            clearTimeout(fsControlsTimer);
-            if (visible) {
-                controls.classList.remove('hidden');
-                if (!fsVideo.paused) {
-                    fsControlsTimer = setTimeout(() => controls.classList.add('hidden'), 3200);
-                }
-            } else {
-                controls.classList.add('hidden');
-                document.getElementById('fsMenu').classList.remove('open');
-            }
-        }
-
-        function toggleFsPlay(e) {
-            if (e) e.stopPropagation();
-            if (fsVideo.paused) fsVideo.play();
-            else fsVideo.pause();
-        }
-
-        function toggleFsMute(e) {
-            if (e) e.stopPropagation();
-            fsVideo.muted = !fsVideo.muted;
-            updateFsMuteIcon();
-        }
-
-        function updateFsMuteIcon() {
-            const btn = document.getElementById('fsMuteBtn');
-            btn.innerHTML = fsVideo.muted ?
-                '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>' :
-                '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>';
-        }
-
-        function toggleFsMenu(e) {
-            e.stopPropagation();
-            document.getElementById('fsMenu').classList.toggle('open');
-        }
-
-        async function downloadCurrentVideo(e) {
-            e.stopPropagation();
-            document.getElementById('fsMenu').classList.remove('open');
-            const url = fsVideo.currentSrc || fsVideo.src;
-            if (!url) return;
-            try {
-                const res = await fetch(url);
-                const blob = await res.blob();
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = 'memoria-video.mp4';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                showFsToast('Downloading video…');
-            } catch (err) {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'memoria-video.mp4';
-                a.target = '_blank';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                showFsToast('Downloading video…');
-            }
-        }
-
-        function showFsToast(msg) {
-            const toast = document.getElementById('fs-toast');
-            toast.textContent = msg;
-            toast.classList.add('show');
-            clearTimeout(window._toastTimer);
-            window._toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
-        }
-
-        // ---- FS video event listeners ----
-        fsVideo.addEventListener('play', () => {
-            document.getElementById('fsCenterIcon').innerHTML =
-                '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
-            document.querySelector('#fsPlayBtn svg').innerHTML =
-                '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
-            showFsControls(true);
-        });
-        fsVideo.addEventListener('pause', () => {
-            document.getElementById('fsCenterIcon').innerHTML = '<path d="M8 5v14l11-7z"/>';
-            document.querySelector('#fsPlayBtn svg').innerHTML = '<path d="M8 5v14l11-7z"/>';
-            showFsControls(true);
-            clearTimeout(fsControlsTimer);
-        });
-        fsVideo.addEventListener('loadedmetadata', () => {
-            document.getElementById('fsTimeDuration').textContent = fmtTime(fsVideo.duration);
-        });
-        fsVideo.addEventListener('timeupdate', () => {
-            if (fsScrubbing) return;
-            const pct = fsVideo.duration ? (fsVideo.currentTime / fsVideo.duration) * 100 : 0;
-            document.getElementById('fsScrubFill').style.width = pct + '%';
-            document.getElementById('fsScrubHandle').style.left = pct + '%';
-            document.getElementById('fsTimeCurrent').textContent = fmtTime(fsVideo.currentTime);
-        });
-        fsVideo.addEventListener('progress', () => {
-            if (fsVideo.buffered.length && fsVideo.duration) {
-                const end = fsVideo.buffered.end(fsVideo.buffered.length - 1);
-                document.getElementById('fsScrubBuffer').style.width = ((end / fsVideo.duration) * 100) + '%';
-            }
-        });
-        fsVideo.addEventListener('ended', () => {
-            document.getElementById('fsCenterIcon').innerHTML = '<path d="M8 5v14l11-7z"/>';
-            document.querySelector('#fsPlayBtn svg').innerHTML = '<path d="M8 5v14l11-7z"/>';
-            showFsControls(true);
-        });
-
-        // ---- Scrubber ----
-        const scrubTrack = document.getElementById('fsScrubTrack');
-
-        function scrubToClientX(clientX) {
-            const rect = scrubTrack.getBoundingClientRect();
-            let pct = (clientX - rect.left) / rect.width;
-            pct = Math.max(0, Math.min(1, pct));
-            if (fsVideo.duration) fsVideo.currentTime = pct * fsVideo.duration;
-            document.getElementById('fsScrubFill').style.width = (pct * 100) + '%';
-            document.getElementById('fsScrubHandle').style.left = (pct * 100) + '%';
-            document.getElementById('fsTimeCurrent').textContent = fmtTime(pct * (fsVideo.duration || 0));
-        }
-
-        function scrubStart(e) {
-            e.stopPropagation();
-            fsScrubbing = true;
-            clearTimeout(fsControlsTimer);
-            const x = e.touches ? e.touches[0].clientX : e.clientX;
-            scrubToClientX(x);
-        }
-
-        function scrubMove(e) {
-            if (!fsScrubbing) return;
-            const x = e.touches ? e.touches[0].clientX : e.clientX;
-            scrubToClientX(x);
-        }
-
-        function scrubEnd() {
-            if (!fsScrubbing) return;
-            fsScrubbing = false;
-            showFsControls(true);
-        }
-        scrubTrack.addEventListener('mousedown', scrubStart);
-        scrubTrack.addEventListener('touchstart', scrubStart, { passive: true });
-        window.addEventListener('mousemove', scrubMove);
-        window.addEventListener('touchmove', scrubMove, { passive: true });
-        window.addEventListener('mouseup', scrubEnd);
-        window.addEventListener('touchend', scrubEnd);
-
-        document.addEventListener('click', (e) => {
-            const menu = document.getElementById('fsMenu');
-            if (menu.classList.contains('open') && !menu.contains(e.target)) {
-                menu.classList.remove('open');
-            }
-        });
-
-        // ================================================================
-        // CAMERA CONTROLS
-        // ================================================================
-        async function toggleTorch() {
-            if (!videoTrack) return;
-            if (!videoTrack.getCapabilities || !videoTrack.getCapabilities().torch) return;
-            torchOn = !torchOn;
-            await videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
-            document.getElementById('torchBtn').style.color = torchOn ? 'var(--gold)' : '#fff';
-        }
-
-        async function switchCamera() {
-            if (!mindarThree) return;
-            mindarThree.switchCamera();
-            setTimeout(() => {
-                try { videoTrack = mindarThree.video.srcObject.getVideoTracks()[0]; } catch (_) {}
-            }, 500);
-        }
-
-        function stopScanLoop() {
-            if (mindarThree && mindarThree.controller) mindarThree.controller.stopProcessVideo();
-        }
-
-        function startScanLoop() {
-            if (mindarThree && mindarThree.controller && mindarThree.video) {
-                mindarThree.controller.processVideo(mindarThree.video);
-            }
-        }
-
-        // ================================================================
-        // DEBUG HUD
-        // ================================================================
-        function updateDebugHud(fps, frameMs, sensorFusionActive) {
-            const hud = document.getElementById('debug-hud');
-            if (!hud) return;
-            const fpsClass = fps >= 24 ? 'hud-good' : fps >= 14 ? 'hud-warn' : 'hud-bad';
-            let html =
-                `<div class="hud-section"><div class="hud-row"><span class="hud-label">FPS</span><span class="${fpsClass}">${fps}</span></div>`;
-            html +=
-                `<div class="hud-row"><span class="hud-label">Frame</span><span>${frameMs.toFixed(1)}ms</span></div>`;
-            html +=
-                `<div class="hud-row"><span class="hud-label">Sensor</span><span class="${sensorFusionActive ? 'hud-good' : 'hud-warn'}">${sensorFusionActive ? 'gyro' : 'no gyro'}</span></div>`;
-            html += `<div class="hud-row"><span class="hud-label">Targets</span><span>${arTargets.size}</span></div></div>`;
-
-            arTargets.forEach((entry, id) => {
-                const tracking = entry.anchor.visible;
-                const holding = !tracking && entry._lostSince != null;
-                const state = tracking ? 'TRACK' : holding ? 'HOLD' : 'LOST';
-                const stateClass = tracking ? 'hud-good' : holding ? 'hud-warn' : 'hud-bad';
-                const confidence = entry.confidence !== undefined ? entry.confidence : 0;
-                const stability = entry.stability !== undefined ? entry.stability : 0;
-                const locked = entry.isAnchorLocked ? '🔒' : '🔓';
-                html += `<div class="hud-target">`;
-                html +=
-                    `<div class="hud-row"><span class="hud-label">#${id} ${locked}</span><span class="${stateClass}">${state}</span></div>`;
-                html +=
-                    `<div class="hud-row"><span class="hud-label">Conf</span><span class="${scoreClass(confidence)}">${(confidence*100).toFixed(0)}%</span></div>`;
-                html +=
-                    `<div class="hud-row"><span class="hud-label">Stab</span><span class="${scoreClass(stability)}">${(stability*100).toFixed(0)}%</span></div>`;
-                html +=
-                    `<div class="hud-row"><span class="hud-label">Vel</span><span>${(entry.userVel||0).toFixed(2)}</span></div>`;
-                html +=
-                    `<div class="hud-row"><span class="hud-label">Reject</span><span>${entry._rejectCount||0}</span></div>`;
-                html += `</div>`;
-            });
-            hud.innerHTML = html;
-        }
-
-        function onLogoTap() {
-            _logoTapCount++;
-            clearTimeout(_logoTapTimer);
-            _logoTapTimer = setTimeout(() => { _logoTapCount = 0; }, 800);
-            if (_logoTapCount >= 5) {
-                _logoTapCount = 0;
-                window.__memoriaDebug = !window.__memoriaDebug;
-                document.getElementById('debug-hud').classList.toggle('on', window.__memoriaDebug);
-            }
-        }
-
-        // ================================================================
-        // START SCANNER — permission + preview + MindAR
-        // ================================================================
-        async function startScanner() {
-            document.getElementById('demo-overlay').classList.add('hidden');
-            setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
-            document.getElementById('loading').classList.remove('hidden');
-
-            // Gyro permission (iOS)
-            if (typeof DeviceOrientationEvent !== 'undefined' &&
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try { await DeviceOrientationEvent.requestPermission(); } catch (_) {}
-            }
-
-            // ---- Instant preview ----
-            let previewStream;
-            try {
-                previewStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },
-                    audio: false
-                });
-            } catch (err) {
-                showCameraErrorScreen(err);
-                return;
-            }
-            const previewVideo = document.getElementById('instant-preview');
-            previewVideo.srcObject = previewStream;
-
-            function sizePreview() {
-                previewVideo.style.width = window.innerWidth + 'px';
-                previewVideo.style.height = window.innerHeight + 'px';
-            }
-            sizePreview();
-            previewVideo.addEventListener('loadedmetadata', sizePreview);
-            window.addEventListener('resize', sizePreview);
-            window.addEventListener('orientationchange', sizePreview);
-
-            document.getElementById('loading').classList.add('hidden');
-            localStorage.setItem(PERM_KEY, 'true');
-
-            // ---- Fetch & compile targets ----
-            let mindUrl;
-            try {
-                await wakeBackend();
-                mindUrl = await fetchAndCompileTargets();
-            } catch (err) {
-                console.error('[Memoria] target prep failed:', err);
-                const statusText = document.getElementById('statusText');
-                if (statusText) statusText.textContent = 'Could not load memories. Pull to retry.';
-                return;
-            }
-            if (!mindUrl) return;
-
-            // ---- Stop preview, start MindAR ----
-            previewStream.getTracks().forEach(t => t.stop());
-            previewVideo.srcObject = null;
-            previewVideo.style.display = 'none';
-
-            try {
-                await beginMindAR(mindUrl);
-            } catch (err) {
-                console.error('[Memoria] MindAR start failed:', err);
-                showCameraErrorScreen(err);
-            }
-        }
-
-        // ================================================================
-        // INIT
-        // ================================================================
-        async function initScanner() {
-            let alreadyGranted = localStorage.getItem(PERM_KEY) === 'true';
-            if (navigator.permissions && navigator.permissions.query) {
+            async function initScanner() {
                 try {
-                    const status = await navigator.permissions.query({ name: 'camera' });
-                    if (status.state === 'granted') alreadyGranted = true;
-                    if (status.state === 'denied') alreadyGranted = false;
-                    status.onchange = () => {
-                        if (status.state === 'granted') localStorage.setItem(PERM_KEY, 'true');
-                        if (status.state === 'denied') localStorage.removeItem(PERM_KEY);
-                    };
-                } catch (_) {}
+                    // Load MindAR scripts dynamically
+                    await loadMindAR();
+                    _mindARLoaded = true;
+                    console.log('[Memoria] MindAR ready, initializing scanner…');
+
+                    // Check camera permission
+                    let alreadyGranted = localStorage.getItem(PERM_KEY) === 'true';
+                    if (navigator.permissions && navigator.permissions.query) {
+                        try {
+                            const status = await navigator.permissions.query({ name: 'camera' });
+                            if (status.state === 'granted') alreadyGranted = true;
+                            if (status.state === 'denied') alreadyGranted = false;
+                            status.onchange = () => {
+                                if (status.state === 'granted') localStorage.setItem(PERM_KEY, 'true');
+                                if (status.state === 'denied') localStorage.removeItem(PERM_KEY);
+                            };
+                        } catch (_) {}
+                    }
+
+                    // Wire up the demo start button
+                    document.getElementById('demoStartBtn').addEventListener('click', () => {
+                        if (!_mindARLoaded) {
+                            alert('MindAR is still loading… please wait.');
+                            return;
+                        }
+                        startScanner();
+                    });
+
+                    if (alreadyGranted) {
+                        document.getElementById('demo-overlay').classList.add('hidden');
+                        // Small delay to ensure everything is ready
+                        setTimeout(() => startScanner(), 300);
+                    }
+                } catch (err) {
+                    console.error('[Memoria] Failed to load MindAR:', err);
+                    document.getElementById('loading').innerHTML = `
+                        <div style="text-align:center;padding:40px;max-width:360px">
+                            <div style="font-size:32px;margin-bottom:16px">⚠️</div>
+                            <h3 style="color:#fff;margin-bottom:8px">Failed to load AR engine</h3>
+                            <p style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">
+                                Could not load the AR tracking library. Please check your internet connection and refresh the page.
+                            </p>
+                            <button onclick="location.reload()"
+                                style="margin-top:22px;padding:12px 28px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
+                                Retry
+                            </button>
+                        </div>`;
+                }
             }
-            if (alreadyGranted) {
-                document.getElementById('demo-overlay').classList.add('hidden');
-                startScanner();
-            }
-        }
 
-        // ================================================================
-        // EXPOSE TO WINDOW
-        // ================================================================
-        window.startScanner = startScanner;
-        window.toggleTorch = toggleTorch;
-        window.switchCamera = switchCamera;
-        window.openFullscreen = openFullscreen;
-        window.closeFullscreen = closeFullscreen;
-        window.onFsTap = onFsTap;
-        window.toggleFsPlay = toggleFsPlay;
-        window.toggleFsMute = toggleFsMute;
-        window.toggleFsMenu = toggleFsMenu;
-        window.downloadCurrentVideo = downloadCurrentVideo;
-        window.triggerOpenWithConfirm = triggerOpenWithConfirm;
-        window.onLogoTap = onLogoTap;
+            // ================================================================
+            // EXPOSE TO WINDOW
+            // ================================================================
+            window.startScanner = startScanner;
+            window.toggleTorch = toggleTorch;
+            window.switchCamera = switchCamera;
+            window.openFullscreen = openFullscreen;
+            window.closeFullscreen = closeFullscreen;
+            window.onFsTap = onFsTap;
+            window.toggleFsPlay = toggleFsPlay;
+            window.toggleFsMute = toggleFsMute;
+            window.toggleFsMenu = toggleFsMenu;
+            window.downloadCurrentVideo = downloadCurrentVideo;
+            window.triggerOpenWithConfirm = triggerOpenWithConfirm;
+            window.onLogoTap = onLogoTap;
 
-        // ---- Boot ----
-        initScanner();
+            // ---- Boot ----
+            initScanner();
 
-        // ---- Tap diagnostic (temporary) ----
-        document.addEventListener('pointerdown', (e) => {
-            const el = e.target;
-            console.log('[Memoria][tap-diag] top element under tap:', el.tagName, el.className || '(no class)', el.id ||
-                '(no id)');
-        }, { capture: true });
-    </script>
-</body>
-</html>
+            // ---- Tap diagnostic ----
+            document.addEventListener('pointerdown', (e) => {
+                const el = e.target;
+                console.log('[Memoria][tap-diag] top element under tap:', el.tagName, el.className || '(no class)',
+                    el.id || '(no id)');
+            }, { capture: true });
+        </script>
+    </body>
+    </html>
