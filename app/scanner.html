@@ -1130,7 +1130,7 @@ async function beginMindAR(mindUrl) {
     // These values stay closer to the library's own tuned defaults, with
     // minCutOff nudged down a bit for a calmer hold-still state — good for
     // "video glued to a printed photo" rather than fast game-style motion:
-    filterMinCF: 0.0005,
+    filterMinCF: 0.0002,
     filterBeta: 200,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
@@ -1218,7 +1218,7 @@ async function beginMindAR(mindUrl) {
   // overlay compositors (the Hotstar/Netflix-grade smoothing you asked
   // for) avoid the classic "smoothing looks great still, terrible moving"
   // tradeoff.
-  const SMOOTHING_HALF_LIFE_MS_IDLE = 70;   // calm, jitter-free when (near) still
+  const SMOOTHING_HALF_LIFE_MS_IDLE = 120;  // calm, jitter-free when (near) still — raised from 70 for a calmer hold
   const SMOOTHING_HALF_LIFE_MS_FAST = 14;   // tight, glued-on when moving fast
   const FAST_VELOCITY_THRESHOLD = 0.45;     // marker-space units/sec where "fast" kicks in fully
   // STILL-LOCK: below this velocity, the poster counts as "not actually
@@ -1338,6 +1338,7 @@ async function beginMindAR(mindUrl) {
           smoothed.scale.copy(_rawScale);
           entry.userVel = 0;
           entry._velVec = null;
+          entry._isStill = true;
           entry.stability = 1;
         } else {
           // Estimate current motion speed from raw-position delta since last
@@ -1362,8 +1363,24 @@ async function beginMindAR(mindUrl) {
           }
           entry._prevRawPos.copy(_rawPos);
 
-          const STILL_VELOCITY_THRESHOLD = 0.012; // marker-space units/sec — below this counts as "not actually moving"
-          const isStill = entry.userVel < STILL_VELOCITY_THRESHOLD;
+          // STILL DETECTION — HYSTERESIS, not a single threshold. A single
+          // cutoff (the old STILL_VELOCITY_THRESHOLD=0.012 alone) flickers:
+          // ordinary hand tremor / residual sensor noise constantly crosses
+          // one fixed line, so the code kept bouncing in and out of the
+          // "moving" branch even while genuinely held dead straight —
+          // every bounce into "moving" re-chases a noisy raw sample, which
+          // IS the visible micro-shake when the poster isn't actually
+          // moving. Fix: two thresholds. Once truly still, require a
+          // LARGER velocity to be considered "moving again" (STILL_EXIT);
+          // while moving, only drop back to still once velocity falls
+          // BELOW the smaller STILL_ENTER. That gap is the hysteresis band
+          // — noise small enough to live inside it can no longer flip the
+          // state every frame.
+          const STILL_ENTER = 0.012; // marker-space units/sec — must drop below this to BECOME still
+          const STILL_EXIT  = 0.05;  // must rise above this to leave still — wider than noise alone produces
+          const wasStill = entry._isStill === true;
+          const isStill = wasStill ? entry.userVel < STILL_EXIT : entry.userVel < STILL_ENTER;
+          entry._isStill = isStill;
 
           if (isStill) {
             // Pose stays exactly where it already is — zero drift while the
