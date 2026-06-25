@@ -122,11 +122,15 @@ html,body{
   opacity:1;
   animation:arFadeIn .35s ease both;
 }
-.ar-video-inner.losing{
-  animation:arFadeOut .25s ease both;
-}
+/* NOTE: .losing intentionally has no opacity/animation rule anymore.
+   The hold/fade behavior during target loss (Phase 9 recovery) is now
+   driven frame-by-frame from JS via inline style.opacity, tracking the
+   actual hold-and-gyro-correct timeline — a fixed-duration CSS animation
+   here would fight that and snap opacity back to 0 well before the real
+   hold window (up to 4s) finishes, undoing the "feels invisible" recovery
+   the smoothing loop above is built to provide. The .losing class is kept
+   only as a styling hook (e.g. for the corner brackets) where needed. */
 @keyframes arFadeIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
-@keyframes arFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.96)}}
 .ar-video{
   width:100%;height:100%;
   /* object-fit:cover guarantees the video always FULLY fills this cropped
@@ -275,6 +279,27 @@ html,body{
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 .status-pill.found{background:rgba(30,30,30,.7);border-color:rgba(76,175,80,.4)}
 .status-pill.fade-out{opacity:0;transform:translateY(6px);}
+
+/* DEBUG HUD — real tracking telemetry (Phase 12). Hidden by default; toggled
+   via window.__memoriaDebug = true in console, or tapping the logo 5×.
+   Numbers here come straight from the smoothing/rejection pipeline below —
+   nothing is faked or simulated for display purposes. */
+#debug-hud{
+  position:fixed;top:54px;left:10px;z-index:50;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(6px);
+  border:0.5px solid rgba(255,255,255,.18);border-radius:8px;
+  padding:8px 10px;font-family:'SF Mono',Menlo,Consolas,monospace;
+  font-size:10.5px;line-height:1.55;color:#9fe89f;
+  pointer-events:none;display:none;min-width:190px;
+  white-space:pre;
+}
+#debug-hud.on{display:block}
+#debug-hud .hud-row{display:flex;justify-content:space-between;gap:10px;color:#ddd}
+#debug-hud .hud-label{color:#888}
+#debug-hud .hud-good{color:#4CAF50}
+#debug-hud .hud-warn{color:#e8c34a}
+#debug-hud .hud-bad{color:#e85a5a}
+#debug-hud .hud-target{margin-top:4px;padding-top:4px;border-top:0.5px solid rgba(255,255,255,.12)}
 
 .bottom-actions{
   display:flex;gap:16px;align-items:center;
@@ -595,11 +620,14 @@ html,body{
 <!-- SCAN UI -->
 <div id="scan-ui">
   <div class="scan-topbar">
-    <div class="scan-logo">Memo<span>ria</span></div>
+    <div class="scan-logo" id="scanLogo" onclick="onLogoTap()">Memo<span>ria</span></div>
     <a href="dashboard.html" class="scan-close">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </a>
   </div>
+
+  <div id="debug-hud"></div>
+
 
   <div class="finder"></div>
 
@@ -797,6 +825,22 @@ async function startScanner() {
   document.getElementById('demo-overlay').classList.add('hidden');
   setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
   document.getElementById('loading').classList.remove('hidden');
+
+  // ── GYRO PERMISSION (iOS 13+ Safari) ──────────────────────────────────
+  // DeviceOrientationEvent.requestPermission() exists ONLY on iOS Safari and
+  // MUST be called from inside a user-gesture handler (a click) or it
+  // throws/silently no-ops — this is exactly that gesture (the "Open camera
+  // & scan" tap), so this is the one safe place to ask. Other browsers
+  // (Android Chrome, desktop) don't have this gate at all — the orientation
+  // listener registered later just works without ever needing this call,
+  // so guarding on the method's existence keeps this a no-op there.
+  // Non-fatal either way: if this is denied, sensor-fusion hold-through-
+  // occlusion simply falls back to a flat freeze instead of gyro-corrected,
+  // not a hard failure of tracking itself.
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch (_) {}
+  }
 
   // ── STEP 1: instant raw camera preview ──
   // This is the one and only getUserMedia call that needs permission. It's
@@ -1062,6 +1106,46 @@ async function beginMindAR(mindUrl) {
     anchor.onTargetLost  = () => onTargetLost(String(target.id));
   });
 
+  // ── GYROSCOPE-ASSISTED HOLD (real sensor fusion, scoped to what a browser
+  // actually exposes — DeviceOrientationEvent's alpha/beta/gamma, no raw
+  // gyro rate, no IMU access, no accelerometer-based positional tracking;
+  // that level of fusion needs native AR APIs (ARKit/ARCore) this stack
+  // doesn't have). What THIS gives us, honestly: while a poster is briefly
+  // out of MindAR's view (motion blur, partial occlusion, edge of frame),
+  // we know roughly which way the PHONE rotated since it was last seen, so
+  // instead of freezing the video at a literal fixed screen position (which
+  // looks wrong the instant the phone moves at all), we counter-rotate the
+  // held pose by the phone's own rotation delta — a cheap but real
+  // approximation of "the poster is still out there in space, the camera
+  // just moved". This is what makes Phase 5/9's "target loss should feel
+  // invisible" actually true for small/brief losses instead of just
+  // freezing a flat image in place.
+  let _orientAvailable = false;
+  let _lastOrient = null; // {alpha,beta,gamma} in degrees, most recent reading
+  const _orientEuler = new THREE.Euler();
+  const _orientQuat = new THREE.Quaternion();
+  const _prevOrientQuat = new THREE.Quaternion();
+  const _orientDeltaQuat = new THREE.Quaternion();
+  function onDeviceOrientation(e) {
+    if (e.alpha == null) return; // null on some desktop browsers/no sensor
+    _orientAvailable = true;
+    _lastOrient = { alpha: e.alpha, beta: e.beta, gamma: e.gamma };
+  }
+  window.addEventListener('deviceorientation', onDeviceOrientation, true);
+  function currentOrientQuat(out) {
+    if (!_lastOrient) return null;
+    // ZXY order matches the common mapping for device alpha/beta/gamma —
+    // exact axis convention doesn't need to be perfect here since we only
+    // ever use the DELTA between two readings, not the absolute orientation.
+    _orientEuler.set(
+      THREE.MathUtils.degToRad(_lastOrient.beta || 0),
+      THREE.MathUtils.degToRad(_lastOrient.alpha || 0),
+      -THREE.MathUtils.degToRad(_lastOrient.gamma || 0),
+      'YXZ'
+    );
+    return out.setFromEuler(_orientEuler);
+  }
+
   // ── SMOOTHING LOOP ──────────────────────────────────────────────────
   // Runs every frame BEFORE the two renders below. For each tracked target,
   // reads anchor.group's raw matrix (MindAR's own filtered tracking output,
@@ -1090,11 +1174,36 @@ async function beginMindAR(mindUrl) {
   const SMOOTHING_HALF_LIFE_MS_IDLE = 70;   // calm, jitter-free when (near) still
   const SMOOTHING_HALF_LIFE_MS_FAST = 14;   // tight, glued-on when moving fast
   const FAST_VELOCITY_THRESHOLD = 0.45;     // marker-space units/sec where "fast" kicks in fully
+
+  // ── OUTLIER / POSE-SPIKE REJECTION (Phase 8) ─────────────────────────
+  // A single bad homography decomposition (motion blur frame, partial
+  // occlusion, a hand crossing the poster) can produce a raw pose that
+  // jumps far from where the target physically was one frame ago. Easing
+  // toward that bad sample still corrupts the smoothed pose, just more
+  // slowly. Instead: compare the incoming raw pose to the LAST GOOD raw
+  // pose (not the smoothed one, so legitimate fast motion never gets
+  // mistaken for an outlier) and reject frames whose position or rotation
+  // jumped further than physically plausible for the elapsed dt. Rejected
+  // frames are dropped entirely — smoothed continues toward the last good
+  // sample, vanishing instantly into the existing easing pipeline rather
+  // than needing special-case code.
+  const MAX_POS_JUMP_PER_SEC = 1.3;      // marker-space units/sec, generous vs FAST_VELOCITY_THRESHOLD
+  const MAX_ROT_JUMP_RAD_PER_SEC = 14;   // ~800°/s — well above genuine hand rotation speed
+  const REJECT_GRACE_FRAMES = 3;         // consecutive rejects before we just accept (sensor genuinely changed)
+
+  // ── LOST-TARGET RECOVERY (Phase 9) ───────────────────────────────────
+  // Replaces instant hide with: freeze last good pose → gently fade →
+  // hold via gyro counter-rotation → snap back cleanly on reacquire.
+  const LOST_FADE_START_MS = 220;   // begin fading only after a brief grace period (ignores 1-frame blips)
+  const LOST_FADE_DURATION_MS = 900;
+  const LOST_HOLD_MAX_MS = 4000;    // beyond this, fully fade out rather than hold forever on a stale guess
+
   let _lastFrameTime = performance.now();
+  let _frameCount = 0, _fpsAccum = 0, _fps = 0, _lastFpsUpdate = performance.now();
   const _rawPos = new THREE.Vector3();
   const _rawQuat = new THREE.Quaternion();
   const _rawScale = new THREE.Vector3();
-  const _prevRawPos = new THREE.Vector3();
+  const _identityQuat = new THREE.Quaternion();
 
   mindarThree.renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -1102,74 +1211,225 @@ async function beginMindAR(mindUrl) {
     _lastFrameTime = now;
     const dtSec = dt / 1000;
 
+    // FPS counter for the debug HUD — real measured frame rate, not assumed.
+    _frameCount++; _fpsAccum += dt;
+    if (now - _lastFpsUpdate > 500) {
+      _fps = Math.round((_frameCount * 1000) / _fpsAccum);
+      _frameCount = 0; _fpsAccum = 0; _lastFpsUpdate = now;
+    }
+
+    const curOrientQuat = _orientAvailable ? currentOrientQuat(_orientQuat) : null;
+
     arTargets.forEach((entry) => {
       const { anchor, smoothed, inner } = entry;
       const rawVisible = anchor.visible;
-
-      // Visibility now driven here, since cssObject no longer lives inside
-      // anchor.group (MindAR's own per-frame visibility write — see
-      // onUpdate in its source — targets anchor.group.children, which our
-      // object is no longer a member of).
       const wasVisible = smoothed.userData.wasVisible === true;
-      entry.cssObject.element.style.visibility = rawVisible ? 'visible' : 'hidden';
-      smoothed.userData.wasVisible = rawVisible;
 
-      if (!rawVisible) return; // no fresh matrix to ease toward while lost
+      if (rawVisible) {
+        anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
 
-      anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
-
-      if (!wasVisible) {
-        // Snap on the very frame tracking is (re)acquired — easing in from
-        // a stale or identity transform here would itself look like a
-        // jitter/teleport, the opposite of what we want.
-        smoothed.position.copy(_rawPos);
-        smoothed.quaternion.copy(_rawQuat);
-        smoothed.scale.copy(_rawScale);
-        entry.userVel = 0;
-      } else {
-        // Estimate current motion speed from raw-position delta since last
-        // frame (marker-space units/sec). entry.userVel itself is smoothed
-        // a little (simple EMA) so one single noisy frame can't yank the
-        // half-life around — we want this to react to genuine fast hand
-        // movement, not per-frame tracking noise.
-        const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
-        const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
-        entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.7 + instVel * 0.3;
-        entry._prevRawPos.copy(_rawPos);
-
-        const fastT = Math.min(1, entry.userVel / FAST_VELOCITY_THRESHOLD);
-        const halfLife = SMOOTHING_HALF_LIFE_MS_IDLE + (SMOOTHING_HALF_LIFE_MS_FAST - SMOOTHING_HALF_LIFE_MS_IDLE) * fastT;
-        const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / halfLife) : 1;
-
-        // ── QUATERNION HEMISPHERE FIX — the real source of fast-move
-        // visual "distortion"/warping. THREE.Quaternion.slerp (instance
-        // method, used below) does NOT auto-correct for the double-cover
-        // of rotation quaternions: q and -q represent the IDENTICAL
-        // rotation, but slerping toward whichever one happens to have a
-        // negative dot product takes the long way around the 4D unit
-        // sphere instead of the short way. MindAR's per-frame homography
-        // decomposition can and does flip this sign frame-to-frame,
-        // especially under fast rotation/perspective change — exactly
-        // when this bug bites hardest. Flipping the raw quaternion's sign
-        // when the dot product goes negative makes it take the correct,
-        // shortest path every time, which is what removes the warping/
-        // "disturbed" look during fast moves rather than just papering
-        // over it with more smoothing.
-        if (smoothed.quaternion.dot(_rawQuat) < 0) {
-          _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
+        // ── outlier check against last good raw sample ──
+        let accept = true;
+        if (entry._lastGoodRawPos && wasVisible) {
+          const posJump = entry._lastGoodRawPos.distanceTo(_rawPos);
+          const rotJump = entry._lastGoodRawQuat ? entry._lastGoodRawQuat.angleTo(_rawQuat) : 0;
+          const posLimit = MAX_POS_JUMP_PER_SEC * Math.max(dtSec, 1/120);
+          const rotLimit = MAX_ROT_JUMP_RAD_PER_SEC * Math.max(dtSec, 1/120);
+          if (posJump > posLimit || rotJump > rotLimit) {
+            entry._rejectStreak = (entry._rejectStreak || 0) + 1;
+            if (entry._rejectStreak <= REJECT_GRACE_FRAMES) accept = false;
+            // else: several consecutive "outliers" in a row means the target
+            // genuinely moved/rotated that fast — stop rejecting so real
+            // motion is never mistaken for noise indefinitely.
+          } else {
+            entry._rejectStreak = 0;
+          }
+        }
+        entry._rejectedLastFrame = !accept;
+        if (!accept) {
+          entry._rejectCount = (entry._rejectCount || 0) + 1;
+          return; // skip this frame entirely — smoothed keeps easing toward last good pose below via the lost-hold path being inactive
         }
 
-        smoothed.position.lerp(_rawPos, alpha);
-        smoothed.quaternion.slerp(_rawQuat, alpha);
-        smoothed.scale.lerp(_rawScale, alpha);
+        entry._lastGoodRawPos = (entry._lastGoodRawPos || new THREE.Vector3()).copy(_rawPos);
+        entry._lastGoodRawQuat = (entry._lastGoodRawQuat || new THREE.Quaternion()).copy(_rawQuat);
+        entry._lostSince = null;
+        entry._holdOrientQuat = null;
+
+        entry.cssObject.element.style.visibility = 'visible';
+        entry.inner.style.opacity = '';
+        smoothed.userData.wasVisible = true;
+
+        if (!wasVisible) {
+          // Snap on the very frame tracking is (re)acquired — easing in from
+          // a stale or identity transform here would itself look like a
+          // jitter/teleport, the opposite of what we want.
+          smoothed.position.copy(_rawPos);
+          smoothed.quaternion.copy(_rawQuat);
+          smoothed.scale.copy(_rawScale);
+          entry.userVel = 0;
+          entry.stability = 1;
+        } else {
+          // Estimate current motion speed from raw-position delta since last
+          // frame (marker-space units/sec). entry.userVel itself is smoothed
+          // a little (simple EMA) so one single noisy frame can't yank the
+          // half-life around — we want this to react to genuine fast hand
+          // movement, not per-frame tracking noise.
+          const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
+          const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
+          entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.7 + instVel * 0.3;
+          entry._prevRawPos.copy(_rawPos);
+
+          const fastT = Math.min(1, entry.userVel / FAST_VELOCITY_THRESHOLD);
+          const halfLife = SMOOTHING_HALF_LIFE_MS_IDLE + (SMOOTHING_HALF_LIFE_MS_FAST - SMOOTHING_HALF_LIFE_MS_IDLE) * fastT;
+          const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / halfLife) : 1;
+
+          // ── QUATERNION HEMISPHERE FIX — the real source of fast-move
+          // visual "distortion"/warping. THREE.Quaternion.slerp (instance
+          // method, used below) does NOT auto-correct for the double-cover
+          // of rotation quaternions: q and -q represent the IDENTICAL
+          // rotation, but slerping toward whichever one happens to have a
+          // negative dot product takes the long way around the 4D unit
+          // sphere instead of the short way. MindAR's per-frame homography
+          // decomposition can and does flip this sign frame-to-frame,
+          // especially under fast rotation/perspective change — exactly
+          // when this bug bites hardest. Flipping the raw quaternion's sign
+          // when the dot product goes negative makes it take the correct,
+          // shortest path every time, which is what removes the warping/
+          // "disturbed" look during fast moves rather than just papering
+          // over it with more smoothing.
+          if (smoothed.quaternion.dot(_rawQuat) < 0) {
+            _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
+          }
+
+          smoothed.position.lerp(_rawPos, alpha);
+          smoothed.quaternion.slerp(_rawQuat, alpha);
+          smoothed.scale.lerp(_rawScale, alpha);
+
+          // Stability score (0-1) for the debug HUD: high jitter/velocity
+          // pulls it down, calm tracking pulls it back up. Purely diagnostic.
+          const jitterPenalty = Math.min(1, entry.userVel / (FAST_VELOCITY_THRESHOLD * 2));
+          const target = 1 - jitterPenalty * 0.6;
+          entry.stability = entry.stability === undefined ? target : entry.stability * 0.85 + target * 0.15;
+        }
+        smoothed.updateMatrix();
+
+      } else {
+        // ── TARGET NOT VISIBLE THIS FRAME ──
+        if (wasVisible) {
+          // Just lost it this frame — start the hold/fade clock and
+          // capture the current device orientation as our reference for
+          // counter-rotation while we hold.
+          entry._lostSince = now;
+          entry._holdOrientQuat = curOrientQuat ? curOrientQuat.clone() : null;
+        }
+
+        const lostSince = entry._lostSince;
+        if (lostSince == null) {
+          // Never been visible at all yet this session — nothing to hold.
+          entry.cssObject.element.style.visibility = 'hidden';
+          smoothed.userData.wasVisible = false;
+          return;
+        }
+
+        const lostMs = now - lostSince;
+
+        if (lostMs > LOST_HOLD_MAX_MS) {
+          // Held long enough without recovery — give up cleanly rather than
+          // leaving a stale video glued in the wrong place indefinitely.
+          entry.cssObject.element.style.visibility = 'hidden';
+          smoothed.userData.wasVisible = false;
+          return;
+        }
+
+        // Still within the hold window: keep the video visible at its last
+        // known pose (optionally gyro-corrected), fading gradually rather
+        // than vanishing — this is what makes brief occlusion/edge-of-frame
+        // loss "feel invisible" instead of flickering the video off.
+        entry.cssObject.element.style.visibility = 'visible';
+        smoothed.userData.wasVisible = true; // keep counting as "tracked" through the hold so reacquire snaps cleanly via the rawVisible branch above only changing entry._lastGoodRaw*, not this flag's meaning here
+
+        if (curOrientQuat && entry._holdOrientQuat) {
+          // Counter-rotate the held pose by how much the PHONE has rotated
+          // since the moment we lost the target — an approximate gyro-
+          // assisted hold, not a precise one: DeviceOrientationEvent's
+          // alpha/beta/gamma axes don't map exactly onto the camera's own
+          // rotation axes, so this corrects the right general direction at
+          // the right rough magnitude, not a pixel-perfect inverse. That's
+          // genuinely the ceiling for browser sensor fusion without native
+          // AR APIs — still meaningfully better than a flat frozen overlay
+          // for the brief (sub-second) holds this is actually used for.
+          _prevOrientQuat.copy(entry._holdOrientQuat).invert();
+          _orientDeltaQuat.copy(curOrientQuat).multiply(_prevOrientQuat);
+          // Clamp the correction itself — if the phone has rotated a LOT
+          // since loss (the approximation gets less reliable the larger the
+          // delta), cap how far we let it swing the held pose so a rough
+          // axis-mapping error can't visibly overshoot worse than just
+          // holding the last good pose flat would have.
+          const correctionAngle = _orientDeltaQuat.angleTo(_identityQuat);
+          const MAX_CORRECTION_RAD = THREE.MathUtils.degToRad(35);
+          if (correctionAngle > MAX_CORRECTION_RAD) {
+            _orientDeltaQuat.slerp(_identityQuat, 1 - MAX_CORRECTION_RAD / correctionAngle);
+          }
+          smoothed.quaternion.copy(_orientDeltaQuat).invert().multiply(entry._lastGoodRawQuat || smoothed.quaternion);
+        }
+
+        const fadeT = lostMs <= LOST_FADE_START_MS ? 0
+          : Math.min(1, (lostMs - LOST_FADE_START_MS) / LOST_FADE_DURATION_MS);
+        entry.inner.style.opacity = String(1 - fadeT * 0.85); // never fully invisible while still holding — avoids a hard flicker right at recovery
+        entry.stability = entry.stability === undefined ? 0.5 : entry.stability * 0.9; // diagnostic only
       }
-      smoothed.updateMatrix();
     });
 
     mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
     mindarThree.cssRenderer.render(mindarThree.cssScene, mindarThree.camera);
+    if (window.__memoriaDebug) updateDebugHud(_fps, dt, curOrientQuat !== null);
   });
 }
+
+/* ============================================================
+   DEBUG HUD (Phase 12) — real telemetry pulled straight from the
+   tracking/smoothing state above. Toggle with window.__memoriaDebug = true
+   in the console, or tap the "Memoria" logo 5× quickly.
+============================================================ */
+function scoreClass(v) { return v > 0.75 ? 'hud-good' : v > 0.45 ? 'hud-warn' : 'hud-bad'; }
+
+function updateDebugHud(fps, frameMs, sensorFusionActive) {
+  const hud = document.getElementById('debug-hud');
+  if (!hud) return;
+  const fpsClass = fps >= 24 ? 'hud-good' : fps >= 14 ? 'hud-warn' : 'hud-bad';
+  let html = `<div class="hud-row"><span class="hud-label">FPS</span><span class="${fpsClass}">${fps}</span></div>`
+    + `<div class="hud-row"><span class="hud-label">Frame</span><span>${frameMs.toFixed(1)}ms</span></div>`
+    + `<div class="hud-row"><span class="hud-label">Sensor fusion</span><span class="${sensorFusionActive ? 'hud-good' : 'hud-warn'}">${sensorFusionActive ? 'gyro ok' : 'no gyro'}</span></div>`;
+
+  arTargets.forEach((entry, id) => {
+    const tracking = entry.anchor.visible;
+    const holding = !tracking && entry._lostSince != null;
+    const state = tracking ? 'TRACKING' : holding ? 'HOLD/RECOVER' : 'LOST';
+    const stateClass = tracking ? 'hud-good' : holding ? 'hud-warn' : 'hud-bad';
+    const stability = entry.stability !== undefined ? entry.stability : 0;
+    html += `<div class="hud-target">`
+      + `<div class="hud-row"><span class="hud-label">#${id}</span><span class="${stateClass}">${state}</span></div>`
+      + `<div class="hud-row"><span class="hud-label">Stability</span><span class="${scoreClass(stability)}">${(stability*100).toFixed(0)}%</span></div>`
+      + `<div class="hud-row"><span class="hud-label">Velocity</span><span>${(entry.userVel||0).toFixed(2)}</span></div>`
+      + `<div class="hud-row"><span class="hud-label">Rejected</span><span>${entry._rejectCount||0}</span></div>`
+      + `</div>`;
+  });
+  hud.innerHTML = html;
+}
+
+let _logoTapCount = 0, _logoTapTimer = null;
+function onLogoTap() {
+  _logoTapCount++;
+  clearTimeout(_logoTapTimer);
+  _logoTapTimer = setTimeout(() => { _logoTapCount = 0; }, 800);
+  if (_logoTapCount >= 5) {
+    _logoTapCount = 0;
+    window.__memoriaDebug = !window.__memoriaDebug;
+    document.getElementById('debug-hud').classList.toggle('on', window.__memoriaDebug);
+  }
+}
+window.onLogoTap = onLogoTap;
 
 function loadImage(url) {
   return new Promise((resolve, reject) => {
@@ -1449,6 +1709,8 @@ function onTargetFound(id){
   entry.visible=true;
   entry.lastSeen=performance.now();
   entry.inner.classList.add('visible','tracking');
+  entry.inner.style.opacity = ''; // clear any in-progress hold-fade from a just-recovered loss
+  clearTimeout(entry._lostTeardownTimer);
 
   // Snap corner brackets on — animate the "lock-on" pulse only on the very
   // first found frame (wasTracking false), not on every re-detect after
@@ -1559,13 +1821,30 @@ function onTargetLost(id){
   const entry=arTargets.get(id);
   if(!entry) return;
   entry.visible=false;
+  entry.corners.classList.remove('tracking','lock-anim');
+
+  // ── DON'T INSTANTLY PAUSE ─────────────────────────────────────────────
+  // Phase 9 (smart lost-target recovery): the smoothing loop above now
+  // holds the video visible at its last good pose for up to LOST_HOLD_MAX_MS,
+  // gyro-correcting and fading it gradually rather than yanking it off
+  // screen the instant MindAR drops tracking for one frame (motion blur,
+  // a hand crossing the poster, brief edge-of-frame clipping — all common
+  // and all meant to "feel invisible" per the brief). Pausing playback
+  // immediately would defeat that: the hold would show a frozen frame with
+  // dead audio, which reads as broken rather than stable. So: keep playing
+  // through the hold window, and only actually pause/reset once the loop's
+  // own LOST_HOLD_MAX_MS timeout gives up and hides the element — checked
+  // here via a matching timeout rather than duplicating that constant.
   entry.inner.classList.remove('tracking');
   entry.inner.classList.add('losing');
-  entry.corners.classList.remove('tracking','lock-anim');
-  entry.video.pause();
-  setTimeout(()=>{
-    if(!entry.visible) entry.inner.classList.remove('visible','losing');
-  },250);
+  clearTimeout(entry._lostTeardownTimer);
+  entry._lostTeardownTimer = setTimeout(()=>{
+    if(!entry.visible){
+      entry.inner.classList.remove('visible','losing');
+      entry.inner.style.opacity = '';
+      entry.video.pause();
+    }
+  }, 4250); // slightly beyond LOST_HOLD_MAX_MS so the visual fade finishes first
   refreshStatusPill();
 }
 
