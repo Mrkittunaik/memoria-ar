@@ -1252,11 +1252,22 @@ async function beginMindAR(mindUrl) {
   const REJECT_GRACE_FRAMES = 3;         // consecutive rejects before we just accept (sensor genuinely changed)
 
   // ── LOST-TARGET RECOVERY (Phase 9) ───────────────────────────────────
-  // Replaces instant hide with: freeze last good pose → gently fade →
-  // hold via gyro counter-rotation → snap back cleanly on reacquire.
-  const LOST_FADE_START_MS = 220;   // begin fading only after a brief grace period (ignores 1-frame blips)
-  const LOST_FADE_DURATION_MS = 900;
-  const LOST_HOLD_MAX_MS = 4000;    // beyond this, fully fade out rather than hold forever on a stale guess
+  // Replaces instant hide with: freeze last good pose → fade FAST → hide.
+  // ── RETUNED FOR "LIVE" BEHAVIOR ──────────────────────────────────────
+  // Previously this held the video floating in place for up to 4 FULL
+  // SECONDS after the poster left frame (fading only down to 15% opacity,
+  // never fully gone, the whole time) — meant for brief occlusion/hand-
+  // wobble, but the visible result on a moving camera is exactly what was
+  // reported: video still playing, glued to thin air, well after the poster
+  // is out of shot or the camera's pointed at a wall. The new values fade
+  // the video out almost immediately (full disappear in well under 150ms
+  // of actually losing tracking) while still surviving true single-frame
+  // blips (a hand flicker, one bad homography frame) via the brief grace
+  // period below — so it reads as "instant live tracking" rather than a
+  // lingering ghost overlay.
+  const LOST_FADE_START_MS = 40;    // near-zero grace — only absorbs a true single dropped frame
+  const LOST_FADE_DURATION_MS = 90; // fast fade to fully gone
+  const LOST_HOLD_MAX_MS = 130;     // hard cutoff — fully hidden well under ~0.13s after loss
 
   let _lastFrameTime = performance.now();
   let _frameCount = 0, _fpsAccum = 0, _fps = 0, _lastFpsUpdate = performance.now();
@@ -1331,6 +1342,7 @@ async function beginMindAR(mindUrl) {
         entry._holdOrientQuat = null;
 
         entry.cssObject.element.style.visibility = 'visible';
+        entry.cssObject.element.style.pointerEvents = 'all'; // undo any fade-triggered disable from a previous loss
         entry.inner.style.opacity = '';
         smoothed.userData.wasVisible = true;
 
@@ -1507,7 +1519,16 @@ async function beginMindAR(mindUrl) {
 
         const fadeT = lostMs <= LOST_FADE_START_MS ? 0
           : Math.min(1, (lostMs - LOST_FADE_START_MS) / LOST_FADE_DURATION_MS);
-        entry.inner.style.opacity = String(1 - fadeT * 0.85); // never fully invisible while still holding — avoids a hard flicker right at recovery
+        // Fades all the way to 0 now (previously floored at 15% opacity and
+        // never fully vanished) — once the poster is actually gone, the
+        // video should actually disappear, not linger faintly forever.
+        entry.inner.style.opacity = String(1 - fadeT);
+        // Once any fade has begun, this is no longer a confidently-tracked
+        // poster — stop it from being tappable into fullscreen while it's
+        // disappearing (re-enabled instantly the next time it's genuinely
+        // re-detected, since the rawVisible branch above doesn't touch
+        // pointer-events at all).
+        entry.wrapper.style.pointerEvents = fadeT > 0 ? 'none' : 'all';
         entry.stability = entry.stability === undefined ? 0.5 : entry.stability * 0.9; // diagnostic only
         entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability))));
       }
@@ -2004,7 +2025,7 @@ function onTargetLost(id){
       entry.inner.style.opacity = '';
       entry.video.pause();
     }
-  }, 4250); // slightly beyond LOST_HOLD_MAX_MS so the visual fade finishes first
+  }, 180); // matches the new fast LOST_HOLD_MAX_MS (130ms) + a small safety margin — was 4250ms, which is now far too slow and would leave audio playing for seconds after the video has already visually vanished
   refreshStatusPill();
 }
 
