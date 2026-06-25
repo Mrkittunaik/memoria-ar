@@ -1174,6 +1174,14 @@ async function beginMindAR(mindUrl) {
   const SMOOTHING_HALF_LIFE_MS_IDLE = 70;   // calm, jitter-free when (near) still
   const SMOOTHING_HALF_LIFE_MS_FAST = 14;   // tight, glued-on when moving fast
   const FAST_VELOCITY_THRESHOLD = 0.45;     // marker-space units/sec where "fast" kicks in fully
+  // STILL-LOCK: below this velocity, the poster counts as "not actually
+  // moving" and the smoothed pose is held bit-for-bit fixed instead of
+  // continuing to ease toward raw tracking noise — see the dead-zone block
+  // below for why this is the actual fix for "video keeps drifting off the
+  // corner even when the poster isn't moving". Raise this if a poster on a
+  // slightly shaky surface (held in hand, not wall-mounted) still shows
+  // tiny residual drift; lower it if deliberate slow panning ever snaps.
+  const STILL_VELOCITY_THRESHOLD = 0.012;   // marker-space units/sec
 
   // ── OUTLIER / POSE-SPIKE REJECTION (Phase 8) ─────────────────────────
   // A single bad homography decomposition (motion blur frame, partial
@@ -1280,37 +1288,46 @@ async function beginMindAR(mindUrl) {
           entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.7 + instVel * 0.3;
           entry._prevRawPos.copy(_rawPos);
 
-          const fastT = Math.min(1, entry.userVel / FAST_VELOCITY_THRESHOLD);
-          const halfLife = SMOOTHING_HALF_LIFE_MS_IDLE + (SMOOTHING_HALF_LIFE_MS_FAST - SMOOTHING_HALF_LIFE_MS_IDLE) * fastT;
-          const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / halfLife) : 1;
+          const STILL_VELOCITY_THRESHOLD = 0.012; // marker-space units/sec — below this counts as "not actually moving"
+          const isStill = entry.userVel < STILL_VELOCITY_THRESHOLD;
 
-          // ── QUATERNION HEMISPHERE FIX — the real source of fast-move
-          // visual "distortion"/warping. THREE.Quaternion.slerp (instance
-          // method, used below) does NOT auto-correct for the double-cover
-          // of rotation quaternions: q and -q represent the IDENTICAL
-          // rotation, but slerping toward whichever one happens to have a
-          // negative dot product takes the long way around the 4D unit
-          // sphere instead of the short way. MindAR's per-frame homography
-          // decomposition can and does flip this sign frame-to-frame,
-          // especially under fast rotation/perspective change — exactly
-          // when this bug bites hardest. Flipping the raw quaternion's sign
-          // when the dot product goes negative makes it take the correct,
-          // shortest path every time, which is what removes the warping/
-          // "disturbed" look during fast moves rather than just papering
-          // over it with more smoothing.
-          if (smoothed.quaternion.dot(_rawQuat) < 0) {
-            _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
+          if (isStill) {
+            // Pose stays exactly where it already is — zero drift while the
+            // poster is genuinely stationary relative to the camera.
+            entry.stability = entry.stability === undefined ? 1 : entry.stability * 0.9 + 1 * 0.1;
+          } else {
+            const fastT = Math.min(1, entry.userVel / FAST_VELOCITY_THRESHOLD);
+            const halfLife = SMOOTHING_HALF_LIFE_MS_IDLE + (SMOOTHING_HALF_LIFE_MS_FAST - SMOOTHING_HALF_LIFE_MS_IDLE) * fastT;
+            const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / halfLife) : 1;
+
+            // ── QUATERNION HEMISPHERE FIX — the real source of fast-move
+            // visual "distortion"/warping. THREE.Quaternion.slerp (instance
+            // method, used below) does NOT auto-correct for the double-cover
+            // of rotation quaternions: q and -q represent the IDENTICAL
+            // rotation, but slerping toward whichever one happens to have a
+            // negative dot product takes the long way around the 4D unit
+            // sphere instead of the short way. MindAR's per-frame homography
+            // decomposition can and does flip this sign frame-to-frame,
+            // especially under fast rotation/perspective change — exactly
+            // when this bug bites hardest. Flipping the raw quaternion's sign
+            // when the dot product goes negative makes it take the correct,
+            // shortest path every time, which is what removes the warping/
+            // "disturbed" look during fast moves rather than just papering
+            // over it with more smoothing.
+            if (smoothed.quaternion.dot(_rawQuat) < 0) {
+              _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
+            }
+
+            smoothed.position.lerp(_rawPos, alpha);
+            smoothed.quaternion.slerp(_rawQuat, alpha);
+            smoothed.scale.lerp(_rawScale, alpha);
+
+            // Stability score (0-1) for the debug HUD: high jitter/velocity
+            // pulls it down, calm tracking pulls it back up. Purely diagnostic.
+            const jitterPenalty = Math.min(1, entry.userVel / (FAST_VELOCITY_THRESHOLD * 2));
+            const target = 1 - jitterPenalty * 0.6;
+            entry.stability = entry.stability === undefined ? target : entry.stability * 0.85 + target * 0.15;
           }
-
-          smoothed.position.lerp(_rawPos, alpha);
-          smoothed.quaternion.slerp(_rawQuat, alpha);
-          smoothed.scale.lerp(_rawScale, alpha);
-
-          // Stability score (0-1) for the debug HUD: high jitter/velocity
-          // pulls it down, calm tracking pulls it back up. Purely diagnostic.
-          const jitterPenalty = Math.min(1, entry.userVel / (FAST_VELOCITY_THRESHOLD * 2));
-          const target = 1 - jitterPenalty * 0.6;
-          entry.stability = entry.stability === undefined ? target : entry.stability * 0.85 + target * 0.15;
         }
         smoothed.updateMatrix();
 
