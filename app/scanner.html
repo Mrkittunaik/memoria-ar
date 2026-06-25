@@ -41,13 +41,14 @@
         }
 
         /* ============================================================
-                   AR CONTAINER — MindAR mounts its own video + canvases here
+                   AR CONTAINER — initially transparent, MindAR will fill it
                 ============================================================ */
         #ar-container {
             position: fixed;
             inset: 0;
-            background: #000;
+            background: transparent;
             z-index: 2;
+            pointer-events: none; /* allow taps to reach preview if needed */
         }
 
         /* ============================================================
@@ -364,7 +365,7 @@
         }
 
         /* ============================================================
-                   LOADING SCREEN
+                   LOADING SCREEN — covers everything initially
                 ============================================================ */
         #loading {
             position: fixed;
@@ -412,12 +413,14 @@
         }
 
         /* ============================================================
-                   INSTANT PREVIEW
+                   INSTANT PREVIEW — shown immediately after camera permission
                 ============================================================ */
         #instant-preview {
             position: fixed;
             top: 0;
             left: 0;
+            width: 100%;
+            height: 100%;
             object-fit: cover;
             background: #000;
             z-index: 1;
@@ -1689,8 +1692,13 @@
             async function beginMindAR(mindUrl) {
                 const statusText = document.getElementById('statusText');
 
+                // Make container visible and set pointer-events to auto so MindAR can handle them
+                const container = document.getElementById('ar-container');
+                container.style.pointerEvents = 'auto';
+                container.style.background = '#000'; // MindAR will fill it
+
                 mindarThree = new window.MINDAR.IMAGE.MindARThree({
-                    container: document.getElementById('ar-container'),
+                    container: container,
                     imageTargetSrc: mindUrl,
                     maxTrack: Math.min(_targets.length, 4),
                     filterMinCF: 0.00015,
@@ -2562,7 +2570,10 @@
                     body = `Something went wrong starting the camera. Please allow camera access for this site and try again.`;
                 }
 
-                document.getElementById('loading').innerHTML = `
+                // Make sure the loading overlay is visible
+                const loading = document.getElementById('loading');
+                loading.classList.remove('hidden');
+                loading.innerHTML = `
                     <div style="text-align:center;padding:40px;max-width:360px">
                         <div style="font-size:32px;margin-bottom:16px">📷</div>
                         <h3 style="color:#fff;margin-bottom:8px">${title}</h3>
@@ -2577,6 +2588,7 @@
             }
 
             async function retryStartScanner() {
+                // Reset loading to original state
                 document.getElementById('loading').innerHTML = `
                     <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
                     <div class="loading-spinner"></div>
@@ -2593,8 +2605,11 @@
             // ================================================================
             async function startScanner() {
                 document.getElementById('demo-overlay').classList.add('hidden');
+
+                // Ensure loading is visible at start
+                const loading = document.getElementById('loading');
+                loading.classList.remove('hidden');
                 setLoadingState('Starting camera', 'Point at a registered photo to begin', '');
-                document.getElementById('loading').classList.remove('hidden');
 
                 // Gyro permission (iOS)
                 if (typeof DeviceOrientationEvent !== 'undefined' &&
@@ -2625,35 +2640,38 @@
                 window.addEventListener('resize', sizePreview);
                 window.addEventListener('orientationchange', sizePreview);
 
-                document.getElementById('loading').classList.add('hidden');
+                // Hide loading now that we have camera feed
+                loading.classList.add('hidden');
                 localStorage.setItem(PERM_KEY, 'true');
 
                 // ---- Wake backend & fetch targets ----
                 let mindUrl;
                 try {
-                    // First, wake the backend (handles cold start)
                     await wakeBackend();
-                    // Then fetch and compile targets
                     mindUrl = await fetchAndCompileTargets();
                 } catch (err) {
                     console.error('[Memoria] backend/target error:', err);
+                    // Show error on status pill but keep preview running
                     const statusText = document.getElementById('statusText');
                     const pill = document.getElementById('statusPill');
                     if (statusText) {
-                        statusText.textContent = '❌ ' + (err.message || 'Could not connect to server. Please check your internet and try again.');
+                        statusText.textContent = '❌ ' + (err.message || 'Could not connect to server.');
                         pill.className = 'status-pill ready';
                     }
-                    // Show a retry button in the status area
-                    const retryBtn = document.createElement('button');
-                    retryBtn.textContent = '🔄 Retry';
-                    retryBtn.style.cssText =
-                        'margin-top:8px;padding:8px 20px;border-radius:8px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:13px;font-family:inherit;';
-                    retryBtn.onclick = () => {
-                        retryBtn.remove();
-                        startScanner();
-                    };
-                    const statusArea = document.querySelector('.status-area');
-                    if (statusArea) statusArea.appendChild(retryBtn);
+                    // Show retry button
+                    const retryBtn = document.getElementById('statusRetryBtn');
+                    if (!retryBtn) {
+                        const btn = document.createElement('button');
+                        btn.id = 'statusRetryBtn';
+                        btn.textContent = '🔄 Retry';
+                        btn.style.cssText =
+                            'margin-top:8px;padding:8px 20px;border-radius:8px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:13px;font-family:inherit;';
+                        btn.onclick = () => {
+                            btn.remove();
+                            startScanner();
+                        };
+                        document.querySelector('.status-area').appendChild(btn);
+                    }
                     return;
                 }
                 if (!mindUrl) {
@@ -2670,6 +2688,9 @@
 
                 try {
                     await beginMindAR(mindUrl);
+                    // Remove any retry button if present
+                    const retryBtn = document.getElementById('statusRetryBtn');
+                    if (retryBtn) retryBtn.remove();
                 } catch (err) {
                     console.error('[Memoria] MindAR start failed:', err);
                     showCameraErrorScreen(err);
@@ -2713,7 +2734,6 @@
 
                     if (alreadyGranted) {
                         document.getElementById('demo-overlay').classList.add('hidden');
-                        // Small delay to ensure everything is ready
                         setTimeout(() => startScanner(), 300);
                     }
                 } catch (err) {
