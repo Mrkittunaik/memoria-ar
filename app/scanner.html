@@ -1357,7 +1357,7 @@ async function beginMindAR(mindUrl) {
           if (dtSec > 0) {
             const instVelVec = _rawPos.clone().sub(prevRaw).divideScalar(dtSec);
             entry._velVec = entry._velVec
-              ? entry._velVec.lerp(instVelVec, 0.4)
+              ? entry._velVec.lerp(instVelVec, 0.25)
               : instVelVec;
           }
           entry._prevRawPos.copy(_rawPos);
@@ -1393,14 +1393,21 @@ async function beginMindAR(mindUrl) {
             }
 
             // Lead target = raw position nudged a tiny bit further along
-            // the current velocity vector, so the smoothing eases toward
-            // "about where the corner will be by render time" rather than
-            // strictly last frame's sample. Scaled down further as fastT
-            // approaches 1 isn't needed — LEAD_MS is already small enough
-            // that even at max velocity the nudge stays sub-pixel-class
-            // relative to the marker, just enough to cancel render latency.
+            // the current velocity vector. Scaled by fastT (0 at the still
+            // threshold, 1 at full fast-velocity) so this ONLY engages
+            // during genuine fast motion — applying it near the still
+            // threshold would extrapolate raw sensor noise forward instead
+            // of real motion, which amplifies jitter rather than fixing
+            // latency. Also clamped to a small absolute distance as a
+            // second safety net against a single noisy velocity spike.
             _leadPos.copy(_rawPos);
-            if (entry._velVec) _leadPos.addScaledVector(entry._velVec, LEAD_MS / 1000);
+            if (entry._velVec) {
+              const leadScale = (LEAD_MS / 1000) * fastT;
+              const lead = entry._velVec.clone().multiplyScalar(leadScale);
+              const MAX_LEAD_DIST = 0.03; // marker-space units — small, sub-visible at idle
+              if (lead.length() > MAX_LEAD_DIST) lead.setLength(MAX_LEAD_DIST);
+              _leadPos.add(lead);
+            }
 
             smoothed.position.lerp(_leadPos, alpha);
             smoothed.quaternion.slerp(_rawQuat, alpha);
@@ -1685,7 +1692,32 @@ function spawnArTarget(id, targetIndex, target, anchor){
   });
   wrapper.appendChild(corners);
 
-  wrapper.addEventListener('click',()=>triggerOpenWithConfirm(id));
+  wrapper.addEventListener('click',()=>{
+    console.log('[Memoria] wrapper CLICK fired', id);
+    entry_openGuard(id);
+  });
+  // ── POINTERDOWN FALLBACK ─────────────────────────────────────────────
+  // Some mobile WebViews/browsers delay or swallow synthetic 'click' on
+  // elements that are repositioned every frame via transform (which this
+  // wrapper is, via CSS3DRenderer's matrix3d() writes) — the browser's
+  // click-after-tap heuristic can lose track of the element between
+  // touchstart and touchend if its transform changed mid-tap. 'pointerdown'
+  // fires immediately on touch/mouse contact, before any of that
+  // ambiguity, so it's a more reliable trigger for a fast-moving AR
+  // overlay. Guarded with a tiny per-wrapper debounce so this doesn't
+  // ALSO fire 'click' a moment later and double-open.
+  wrapper.addEventListener('pointerdown', (e) => {
+    console.log('[Memoria] wrapper POINTERDOWN fired', id, e.pointerType);
+    entry_openGuard(id);
+  });
+  function entry_openGuard(targetId){
+    const e = arTargets.get(targetId);
+    if (!e) return;
+    const now = performance.now();
+    if (e._lastOpenTriggerAt && now - e._lastOpenTriggerAt < 600) return; // debounce vs click firing right after
+    e._lastOpenTriggerAt = now;
+    triggerOpenWithConfirm(targetId);
+  }
 
   // Position the video within the poster using the saved videoRect (percentages
   // of the photo's own size, center-anchored) — same numbers set in your
@@ -2432,6 +2464,20 @@ document.addEventListener('visibilitychange', handleVisibilityChange);
 /* ============================================================
    BOOT
 ============================================================ */
+/* ============================================================
+   TEMP DEBUG ONLY — tap diagnostic. Logs the actual top-most element under
+   every tap anywhere on screen, in the capture phase (before anything can
+   stopPropagation it away). If tapping a visibly-tracked AR video produces
+   neither the "wrapper CLICK/POINTERDOWN fired" logs above NOR a log line
+   here naming a .ar-video-wrapper, something else (a canvas, an overlay
+   div) is physically on top and absorbing the tap — this will name it.
+   REMOVE once the tap issue is confirmed fixed — not for production.
+============================================================ */
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target;
+  console.log('[Memoria][tap-diag] top element under tap:', el.tagName, el.className || '(no class)', el.id || '(no id)');
+}, { capture: true });
+
 initScanner();
 </script>
 </body>
