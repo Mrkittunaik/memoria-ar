@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Scan — Memoria</title>
 
-    <!-- Eruda debug console (remove in production) -->
+    <!-- Eruda debug console -->
     <script src="https://cdn.jsdelivr.net/npm/eruda">
     </script>
     <script>
@@ -911,7 +911,7 @@
                 }
             }
         </script>
-        <!-- MindAR scripts are now loaded dynamically via the loader below -->
+        <!-- MindAR scripts loaded dynamically via the loader below -->
     </head>
 
     <body>
@@ -1061,11 +1061,9 @@
             }
 
             async function loadMindAR() {
-                // Load both MindAR scripts sequentially (order matters)
                 await loadScript('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js');
                 await loadScript('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
 
-                // Verify the global object is available
                 if (!window.MINDAR || !window.MINDAR.IMAGE || !window.MINDAR.IMAGE.Compiler || !window.MINDAR.IMAGE
                     .MindARThree) {
                     throw new Error('MindAR failed to initialize properly');
@@ -1475,112 +1473,127 @@
             }
 
             // ================================================================
-            // BACKEND WAKE
+            // BACKEND WAKE — RELIABLE with exponential backoff and clear feedback
             // ================================================================
             async function wakeBackend() {
                 if (_backendReady) return;
                 const statusText = document.getElementById('statusText');
+                const pill = document.getElementById('statusPill');
+
+                // First, try a quick health check with a short timeout
                 try {
-                    const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(4000) });
-                    if (res.ok) { _backendReady = true; return; }
-                } catch (_) {}
+                    const res = await fetch(`${BACKEND_URL}/health`, {
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    if (res.ok) {
+                        _backendReady = true;
+                        console.log('[Memoria] Backend is awake');
+                        return;
+                    }
+                } catch (_) {
+                    // Health check failed — backend is likely sleeping
+                    console.log('[Memoria] Backend health check failed, waking up…');
+                }
 
-                if (statusText) statusText.textContent = 'Waking up server… this can take 30–60s on first scan';
-                let secs = 0;
-                const timer = setInterval(() => {
-                    secs++;
-                    if (statusText) statusText.textContent = `Waking up server… ${secs}s elapsed`;
-                }, 1000);
-                const deadline = Date.now() + 90000;
-                while (Date.now() < deadline) {
+                // Backend is sleeping — show wake-up progress
+                if (statusText) {
+                    statusText.textContent = '🔄 Waking up server… (Render cold start, 30–60s)';
+                    pill.className = 'status-pill ready';
+                }
+
+                // Try fetching targets directly — this will wake the backend
+                let attempts = 0;
+                const maxAttempts = 8;
+                const baseDelay = 2000;
+
+                while (attempts < maxAttempts) {
+                    attempts++;
+                    const delay = baseDelay * Math.min(2, attempts);
+                    const elapsed = (attempts * baseDelay) / 1000;
+
+                    if (statusText) {
+                        statusText.textContent = `🔄 Waking up server… ${Math.round(elapsed)}s elapsed`;
+                    }
+
                     try {
-                        const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(5000) });
-                        if (res.ok) { _backendReady = true; break; }
-                    } catch (_) {}
-                    await new Promise(r => setTimeout(r, 2000));
-                }
-                clearInterval(timer);
-            }
+                        const res = await fetch(`${BACKEND_URL}/api/memories/targets`, {
+                            signal: AbortSignal.timeout(8000)
+                        });
+                        if (res.ok) {
+                            _backendReady = true;
+                            console.log('[Memoria] Backend woke up successfully');
+                            if (statusText) statusText.textContent = '✅ Server ready!';
+                            return;
+                        }
+                        // If we get a response but not OK, something else is wrong
+                        console.warn('[Memoria] Backend responded with status:', res.status);
+                    } catch (err) {
+                        // Request failed — backend still sleeping, continue retry
+                        console.log(`[Memoria] Wake attempt ${attempts}/${maxAttempts} failed, retrying…`);
+                    }
 
-            // ================================================================
-            // CAMERA ERROR SCREEN
-            // ================================================================
-            function showCameraErrorScreen(err) {
-                localStorage.removeItem(PERM_KEY);
-                const name = err && err.name;
-                const isBlocked = name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError';
-                const isNoCamera = name === 'NotFoundError' || name === 'DevicesNotFoundError';
-                const isInUse = name === 'NotReadableError' || name === 'TrackStartError';
-
-                let title, body;
-                if (isBlocked) {
-                    title = 'Camera access is blocked';
-                    body =
-                        `You previously blocked camera access for this site. Browsers don't let websites re-ask once blocked — you'll need to allow it manually:<br><br><b>On phone (Chrome/Safari):</b> tap the icon left of the address bar (🔒 or ⓘ) → Permissions / Site settings → set Camera to Allow.<br><b>On desktop Chrome:</b> click the 🔒 / ⓘ icon in the address bar → Site settings → Camera → Allow.<br><b>On desktop Safari:</b> Safari menu → Settings → Websites → Camera → set this site to Allow.`;
-                } else if (isNoCamera) {
-                    title = 'No camera found';
-                    body =
-                        `This device doesn't have a usable camera, or it's disabled at the OS level. Check your device's camera settings and try again.`;
-                } else if (isInUse) {
-                    title = 'Camera is busy';
-                    body = `Another app or browser tab seems to be using the camera right now. Close it and try again.`;
-                } else {
-                    title = 'Camera access needed';
-                    body = `Something went wrong starting the camera. Please allow camera access for this site and try again.`;
+                    // Wait before next attempt
+                    if (attempts < maxAttempts) {
+                        await new Promise(r => setTimeout(r, delay));
+                    }
                 }
 
-                document.getElementById('loading').innerHTML = `
-                    <div style="text-align:center;padding:40px;max-width:360px">
-                        <div style="font-size:32px;margin-bottom:16px">📷</div>
-                        <h3 style="color:#fff;margin-bottom:8px">${title}</h3>
-                        <p style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">${body}</p>
-                        <p style="color:rgba(255,80,80,.65);font-size:11px;margin-top:10px;word-break:break-word">
-                            ${name ? '(' + name + ')' : ''}</p>
-                        <button id="cameraRetryBtn"
-                            style="margin-top:22px;padding:12px 28px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
-                            Try again</button>
-                    </div>`;
-                document.getElementById('cameraRetryBtn').addEventListener('click', retryStartScanner);
-            }
-
-            async function retryStartScanner() {
-                document.getElementById('loading').innerHTML = `
-                    <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
-                    <div class="loading-spinner"></div>
-                    <div id="loading-text">
-                        <h3 id="loading-title">Starting camera</h3>
-                        <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
-                        <p id="loading-counter" style="text-align:center"></p>
-                    </div>`;
-                await startScanner();
+                // If we get here, all attempts failed
+                throw new Error(
+                    'Backend did not respond after multiple attempts. It may be down or unreachable. Please try again later.');
             }
 
             // ================================================================
-            // FETCH & COMPILE TARGETS
+            // FETCH & COMPILE TARGETS — with retry and clear error handling
             // ================================================================
             async function fetchAndCompileTargets() {
                 const statusText = document.getElementById('statusText');
                 const pill = document.getElementById('statusPill');
                 pill.className = 'status-pill ready';
-                statusText.textContent = 'Loading memories…';
+                statusText.textContent = '📡 Fetching memories…';
 
-                const res = await fetch(`${BACKEND_URL}/api/memories/targets`);
-                if (!res.ok) throw new Error(`Backend ${res.status}`);
+                let res;
+                let fetchAttempts = 0;
+                const maxFetchAttempts = 3;
+
+                while (fetchAttempts < maxFetchAttempts) {
+                    fetchAttempts++;
+                    try {
+                        res = await fetch(`${BACKEND_URL}/api/memories/targets`, {
+                            signal: AbortSignal.timeout(10000)
+                        });
+                        if (res.ok) break;
+                    } catch (err) {
+                        console.warn(`[Memoria] Fetch attempt ${fetchAttempts}/${maxFetchAttempts} failed:`, err);
+                        if (fetchAttempts < maxFetchAttempts) {
+                            await new Promise(r => setTimeout(r, 1500));
+                        } else {
+                            throw new Error(
+                                `Failed to fetch memories after ${maxFetchAttempts} attempts. Please check your connection.`);
+                        }
+                    }
+                }
+
+                if (!res || !res.ok) {
+                    throw new Error(`Backend error: ${res ? res.status : 'no response'}`);
+                }
+
                 const data = await res.json();
 
                 if (!data.success || !data.data.targets || data.data.targets.length === 0) {
-                    statusText.textContent = 'No memories uploaded yet.';
+                    statusText.textContent = '📭 No memories uploaded yet. Add one in the dashboard.';
                     return null;
                 }
+
                 _targets = data.data.targets;
 
-                statusText.textContent = `Preparing AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+                statusText.textContent = `🔄 Preparing AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
                 const { Compiler } = window.MINDAR.IMAGE;
                 const compiler = new Compiler();
                 const images = await Promise.all(_targets.map(t => loadImage(t.photoUrl)));
                 await compiler.compileImageTargets(images, (progress) => {
-                    statusText.textContent = `Preparing AR tracking… ${Math.round(progress)}%`;
+                    statusText.textContent = `🔄 Preparing AR tracking… ${Math.round(progress)}%`;
                 });
                 const mindBuffer = compiler.exportData();
                 const mindBlob = new Blob([mindBuffer]);
@@ -1595,6 +1608,7 @@
                 });
 
                 _lastMindUrl = URL.createObjectURL(mindBlob);
+                statusText.textContent = `✅ Ready! Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
                 return _lastMindUrl;
             }
 
@@ -1694,7 +1708,7 @@
 
                 acquireWakeLock();
 
-                statusText.textContent = `Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+                statusText.textContent = `🔍 Scanning for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
                 _targets.forEach((target, index) => {
                     const anchor = mindarThree.addCSSAnchor(index);
@@ -2172,7 +2186,7 @@
                 } else {
                     pill.classList.remove('fade-out');
                     pill.className = 'status-pill ready';
-                    text.textContent = 'Scanning for photos…';
+                    text.textContent = '🔍 Scanning for photos…';
                 }
             }
 
@@ -2522,7 +2536,60 @@
             }
 
             // ================================================================
-            // START SCANNER
+            // CAMERA ERROR SCREEN
+            // ================================================================
+            function showCameraErrorScreen(err) {
+                localStorage.removeItem(PERM_KEY);
+                const name = err && err.name;
+                const isBlocked = name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError';
+                const isNoCamera = name === 'NotFoundError' || name === 'DevicesNotFoundError';
+                const isInUse = name === 'NotReadableError' || name === 'TrackStartError';
+
+                let title, body;
+                if (isBlocked) {
+                    title = 'Camera access is blocked';
+                    body =
+                        `You previously blocked camera access for this site. Browsers don't let websites re-ask once blocked — you'll need to allow it manually:<br><br><b>On phone (Chrome/Safari):</b> tap the icon left of the address bar (🔒 or ⓘ) → Permissions / Site settings → set Camera to Allow.<br><b>On desktop Chrome:</b> click the 🔒 / ⓘ icon in the address bar → Site settings → Camera → Allow.<br><b>On desktop Safari:</b> Safari menu → Settings → Websites → Camera → set this site to Allow.`;
+                } else if (isNoCamera) {
+                    title = 'No camera found';
+                    body =
+                        `This device doesn't have a usable camera, or it's disabled at the OS level. Check your device's camera settings and try again.`;
+                } else if (isInUse) {
+                    title = 'Camera is busy';
+                    body = `Another app or browser tab seems to be using the camera right now. Close it and try again.`;
+                } else {
+                    title = 'Camera access needed';
+                    body = `Something went wrong starting the camera. Please allow camera access for this site and try again.`;
+                }
+
+                document.getElementById('loading').innerHTML = `
+                    <div style="text-align:center;padding:40px;max-width:360px">
+                        <div style="font-size:32px;margin-bottom:16px">📷</div>
+                        <h3 style="color:#fff;margin-bottom:8px">${title}</h3>
+                        <p style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">${body}</p>
+                        <p style="color:rgba(255,80,80,.65);font-size:11px;margin-top:10px;word-break:break-word">
+                            ${name ? '(' + name + ')' : ''}</p>
+                        <button id="cameraRetryBtn"
+                            style="margin-top:22px;padding:12px 28px;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:14px">
+                            Try again</button>
+                    </div>`;
+                document.getElementById('cameraRetryBtn').addEventListener('click', retryStartScanner);
+            }
+
+            async function retryStartScanner() {
+                document.getElementById('loading').innerHTML = `
+                    <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
+                    <div class="loading-spinner"></div>
+                    <div id="loading-text">
+                        <h3 id="loading-title">Starting camera</h3>
+                        <p id="loading-sub" style="text-align:center;margin-top:4px">Point at a registered photo to begin</p>
+                        <p id="loading-counter" style="text-align:center"></p>
+                    </div>`;
+                await startScanner();
+            }
+
+            // ================================================================
+            // START SCANNER — permission + preview + MindAR
             // ================================================================
             async function startScanner() {
                 document.getElementById('demo-overlay').classList.add('hidden');
@@ -2561,18 +2628,40 @@
                 document.getElementById('loading').classList.add('hidden');
                 localStorage.setItem(PERM_KEY, 'true');
 
-                // ---- Fetch & compile targets ----
+                // ---- Wake backend & fetch targets ----
                 let mindUrl;
                 try {
+                    // First, wake the backend (handles cold start)
                     await wakeBackend();
+                    // Then fetch and compile targets
                     mindUrl = await fetchAndCompileTargets();
                 } catch (err) {
-                    console.error('[Memoria] target prep failed:', err);
+                    console.error('[Memoria] backend/target error:', err);
                     const statusText = document.getElementById('statusText');
-                    if (statusText) statusText.textContent = 'Could not load memories. Pull to retry.';
+                    const pill = document.getElementById('statusPill');
+                    if (statusText) {
+                        statusText.textContent = '❌ ' + (err.message || 'Could not connect to server. Please check your internet and try again.');
+                        pill.className = 'status-pill ready';
+                    }
+                    // Show a retry button in the status area
+                    const retryBtn = document.createElement('button');
+                    retryBtn.textContent = '🔄 Retry';
+                    retryBtn.style.cssText =
+                        'margin-top:8px;padding:8px 20px;border-radius:8px;background:var(--gold);color:#fff;border:none;cursor:pointer;font-size:13px;font-family:inherit;';
+                    retryBtn.onclick = () => {
+                        retryBtn.remove();
+                        startScanner();
+                    };
+                    const statusArea = document.querySelector('.status-area');
+                    if (statusArea) statusArea.appendChild(retryBtn);
                     return;
                 }
-                if (!mindUrl) return;
+                if (!mindUrl) {
+                    // No targets uploaded — show a message but keep camera running
+                    const statusText = document.getElementById('statusText');
+                    if (statusText) statusText.textContent = '📭 No memories uploaded yet. Add one in the dashboard.';
+                    return;
+                }
 
                 // ---- Stop preview, start MindAR ----
                 previewStream.getTracks().forEach(t => t.stop());
