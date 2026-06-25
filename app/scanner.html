@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>Memoria AR — Advanced Scanner</title>
+<title>Memoria AR — Pin & Thread</title>
 
 <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
 <script>eruda.init();</script>
@@ -67,7 +67,6 @@
     transform: translateZ(0);
     perspective: 800px;
     border-radius: 4px;
-    /* 3D shadow – mimics a floating card */
     filter: drop-shadow(0 8px 24px rgba(0,0,0,0.6)) drop-shadow(0 2px 8px rgba(0,0,0,0.4));
     transition: filter 0.3s ease;
   }
@@ -993,7 +992,7 @@ async function beginMindAR(mindUrl) {
     anchor.onTargetLost = () => onTargetLost(String(target.id));
   });
 
-  // ── Gyro (only used for debug, no hold) ──
+  // ── Gyro (only for debug, not used for orientation) ──
   let _orientAvailable = false;
   let _lastOrient = null;
   const _orientEuler = new THREE.Euler();
@@ -1017,20 +1016,24 @@ async function beginMindAR(mindUrl) {
     return out.setFromEuler(_orientEuler);
   }
 
-  // ── SMOOTHING (no hold) ──
+  // ── SMOOTHING (no hold, billboard rotation) ──
   const SMOOTHING_HALF_LIFE_IDLE = 60;
   const SMOOTHING_HALF_LIFE_FAST = 12;
   const FAST_VELOCITY_THRESHOLD = 0.4;
   const STILL_VELOCITY_THRESHOLD = 0.01;
   const MAX_POS_JUMP_PER_SEC = 1.2;
-  const MAX_ROT_JUMP_RAD_PER_SEC = 12;
+  const MAX_ROT_JUMP_RAD_PER_SEC = 12; // not used for rotation
   const REJECT_GRACE_FRAMES = 3;
 
   let _lastFrameTime = performance.now();
   let _frameCount = 0, _fpsAccum = 0, _fps = 0, _lastFpsUpdate = performance.now();
   const _rawPos = new THREE.Vector3();
-  const _rawQuat = new THREE.Quaternion();
+  const _rawQuat = new THREE.Quaternion(); // unused for rotation
   const _rawScale = new THREE.Vector3();
+
+  // Temporary for lookAt
+  const _cameraPos = new THREE.Vector3(0, 0, 0);
+  const _up = new THREE.Vector3(0, 1, 0);
 
   mindarThree.renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -1055,14 +1058,12 @@ async function beginMindAR(mindUrl) {
       if (rawVisible) {
         anchor.group.matrix.decompose(_rawPos, _rawQuat, _rawScale);
 
-        // ── Outlier rejection ──
+        // ── Outlier rejection (position only) ──
         let accept = true;
         if (entry._lastGoodRawPos && wasVisible) {
           const posJump = entry._lastGoodRawPos.distanceTo(_rawPos);
-          const rotJump = entry._lastGoodRawQuat ? entry._lastGoodRawQuat.angleTo(_rawQuat) : 0;
           const posLimit = MAX_POS_JUMP_PER_SEC * Math.max(dtSec, 1/120);
-          const rotLimit = MAX_ROT_JUMP_RAD_PER_SEC * Math.max(dtSec, 1/120);
-          if (posJump > posLimit || rotJump > rotLimit) {
+          if (posJump > posLimit) {
             entry._rejectStreak = (entry._rejectStreak || 0) + 1;
             if (entry._rejectStreak <= REJECT_GRACE_FRAMES) accept = false;
           } else {
@@ -1076,7 +1077,6 @@ async function beginMindAR(mindUrl) {
         }
 
         entry._lastGoodRawPos = (entry._lastGoodRawPos || new THREE.Vector3()).copy(_rawPos);
-        entry._lastGoodRawQuat = (entry._lastGoodRawQuat || new THREE.Quaternion()).copy(_rawQuat);
 
         wrapper.style.visibility = 'visible';
         inner.style.opacity = '';
@@ -1085,8 +1085,9 @@ async function beginMindAR(mindUrl) {
 
         if (!wasVisible) {
           smoothed.position.copy(_rawPos);
-          smoothed.quaternion.copy(_rawQuat);
           smoothed.scale.copy(_rawScale);
+          // Set initial orientation to face camera
+          smoothed.lookAt(_cameraPos);
           entry.userVel = 0;
           entry.stability = 1;
         } else {
@@ -1105,12 +1106,7 @@ async function beginMindAR(mindUrl) {
               (SMOOTHING_HALF_LIFE_FAST - SMOOTHING_HALF_LIFE_IDLE) * fastT;
             const alpha = dt > 0 ? 1 - Math.pow(0.5, dt / halfLife) : 1;
 
-            if (smoothed.quaternion.dot(_rawQuat) < 0) {
-              _rawQuat.set(-_rawQuat.x, -_rawQuat.y, -_rawQuat.z, -_rawQuat.w);
-            }
-
             smoothed.position.lerp(_rawPos, alpha);
-            smoothed.quaternion.slerp(_rawQuat, alpha);
             smoothed.scale.lerp(_rawScale, alpha);
 
             const jitterPenalty = Math.min(1, entry.userVel / (FAST_VELOCITY_THRESHOLD * 2));
@@ -1118,10 +1114,11 @@ async function beginMindAR(mindUrl) {
             entry.stability = entry.stability === undefined ? target : entry.stability * 0.82 + target * 0.18;
           }
         }
-        smoothed.updateMatrix();
 
-        // ── Update info label position (it's a child of wrapper, so it follows) ──
-        // Already positioned via CSS relative to wrapper.
+        // ── BILLBOARD: always face the camera ──
+        smoothed.lookAt(_cameraPos);
+
+        smoothed.updateMatrix();
 
       } else {
         // ── LOST – hide immediately ──
@@ -1230,9 +1227,10 @@ function spawnArTarget(id, targetIndex, target, anchor) {
   smoothed.add(cssObject);
   mindarThree.cssScene.add(smoothed);
   smoothed.matrixAutoUpdate = true;
+  // Initial orientation: face camera
   smoothed.position.setFromMatrixPosition(anchor.group.matrix);
-  smoothed.quaternion.setFromRotationMatrix(anchor.group.matrix);
   smoothed.scale.setFromMatrixScale(anchor.group.matrix);
+  smoothed.lookAt(0, 0, 0);
 
   const entry = {
     wrapper, inner, corners, video, cssObject, smoothed, anchor,
@@ -1291,8 +1289,6 @@ function onTargetLost(id) {
   const entry = arTargets.get(id);
   if (!entry) return;
   entry.visible = false;
-  // Hiding is now handled in the animation loop (immediate)
-  // Just clean up timers
   clearTimeout(entry._lostTeardownTimer);
   refreshStatusPill();
 }
