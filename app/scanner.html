@@ -77,7 +77,7 @@
   .ar-video-inner {
     position: absolute; inset: 0;
     opacity: 0;
-    transition: opacity 0.15s cubic-bezier(0.22,0.9,0.32,1);
+    transition: opacity 0.25s cubic-bezier(0.22,0.9,0.32,1);
     pointer-events: none;
     backface-visibility: hidden;
     -webkit-transform: translateZ(0);
@@ -142,7 +142,7 @@
     animation: bracketLock 0.25s cubic-bezier(0.22,0.9,0.32,1) both;
   }
 
-  /* ─── MEMORY INFO LABEL (floating above poster) ─── */
+  /* ─── MEMORY INFO LABEL ─── */
   .ar-info-label {
     position: absolute;
     bottom: 105%; left: 50%;
@@ -992,7 +992,7 @@ async function beginMindAR(mindUrl) {
     anchor.onTargetLost = () => onTargetLost(String(target.id));
   });
 
-  // ── Gyro (only for debug, not used for orientation) ──
+  // ── Gyro (only for debug, not used) ──
   let _orientAvailable = false;
   let _lastOrient = null;
   const _orientEuler = new THREE.Euler();
@@ -1016,13 +1016,12 @@ async function beginMindAR(mindUrl) {
     return out.setFromEuler(_orientEuler);
   }
 
-  // ── SMOOTHING (no hold, billboard rotation) ──
+  // ── SMOOTHING (no hold, instant hide on loss) ──
   const SMOOTHING_HALF_LIFE_IDLE = 60;
   const SMOOTHING_HALF_LIFE_FAST = 12;
   const FAST_VELOCITY_THRESHOLD = 0.4;
   const STILL_VELOCITY_THRESHOLD = 0.01;
   const MAX_POS_JUMP_PER_SEC = 1.2;
-  const MAX_ROT_JUMP_RAD_PER_SEC = 12; // not used for rotation
   const REJECT_GRACE_FRAMES = 3;
 
   let _lastFrameTime = performance.now();
@@ -1078,7 +1077,10 @@ async function beginMindAR(mindUrl) {
 
         entry._lastGoodRawPos = (entry._lastGoodRawPos || new THREE.Vector3()).copy(_rawPos);
 
+        // Show with fade-in
         wrapper.style.visibility = 'visible';
+        // Restore transition for fade-in
+        inner.style.transition = '';
         inner.style.opacity = '';
         smoothed.userData.wasVisible = true;
         wrapper.classList.add('tracking-active');
@@ -1086,7 +1088,6 @@ async function beginMindAR(mindUrl) {
         if (!wasVisible) {
           smoothed.position.copy(_rawPos);
           smoothed.scale.copy(_rawScale);
-          // Set initial orientation to face camera
           smoothed.lookAt(_cameraPos);
           entry.userVel = 0;
           entry.stability = 1;
@@ -1117,18 +1118,20 @@ async function beginMindAR(mindUrl) {
 
         // ── BILLBOARD: always face the camera ──
         smoothed.lookAt(_cameraPos);
-
         smoothed.updateMatrix();
 
       } else {
-        // ── LOST – hide immediately ──
+        // ── LOST – hide instantly ──
         if (wasVisible) {
           wrapper.classList.remove('tracking-active');
           wrapper.style.visibility = 'hidden';
+          // Remove transition and set opacity to 0 instantly
+          inner.style.transition = 'none';
           inner.style.opacity = '0';
           inner.classList.remove('visible', 'tracking');
           corners.classList.remove('tracking', 'lock-anim');
           if (label) label.classList.remove('visible');
+          // Pause video immediately
           entry.video.pause();
         }
         smoothed.userData.wasVisible = false;
@@ -1227,7 +1230,6 @@ function spawnArTarget(id, targetIndex, target, anchor) {
   smoothed.add(cssObject);
   mindarThree.cssScene.add(smoothed);
   smoothed.matrixAutoUpdate = true;
-  // Initial orientation: face camera
   smoothed.position.setFromMatrixPosition(anchor.group.matrix);
   smoothed.scale.setFromMatrixScale(anchor.group.matrix);
   smoothed.lookAt(0, 0, 0);
@@ -1251,6 +1253,8 @@ function onTargetFound(id) {
   entry.visible = true;
   entry.lastSeen = performance.now();
   entry.inner.classList.add('visible', 'tracking');
+  // Restore transition if it was removed
+  entry.inner.style.transition = '';
   entry.inner.style.opacity = '';
   if (entry.label) entry.label.classList.add('visible');
   clearTimeout(entry._lostTeardownTimer);
