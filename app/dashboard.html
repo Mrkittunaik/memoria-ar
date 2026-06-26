@@ -89,6 +89,58 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 .mobile-toggle{display:none;position:fixed;bottom:20px;right:20px;z-index:300;width:50px;height:50px;border-radius:50%;background:var(--ink);border:none;cursor:pointer;align-items:center;justify-content:center;color:var(--surface);}
 #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);background:rgba(13,11,10,.92);color:#fff;font-size:13px;padding:10px 20px;border-radius:30px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:999;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Topbar icon-only compact buttons ── */
+.topbar-right .btn-sm .btn-label{display:inline;}
+.mob-bottom-nav{display:none;}
+
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);transition:transform .25s}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0;padding-bottom:68px;}
+  .stats-row{grid-template-columns:repeat(2,1fr);gap:10px;}
+  .stat-card{padding:14px;}
+  .stat-value{font-size:22px;}
+  .analytics-row{grid-template-columns:1fr}
+  .topbar{padding:0 14px;height:54px;}
+  .topbar-title{font-size:14px;}
+  .content{padding:14px;}
+  .memories-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;}
+  .memory-thumb-img,.memory-thumb-placeholder{height:130px;}
+
+  /* shrink topbar buttons to icon-only */
+  .topbar-right{gap:8px;}
+  .topbar-right .btn-sm{padding:7px 10px;gap:0;font-size:12px;border-radius:8px;}
+  .topbar-right .btn-sm .btn-label{display:none;}
+  .topbar-right .btn-sm svg{flex-shrink:0;}
+
+  /* mobile bottom nav bar */
+  .mob-bottom-nav{
+    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:200;
+    height:60px;background:var(--surface-card);border-top:.5px solid var(--border);
+    align-items:center;justify-content:space-around;
+    padding:0 8px;padding-bottom:env(safe-area-inset-bottom,0);
+  }
+  .mob-nav-btn{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;padding:6px 4px;border:none;background:none;cursor:pointer;
+    color:var(--ink-faint);font-size:10px;font-family:inherit;font-weight:500;
+    text-decoration:none;border-radius:10px;transition:color .15s;
+  }
+  .mob-nav-btn.active{color:var(--gold);}
+  .mob-nav-btn svg{flex-shrink:0;}
+  .mob-nav-btn.add-btn{
+    color:#fff;background:var(--ink);border-radius:14px;
+    padding:8px 16px;flex:0 0 auto;flex-direction:row;gap:6px;font-size:12px;
+  }
+  .mob-nav-btn.add-btn svg stroke{color:#fff;}
+
+  /* toast sits above bottom nav */
+  #toast{bottom:76px;}
+
+  /* section add-memory btn hide on mobile (bottom nav covers it) */
+  .section-header .btn-sm{display:none;}
+}
 .confirm-bg{display:none;position:fixed;inset:0;z-index:300;background:rgba(13,11,10,.5);align-items:center;justify-content:center;}
 .confirm-bg.open{display:flex}
 .confirm-box{background:var(--surface-card);border-radius:16px;border:0.5px solid var(--border);padding:28px;max-width:340px;width:90%;text-align:center;}
@@ -166,11 +218,11 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
     <div class="topbar-right">
       <a href="scanner.html" class="btn-sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        Scanner
+        <span class="btn-label">Scanner</span>
       </a>
       <a href="upload-memory.html" class="btn-sm btn-primary">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Memory
+        <span class="btn-label">Add Memory</span>
       </a>
     </div>
   </div>
@@ -277,9 +329,21 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 </div>
 
 <div id="toast"></div>
-<button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-</button>
+<!-- Mobile bottom nav -->
+<nav class="mob-bottom-nav">
+  <button class="mob-nav-btn active" onclick="document.getElementById('sidebar').classList.remove('open')">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    Memories
+  </button>
+  <a href="upload-memory.html" class="mob-nav-btn add-btn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Add Memory
+  </a>
+  <a href="scanner.html" class="mob-nav-btn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    Scanner
+  </a>
+</nav>
 
 <script>
 const API = 'https://memoria-ar-backend.onrender.com';
