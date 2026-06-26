@@ -514,30 +514,31 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
       <div id="rotateLayer" style="position:absolute;inset:0;pointer-events:none;">
         <!-- detected border outline (legacy glow, kept for the "fit found" pulse on first detect) -->
         <div id="borderGlow" class="border-glow" style="display:none;"></div>
-        <!-- editable photo-border quad -->
+        <!-- editable photo-border quad — rotates WITH the photo, since these are the photo's own edges -->
         <div id="borderQuad" class="border-quad" style="display:none;"></div>
         <div class="border-corner-handle" id="bcA" data-c="A" style="pointer-events:auto;"><span class="ch-label">A</span></div>
         <div class="border-corner-handle" id="bcB" data-c="B" style="pointer-events:auto;"><span class="ch-label">B</span></div>
         <div class="border-corner-handle" id="bcC" data-c="C" style="pointer-events:auto;"><span class="ch-label">C</span></div>
         <div class="border-corner-handle" id="bcD" data-c="D" style="pointer-events:auto;"><span class="ch-label">D</span></div>
-        <!-- snap guides -->
-        <div class="snap-line h" id="snapH"></div>
-        <div class="snap-line v" id="snapV"></div>
-        <!-- crop/video box -->
-        <div class="crop-box" id="cropBox" style="display:none;pointer-events:auto;">
-          <div class="crop-corner tl"></div>
-          <div class="crop-corner tr"></div>
-          <div class="crop-corner bl"></div>
-          <div class="crop-corner br"></div>
-          <div class="crop-handle h-tl" data-h="tl"></div>
-          <div class="crop-handle h-tr" data-h="tr"></div>
-          <div class="crop-handle h-bl" data-h="bl"></div>
-          <div class="crop-handle h-br" data-h="br"></div>
-          <div class="crop-handle h-t" data-h="t"></div>
-          <div class="crop-handle h-b" data-h="b"></div>
-          <div class="crop-handle h-l" data-h="l"></div>
-          <div class="crop-handle h-r" data-h="r"></div>
-        </div>
+      </div>
+      <!-- snap guides — screen space, independent of photo rotation -->
+      <div class="snap-line h" id="snapH"></div>
+      <div class="snap-line v" id="snapV"></div>
+      <!-- crop/video box — deliberately a SIBLING of rotateLayer, not a child,
+           so rotating the photo never drags the video box along with it -->
+      <div class="crop-box" id="cropBox" style="display:none;pointer-events:auto;">
+        <div class="crop-corner tl"></div>
+        <div class="crop-corner tr"></div>
+        <div class="crop-corner bl"></div>
+        <div class="crop-corner br"></div>
+        <div class="crop-handle h-tl" data-h="tl"></div>
+        <div class="crop-handle h-tr" data-h="tr"></div>
+        <div class="crop-handle h-bl" data-h="bl"></div>
+        <div class="crop-handle h-br" data-h="br"></div>
+        <div class="crop-handle h-t" data-h="t"></div>
+        <div class="crop-handle h-b" data-h="b"></div>
+        <div class="crop-handle h-l" data-h="l"></div>
+        <div class="crop-handle h-r" data-h="r"></div>
       </div>
     </div>
     <div class="crop-hint-txt" id="cropHint">Drag to reposition · drag any handle to resize</div>
@@ -584,22 +585,21 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 
     <div class="crop-wrap" id="previewWrap" style="height:460px;">
       <img id="prevPoster" class="crop-poster" src="" alt=""/>
-      <div id="prevRotateLayer" style="position:absolute;inset:0;pointer-events:none;">
-        <video id="prevVid" class="preview-vid" style="position:absolute;object-fit:fill;" autoplay muted loop playsinline></video>
-        <div class="crop-box" id="prevCropBox" style="pointer-events:auto;">
-          <div class="crop-corner tl"></div>
-          <div class="crop-corner tr"></div>
-          <div class="crop-corner bl"></div>
-          <div class="crop-corner br"></div>
-          <div class="crop-handle h-tl" data-h="tl"></div>
-          <div class="crop-handle h-tr" data-h="tr"></div>
-          <div class="crop-handle h-bl" data-h="bl"></div>
-          <div class="crop-handle h-br" data-h="br"></div>
-          <div class="crop-handle h-t" data-h="t"></div>
-          <div class="crop-handle h-b" data-h="b"></div>
-          <div class="crop-handle h-l" data-h="l"></div>
-          <div class="crop-handle h-r" data-h="r"></div>
-        </div>
+      <div id="prevRotateLayer" style="position:absolute;inset:0;pointer-events:none;"></div>
+      <video id="prevVid" class="preview-vid" style="position:absolute;object-fit:fill;" autoplay muted loop playsinline></video>
+      <div class="crop-box" id="prevCropBox" style="pointer-events:auto;">
+        <div class="crop-corner tl"></div>
+        <div class="crop-corner tr"></div>
+        <div class="crop-corner bl"></div>
+        <div class="crop-corner br"></div>
+        <div class="crop-handle h-tl" data-h="tl"></div>
+        <div class="crop-handle h-tr" data-h="tr"></div>
+        <div class="crop-handle h-bl" data-h="bl"></div>
+        <div class="crop-handle h-br" data-h="br"></div>
+        <div class="crop-handle h-t" data-h="t"></div>
+        <div class="crop-handle h-b" data-h="b"></div>
+        <div class="crop-handle h-l" data-h="l"></div>
+        <div class="crop-handle h-r" data-h="r"></div>
       </div>
     </div>
     <div style="font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:16px;">Drag any side or corner to fine-tune · video stays edge-to-edge · <span id="prevFrameLabel">Sharp</span> frame</div>
@@ -674,6 +674,11 @@ let photoRotation = 0; // degrees, applied to the whole photo
    corners above by default ("attach to corner"), but draggable independently
    for fine offset within the border. */
 let cropState = { xPct:50, yPct:50, wPct:85, hPct:85, ratioKey:'auto', rotation:0 };
+/* Video box as a true free quad — A/B/C/D corners, each fully independent,
+   same model as borderCorners. This is the source of truth in 'free' mode;
+   cropState (rectangle) stays the source of truth in 'auto'/'ratio' modes
+   and gets converted to a quad via cropStateToQuad() when needed. */
+let videoCorners = null; // null until first entering 'free' mode or attach-to-border
 let cropMode = 'auto'; // 'auto'|'ratio'|'free'
 let currentRatio = '9:16';
 let frameStyle = 'sharp'; // sharp|rounded|feather|polaroid|vignette|film
@@ -791,99 +796,41 @@ function detectBorder(url, blob, natW, natH) {
     ctx.drawImage(img, 0, 0, SW, SH);
     const px = ctx.getImageData(0,0,SW,SH).data;
 
-    // grayscale lookup
-    const gray = new Float32Array(SW*SH);
-    for (let i=0;i<SW*SH;i++){
-      const o=i*4;
-      gray[i] = px[o]*0.299 + px[o+1]*0.587 + px[o+2]*0.114;
-    }
-    const at = (x,y) => gray[Math.min(SH-1,Math.max(0,y))*SW + Math.min(SW-1,Math.max(0,x))];
-
-    // ── PASS 1: gradient / edge-energy scan ──
-    const rowEnergy = new Float32Array(SH);
-    const colEnergy = new Float32Array(SW);
-    for (let y=0;y<SH;y++){
-      for (let x=0;x<SW;x++){
-        const gx = at(x+1,y)-at(x-1,y);
-        const gy = at(x,y+1)-at(x,y-1);
-        const mag = Math.sqrt(gx*gx+gy*gy);
-        rowEnergy[y]+=mag; colEnergy[x]+=mag;
-      }
-    }
-    const gradResult = findBorderFromEnergy(rowEnergy,colEnergy,SW,SH);
-
-    // ── PASS 2: brightness/corner-contrast scan (fallback) ──
-    function bri(x,y){ return at(x,y); }
-    const corners=[bri(0,0),bri(SW-1,0),bri(0,SH-1),bri(SW-1,SH-1)];
-    const bgBri = corners.reduce((a,b)=>a+b,0)/4;
-    const THRESH = 22;
-    let minX=SW,maxX=0,minY=SH,maxY=0,found=false;
-    for (let y=0;y<SH;y+=2){
-      for (let x=0;x<SW;x+=2){
-        if (Math.abs(bri(x,y)-bgBri)>THRESH){
-          if(x<minX)minX=x; if(x>maxX)maxX=x;
-          if(y<minY)minY=y; if(y>maxY)maxY=y;
-          found=true;
-        }
-      }
-    }
-    let brightResult = null;
-    if (found && (maxX-minX)>SW*0.08 && (maxY-minY)>SH*0.08) {
-      const PAD=3;
-      minX=Math.max(0,minX-PAD); minY=Math.max(0,minY-PAD);
-      maxX=Math.min(SW-1,maxX+PAD); maxY=Math.min(SH-1,maxY+PAD);
-      brightResult = { minX,maxX,minY,maxY, confidence: scoreBoxConfidence(rowEnergy,colEnergy,minX,maxX,minY,maxY,SW,SH) };
-    }
-
+    const result = detectQuadBorder(px, SW, SH);
     document.getElementById('photoOverlay').classList.remove('on');
 
-    // ── ENSEMBLE: pick the higher-confidence pass, or blend if they agree ──
-    let final = null;
-    if (gradResult && brightResult) {
-      const closeX = Math.abs(gradResult.minX-brightResult.minX)<SW*0.04 && Math.abs(gradResult.maxX-brightResult.maxX)<SW*0.04;
-      const closeY = Math.abs(gradResult.minY-brightResult.minY)<SH*0.04 && Math.abs(gradResult.maxY-brightResult.maxY)<SH*0.04;
-      if (closeX && closeY) {
-        final = {
-          minX:(gradResult.minX+brightResult.minX)/2, maxX:(gradResult.maxX+brightResult.maxX)/2,
-          minY:(gradResult.minY+brightResult.minY)/2, maxY:(gradResult.maxY+brightResult.maxY)/2,
-          confidence: Math.min(98, Math.round((gradResult.confidence+brightResult.confidence)/2 + 12)),
-        };
-      } else {
-        final = gradResult.confidence >= brightResult.confidence ? gradResult : brightResult;
-      }
-    } else {
-      final = gradResult || brightResult;
-    }
+    if (result) {
+      // result.corners are in 0..SW / 0..SH pixel space, in our own local
+      // frame centered on the region — convert to % of the full image
+      const cnv = k => ({ x:(result.center.x+result.corners[k].x)/SW*100, y:(result.center.y+result.corners[k].y)/SH*100 });
+      borderCorners = { A:cnv('A'), B:cnv('B'), C:cnv('C'), D:cnv('D') };
 
-    if (final && (final.maxX-final.minX)>SW*0.06 && (final.maxY-final.minY)>SH*0.06) {
-      detectedBorder = {
-        xPct:(final.minX/SW)*100, yPct:(final.minY/SH)*100,
-        wPct:((final.maxX-final.minX)/SW)*100, hPct:((final.maxY-final.minY)/SH)*100,
-      };
-      detectConfidence = Math.round(final.confidence);
-      const cxPct = detectedBorder.xPct + detectedBorder.wPct/2;
-      const cyPct = detectedBorder.yPct + detectedBorder.hPct/2;
-      cropState = { xPct:cxPct, yPct:cyPct, wPct:detectedBorder.wPct, hPct:detectedBorder.hPct, ratioKey:'auto', rotation:0 };
-      // photo border corners A(TL) B(TR) C(BR) D(BL) — exact print edge, independently editable
-      borderCorners = {
-        A:{x:detectedBorder.xPct,                        y:detectedBorder.yPct},
-        B:{x:detectedBorder.xPct+detectedBorder.wPct,    y:detectedBorder.yPct},
-        C:{x:detectedBorder.xPct+detectedBorder.wPct,    y:detectedBorder.yPct+detectedBorder.hPct},
-        D:{x:detectedBorder.xPct,                        y:detectedBorder.yPct+detectedBorder.hPct},
+      const minXpct = Math.min(borderCorners.A.x,borderCorners.B.x,borderCorners.C.x,borderCorners.D.x);
+      const maxXpct = Math.max(borderCorners.A.x,borderCorners.B.x,borderCorners.C.x,borderCorners.D.x);
+      const minYpct = Math.min(borderCorners.A.y,borderCorners.B.y,borderCorners.C.y,borderCorners.D.y);
+      const maxYpct = Math.max(borderCorners.A.y,borderCorners.B.y,borderCorners.C.y,borderCorners.D.y);
+      detectedBorder = { xPct:minXpct, yPct:minYpct, wPct:maxXpct-minXpct, hPct:maxYpct-minYpct };
+      detectConfidence = result.confidence;
+
+      cropState = {
+        xPct:(minXpct+maxXpct)/2, yPct:(minYpct+maxYpct)/2,
+        wPct:maxXpct-minXpct, hPct:maxYpct-minYpct,
+        ratioKey:'auto', rotation: result.angleSigned,
       };
 
       const tier = detectConfidence>=75?'high':detectConfidence>=45?'mid':'low';
       const tierLabel = detectConfidence>=75?'Strong match':detectConfidence>=45?'Likely match':'Weak match';
+      const tiltNote = Math.abs(result.angleSigned)>=2 ? ` · ${Math.abs(result.angleSigned).toFixed(0)}° tilt corrected` : '';
       document.getElementById('photoPill').innerHTML =
-        `<div class="detect-pill ${tier}">✓ Border found · ${tierLabel} <span class="conf-bar-wrap"><span class="conf-bar-fill" style="width:${detectConfidence}%"></span></span></div>`;
+        `<div class="detect-pill ${tier}">✓ Card found · ${tierLabel} <span class="conf-bar-wrap"><span class="conf-bar-fill" style="width:${detectConfidence}%"></span></span></div>`;
       document.getElementById('detectBox').classList.add('show');
       document.getElementById('detectBoxHead').textContent = 'Auto-detection complete';
       document.getElementById('detectBoxBody').textContent =
-        `Card edges found at ${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% of the photo, ${detectConfidence}% confidence. The video will fit edge-to-edge inside this area — fine-tune it in Step 2 if needed.`;
+        `Card edges found, ${detectConfidence}% confidence${tiltNote}. The video will fit edge-to-edge inside this area — fine-tune it in Step 2 if needed.`;
       document.getElementById('borderInfoSec').style.display = 'block';
       document.getElementById('borderInfoBox').innerHTML =
         `Detected at ${Math.round(detectedBorder.xPct)}%, ${Math.round(detectedBorder.yPct)}% offset · `+
-        `${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% · ${detectConfidence}% confidence`;
+        `${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% · ${detectConfidence}% confidence${tiltNote}`;
     } else {
       detectedBorder = null; detectConfidence = 0;
       cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto', rotation:0 };
@@ -906,44 +853,99 @@ function detectBorder(url, blob, natW, natH) {
   img.src = url;
 }
 
-/* Scan inward from each side to find where edge-energy crosses from
-   "background noise floor" to "card content" — this is what actually
-   finds a straight printed-card border instead of just brightness diff. */
-function findBorderFromEnergy(rowEnergy, colEnergy, SW, SH) {
-  const rowMax = Math.max(...rowEnergy), colMax = Math.max(...colEnergy);
-  if (rowMax<1 || colMax<1) return null;
-  // noise floor = median-ish of the outer 10% margin on each side
-  const marginX = Math.max(2,Math.round(SW*0.05)), marginY = Math.max(2,Math.round(SH*0.05));
-  const floorRow = avg(rowEnergy.slice(0,marginY)) + avg(rowEnergy.slice(SH-marginY)) || rowMax*0.05;
-  const floorCol = avg(colEnergy.slice(0,marginX)) + avg(colEnergy.slice(SW-marginX)) || colMax*0.05;
-  const rowThresh = Math.max(floorRow*2.2, rowMax*0.10);
-  const colThresh = Math.max(floorCol*2.2, colMax*0.10);
+/* ══ QUAD-AWARE BORDER DETECTION ══
+   Finds the card's true 4 corners regardless of tilt — unlike a simple
+   row/column brightness scan (which only finds an axis-aligned bounding box
+   and badly over-estimates size for a rotated card), this:
+   1) builds a foreground mask using a LOCAL background estimate (robust to
+      lighting gradients across a dark table, not just 4 corner samples),
+   2) finds the largest connected region (the card's actual silhouette),
+   3) fits the minimum-area rotated rectangle around that silhouette — the
+      standard, well-tested technique for finding a tilted rectangle's true
+      corners instead of its loose bounding box. */
+function detectQuadBorder(px, SW, SH) {
+  const gray = new Float32Array(SW*SH);
+  for (let i=0;i<SW*SH;i++){ const o=i*4; gray[i]=px[o]*0.299+px[o+1]*0.587+px[o+2]*0.114; }
 
-  let minY=0; while(minY<SH/2 && rowEnergy[minY]<rowThresh) minY++;
-  let maxY=SH-1; while(maxY>SH/2 && rowEnergy[maxY]<rowThresh) maxY--;
-  let minX=0; while(minX<SW/2 && colEnergy[minX]<colThresh) minX++;
-  let maxX=SW-1; while(maxX>SW/2 && colEnergy[maxX]<colThresh) maxX--;
+  // local background estimate from a sparse border sample (median, not mean —
+  // robust against a stray bright/dark patch on the table)
+  const samples=[];
+  const step = Math.max(4, Math.round(SW/40));
+  for (let x=0;x<SW;x+=step){ samples.push(gray[x]); samples.push(gray[(SH-1)*SW+x]); }
+  for (let y=0;y<SH;y+=step){ samples.push(gray[y*SW]); samples.push(gray[y*SW+SW-1]); }
+  samples.sort((a,b)=>a-b);
+  const bgMedian = samples[Math.floor(samples.length/2)];
+  const spread = samples[Math.floor(samples.length*0.9)] - samples[Math.floor(samples.length*0.1)];
+  const THRESH = Math.max(18, spread*1.4);
 
-  if (maxX-minX < SW*0.10 || maxY-minY < SH*0.10) return null;
-  const confidence = scoreBoxConfidence(rowEnergy,colEnergy,minX,maxX,minY,maxY,SW,SH);
-  return {minX,maxX,minY,maxY,confidence};
-}
-function avg(arr){ return arr.length? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+  const mask = new Uint8Array(SW*SH);
+  for (let i=0;i<SW*SH;i++) mask[i] = Math.abs(gray[i]-bgMedian) > THRESH ? 1 : 0;
 
-/* Confidence = how much stronger the energy AT the found edges is vs the
-   background floor outside them — a clean straight border scores high. */
-function scoreBoxConfidence(rowEnergy,colEnergy,minX,maxX,minY,maxY,SW,SH){
-  const edgeStrength = (
-    (rowEnergy[minY]||0)+(rowEnergy[maxY]||0)+(colEnergy[minX]||0)+(colEnergy[maxX]||0)
-  )/4;
-  const m=Math.max(2,Math.round(SW*0.04));
-  const floor = (avg(Array.from(rowEnergy.slice(0,m)))+avg(Array.from(rowEnergy.slice(SH-m)))+
-                 avg(Array.from(colEnergy.slice(0,m)))+avg(Array.from(colEnergy.slice(SW-m))))/4 || 1;
-  const ratio = edgeStrength/Math.max(floor,1);
-  const areaFrac = ((maxX-minX)*(maxY-minY))/(SW*SH);
-  let score = Math.min(92, 30+ratio*9);
-  if (areaFrac<0.15 || areaFrac>0.97) score *= 0.6; // implausible box size penalty
-  return Math.max(5, Math.round(score));
+  // largest connected region via grid-stepped BFS (fast enough for a 480px-wide scan)
+  const visited = new Uint8Array(SW*SH);
+  let best = null;
+  const cap = SW*SH;
+  const qx=new Int32Array(cap), qy=new Int32Array(cap);
+  for (let sy=0; sy<SH; sy+=2) {
+    for (let sx=0; sx<SW; sx+=2) {
+      const idx = sy*SW+sx;
+      if (!mask[idx] || visited[idx]) continue;
+      let qh=0, qt=0;
+      qx[qt]=sx; qy[qt]=sy; qt++; visited[idx]=1;
+      let count=0, minX=sx,maxX=sx,minY=sy,maxY=sy;
+      const points=[];
+      while (qh<qt) {
+        const cx=qx[qh], cy=qy[qh]; qh++; count++;
+        if (count%5===0) points.push([cx,cy]);
+        if (cx<minX)minX=cx; if(cx>maxX)maxX=cx;
+        if (cy<minY)minY=cy; if(cy>maxY)maxY=cy;
+        const nbrs=[[cx+2,cy],[cx-2,cy],[cx,cy+2],[cx,cy-2]];
+        for (const [nx,ny] of nbrs) {
+          if (nx<0||nx>=SW||ny<0||ny>=SH) continue;
+          const nidx=ny*SW+nx;
+          if (mask[nidx] && !visited[nidx]) { visited[nidx]=1; qx[qt]=nx; qy[qt]=ny; qt++; }
+        }
+      }
+      if (!best || count>best.count) best = { count, minX,maxX,minY,maxY, points };
+    }
+  }
+  const minCount = (SW*SH*0.03)/4; // adjusted for the 2px grid step
+  if (!best || best.count < minCount || best.points.length < 8) return null;
+
+  // fit the minimum-area rotated rectangle around the region's points
+  let bestFit = null;
+  for (let deg=0; deg<90; deg+=2) {
+    const rad = deg*Math.PI/180;
+    const cos=Math.cos(rad), sin=Math.sin(rad);
+    let minU=Infinity,maxU=-Infinity,minV=Infinity,maxV=-Infinity;
+    for (const [x,y] of best.points) {
+      const u = x*cos + y*sin, v = -x*sin + y*cos;
+      if (u<minU)minU=u; if(u>maxU)maxU=u;
+      if (v<minV)minV=v; if(v>maxV)maxV=v;
+    }
+    const area = (maxU-minU)*(maxV-minV);
+    if (!bestFit || area<bestFit.area) bestFit = { deg, rad, minU,maxU,minV,maxV, area };
+  }
+  const {rad,minU,maxU,minV,maxV} = bestFit;
+  const cos=Math.cos(rad), sin=Math.sin(rad);
+  const toXY = (u,v) => ({ x: u*cos - v*sin, y: u*sin + v*cos });
+  const rectW = maxU-minU, rectH = maxV-minV;
+  // keep angle in a sane -45..45 range regardless of which axis came out "width"
+  let angleSigned = bestFit.deg;
+  if (angleSigned > 45) angleSigned -= 90;
+
+  const corners = {
+    A: toXY(minU,minV), B: toXY(maxU,minV), C: toXY(maxU,maxV), D: toXY(minU,maxV),
+  };
+  // confidence: how cleanly the foreground region fills its own fitted
+  // rectangle (a real card fills it almost entirely; noise/shadow blobs don't)
+  const fillRatio = (best.count*4) / Math.max(1, rectW*rectH); // *4 corrects for the 2px grid step
+  const areaFrac = (rectW*rectH)/(SW*SH);
+  let confidence = Math.min(95, Math.round(40 + fillRatio*45));
+  if (areaFrac<0.04 || areaFrac>0.97) confidence = Math.round(confidence*0.5);
+  confidence = Math.max(5, confidence);
+
+  return { corners, center:{x:0,y:0}, confidence, angleSigned };
 }
 
 /* ══ VIDEO LOAD ══ */
@@ -1109,11 +1111,71 @@ function attachVideoToBorder() {
   showToast('Video attached to all 4 corners ✓');
   clampCrop(); renderCrop();
 }
-function renderCrop() {
+/* Renders the video box as a true freeform quad — each corner independent,
+   sides drawn straight between them via clip-path polygon. Used only in
+   Free mode. The bounding box covers all 4 corners; clip-path masks it down
+   to the actual quad shape, so the visible edges are always straight lines
+   directly connecting the corners (never warped/curved). */
+function renderCropQuad() {
   const ib = getImgBox();
   const ids = surfaceIds();
   const box = document.getElementById(ids.box);
   box.style.display = 'block';
+  box.style.transform = '';
+
+  const toPx = c => ({ x: ib.offX+(c.x/100)*ib.w, y: ib.offY+(c.y/100)*ib.h });
+  const A=toPx(videoCorners.A), B=toPx(videoCorners.B), C=toPx(videoCorners.C), D=toPx(videoCorners.D);
+  const minX=Math.min(A.x,B.x,C.x,D.x), maxX=Math.max(A.x,B.x,C.x,D.x);
+  const minY=Math.min(A.y,B.y,C.y,D.y), maxY=Math.max(A.y,B.y,C.y,D.y);
+  const w = Math.max(1,maxX-minX), h = Math.max(1,maxY-minY);
+
+  box.style.left = minX+'px'; box.style.top = minY+'px';
+  box.style.width = w+'px'; box.style.height = h+'px';
+  const pct = (px,py) => `${((px-minX)/w*100).toFixed(2)}% ${((py-minY)/h*100).toFixed(2)}%`;
+  box.style.clipPath = `polygon(${pct(A.x,A.y)}, ${pct(B.x,B.y)}, ${pct(C.x,C.y)}, ${pct(D.x,D.y)})`;
+  FRAME_STYLES.forEach(fs => box.classList.remove('frame-fs-'+fs));
+  box.classList.add('frame-fs-'+frameStyle);
+
+  // position each handle at its exact corner — independent, never derived
+  // from the others, so dragging one never visually drags a neighbor
+  const CORNER_OF = { tl:'A', tr:'B', br:'C', bl:'D' };
+  Object.keys(CORNER_OF).forEach(h => {
+    const el = box.querySelector(`.crop-handle.h-${h}`);
+    if (!el) return;
+    const p = toPx(videoCorners[CORNER_OF[h]]);
+    el.style.left = (p.x-minX)+'px'; el.style.top = (p.y-minY)+'px';
+  });
+  const EDGE_MID = {
+    t: ()=>midpoint(A,B), r: ()=>midpoint(B,C), b: ()=>midpoint(C,D), l: ()=>midpoint(D,A),
+  };
+  Object.keys(EDGE_MID).forEach(h => {
+    const el = box.querySelector(`.crop-handle.h-${h}`);
+    if (!el) return;
+    const p = EDGE_MID[h]();
+    el.style.left = (p.x-minX)+'px'; el.style.top = (p.y-minY)+'px';
+  });
+
+  if (activeSurface==='preview') {
+    const vid = document.getElementById('prevVid');
+    if (vid) {
+      vid.style.left = minX+'px'; vid.style.top = minY+'px';
+      vid.style.width = w+'px'; vid.style.height = h+'px';
+      vid.style.transform = '';
+      vid.style.clipPath = box.style.clipPath;
+      FRAME_STYLES.forEach(fs => vid.classList.remove('frame-fs-'+fs));
+      vid.classList.add('frame-fs-'+frameStyle);
+    }
+  }
+}
+function midpoint(p1,p2){ return { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 }; }
+
+function renderCrop() {
+  if (cropMode==='free' && videoCorners) { renderCropQuad(); return; }
+  const ib = getImgBox();
+  const ids = surfaceIds();
+  const box = document.getElementById(ids.box);
+  box.style.display = 'block';
+  box.style.clipPath = ''; // clear any quad clip-path from a previous free-mode render
   const wPx = (cropState.wPct/100)*ib.w;
   const hPx = (cropState.hPct/100)*ib.h;
   const cxPx = ib.offX + (cropState.xPct/100)*ib.w;
@@ -1141,6 +1203,7 @@ function renderCrop() {
   if (activeSurface==='preview') {
     const vid = document.getElementById('prevVid');
     if (vid) {
+      vid.style.clipPath = '';
       vid.style.left = (cxPx-wPx/2)+'px';
       vid.style.top  = (cyPx-hPx/2)+'px';
       vid.style.width  = wPx+'px';
@@ -1233,9 +1296,10 @@ function startDrag(e, mode, handle) {
   e.preventDefault();
   dragMode = mode;
   dragHandle = handle || null;
-  dragTarget = 'video';
+  dragTarget = (cropMode==='free' && videoCorners) ? 'video-quad' : 'video';
   const pt = e.touches?e.touches[0]:e;
   dragStart = { px:pt.clientX, py:pt.clientY, ...cropState };
+  if (dragTarget==='video-quad') dragStart.quad = JSON.parse(JSON.stringify(videoCorners));
   document.getElementById(surfaceIds().box).classList.add('dragging');
   document.addEventListener('mousemove', onDragMove);
   document.addEventListener('mouseup', endDrag);
@@ -1261,7 +1325,45 @@ function onDragMove(e) {
     return;
   }
 
+  if (dragTarget === 'video-quad') {
+    // Free mode: each corner is fully independent. Dragging a corner handle
+    // (tl/tr/bl/br) moves ONLY that corner — its straight-line neighbors
+    // follow automatically because they're drawn from the same shared point,
+    // not because we move them too. Dragging an edge-midpoint handle moves
+    // both corners on that edge together (so you can shift a whole side
+    // without distorting the others), keeping that side straight.
+    const EDGE_PAIRS = { t:['A','B'], r:['B','C'], b:['C','D'], l:['D','A'] };
+    const start = dragStart.quad;
+    if (EDGE_PAIRS[dragHandle]) {
+      EDGE_PAIRS[dragHandle].forEach(k => {
+        videoCorners[k] = {
+          x: Math.min(100, Math.max(0, start[k].x + dxP)),
+          y: Math.min(100, Math.max(0, start[k].y + dyP)),
+        };
+      });
+    } else {
+      const CORNER_KEY = { tl:'A', tr:'B', br:'C', bl:'D' };
+      const k = CORNER_KEY[dragHandle];
+      videoCorners[k] = {
+        x: Math.min(100, Math.max(0, start[k].x + dxP)),
+        y: Math.min(100, Math.max(0, start[k].y + dyP)),
+      };
+    }
+    renderCrop();
+    return;
+  }
+
   if (dragMode==='move') {
+    if (cropMode==='free' && videoCorners) {
+      ['A','B','C','D'].forEach(k => {
+        videoCorners[k] = {
+          x: Math.min(100, Math.max(0, dragStart.quad[k].x + dxP)),
+          y: Math.min(100, Math.max(0, dragStart.quad[k].y + dyP)),
+        };
+      });
+      renderCrop();
+      return;
+    }
     cropState.xPct = dragStart.xPct + dxP;
     cropState.yPct = dragStart.yPct + dyP;
     if (Math.abs(cropState.xPct-50)<SNAP_THRESH) cropState.xPct=50;
@@ -1340,6 +1442,13 @@ function applyImgTransform() {
   const ids = surfaceIds();
   const t = `scale(${zoomPct/100}) rotate(${photoRotation}deg)`;
   document.getElementById(ids.img).style.transform = t;
+  // Only the photo border quad (A/B/C/D) lives inside the rotated layer along
+  // with the image — it's the photo's own edges, so it should visually spin
+  // with the photo. The VIDEO crop box must NOT rotate with it: once you've
+  // placed the video, nudging the photo's rotation shouldn't drag the video
+  // box along. So the crop box is rendered in screen space, independent of
+  // this layer's rotation — see renderCrop()/renderCropQuad() which compute
+  // it fresh from getImgBox() and never inherit this transform.
   const layerId = activeSurface==='preview' ? 'prevRotateLayer' : 'rotateLayer';
   const layer = document.getElementById(layerId);
   if (layer) layer.style.transform = `rotate(${photoRotation}deg)`;
@@ -1429,8 +1538,11 @@ function setMode(m, btn) {
     applyRatioToCurrentBox(RATIOS[currentRatio]||9/16);
     cropState.ratioKey = currentRatio;
   } else {
-    document.getElementById('cropHint').textContent = 'Free crop — drag corner to resize freely';
+    document.getElementById('cropHint').textContent = 'Free crop — drag any corner independently, sides stay straight';
     cropState.ratioKey='free';
+    // entering free mode: seed the quad from the current rectangle so the
+    // transition feels continuous, then each corner becomes independent
+    videoCorners = computeRotatedBoxCorners(cropState);
   }
   clampCrop(); renderCrop();
 }
