@@ -121,62 +121,75 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 }
 @keyframes pulseGlow{0%,100%{opacity:.4;box-shadow:0 0 0 0 rgba(46,125,82,0)}50%{opacity:1;box-shadow:0 0 12px 2px rgba(46,125,82,.18)}}
 
-/* Video crop box */
-.crop-box{
-  position:absolute;cursor:move;
-  border:2px solid var(--gold);
-  border-radius:6px;
-  background:rgba(201,147,58,.10);
-  /* shadow outside = dim everything else */
-  box-shadow:0 0 0 9999px rgba(0,0,0,.42);
-  transition:box-shadow .1s;
+/* Video crop box — wrapper stays a plain positioned div (full-stage size);
+   the actual shape is now drawn by an inner SVG polygon using the 4
+   independent corners, so a single-corner drag bends only that corner's
+   two edges (true perspective quad) instead of redrawing a rectangle. */
+.crop-box{position:absolute;inset:0;pointer-events:none;}
+.crop-quad-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+.crop-quad-poly{
+  fill:rgba(201,147,58,.10);stroke:var(--gold);stroke-width:2;
+  vector-effect:non-scaling-stroke;pointer-events:auto;cursor:move;
 }
-.crop-box.dragging{box-shadow:0 0 0 9999px rgba(0,0,0,.52);}
+.crop-quad-poly.dragging{stroke:#e0aa4d;}
+.crop-quad-grid line{stroke:rgba(255,255,255,.22);stroke-width:1;pointer-events:none;}
+/* dim mask: a full-stage dark rect with the quad knocked out, drawn via SVG mask */
 
-/* rule-of-thirds grid inside crop box */
-.crop-box::after{
-  content:'';position:absolute;inset:0;border-radius:5px;pointer-events:none;
-  background:
-    repeating-linear-gradient(0deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.22) calc(33.33% - .5px),rgba(255,255,255,.22) 33.33%),
-    repeating-linear-gradient(90deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.22) calc(33.33% - .5px),rgba(255,255,255,.22) 33.33%);
-}
+/* corner handles (decorative L-brackets) — not used on the quad shape, the
+   true corners are the draggable dots themselves */
+.crop-corner{display:none;}
 
-/* corner handles (decorative L-brackets) */
-.crop-corner{
-  position:absolute;width:14px;height:14px;
-  border-color:var(--gold);border-style:solid;border-width:0;
-  pointer-events:none;
-}
-.crop-corner.tl{top:-2px;left:-2px;border-top-width:3px;border-left-width:3px;border-radius:3px 0 0 0;}
-.crop-corner.tr{top:-2px;right:-2px;border-top-width:3px;border-right-width:3px;border-radius:0 3px 0 0;}
-.crop-corner.bl{bottom:-2px;left:-2px;border-bottom-width:3px;border-left-width:3px;border-radius:0 0 0 3px;}
-.crop-corner.br{bottom:-2px;right:-2px;border-bottom-width:3px;border-right-width:3px;border-radius:0 0 3px 0;}
-
-/* draggable resize handle dots — one per corner + 4 edge midpoints */
+/* draggable resize handle dots — one per corner + 4 edge midpoints, now
+   positioned in raw px (left/top) since the quad is an arbitrary shape */
 .crop-handle{
   position:absolute;width:15px;height:15px;border-radius:50%;
   background:var(--gold);border:2px solid #fff;
   box-shadow:0 1px 4px rgba(0,0,0,.35);
-  z-index:3;transform:translate(-50%,-50%);
+  z-index:5;transform:translate(-50%,-50%);pointer-events:auto;cursor:grab;
 }
-/* invisible touch-target halo — visual dot stays small, hit area doesn't.
-   Corners get z-index priority over edge handles since corner-drags are
-   used far more often and sit at the same physical point as two edges. */
+.crop-handle.dragging{cursor:grabbing;}
+/* invisible touch-target halo — visual dot stays small, hit area doesn't. */
 .crop-handle::before{
   content:'';position:absolute;left:50%;top:50%;
   width:32px;height:32px;transform:translate(-50%,-50%);
   border-radius:50%;
 }
-.crop-handle.h-tl,.crop-handle.h-tr,.crop-handle.h-bl,.crop-handle.h-br{z-index:5;}
-.crop-handle.h-t,.crop-handle.h-b,.crop-handle.h-l,.crop-handle.h-r{z-index:4;}
-.crop-handle.h-tl{top:0;left:0;cursor:nwse-resize;}
-.crop-handle.h-tr{top:0;left:100%;cursor:nesw-resize;}
-.crop-handle.h-bl{top:100%;left:0;cursor:nesw-resize;}
-.crop-handle.h-br{top:100%;left:100%;cursor:nwse-resize;}
-.crop-handle.h-t{top:0;left:50%;cursor:ns-resize;width:13px;height:13px;}
-.crop-handle.h-b{top:100%;left:50%;cursor:ns-resize;width:13px;height:13px;}
-.crop-handle.h-l{top:50%;left:0;cursor:ew-resize;width:13px;height:13px;}
-.crop-handle.h-r{top:50%;left:100%;cursor:ew-resize;width:13px;height:13px;}
+.crop-handle.h-edge{z-index:4;width:13px;height:13px;background:#e0aa4d;}
+
+/* ── BORDER-EDIT MODE ── */
+.border-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:9px 12px;background:var(--surface-warm);border-radius:9px;border:.5px solid var(--border);}
+.border-toggle-label{font-size:12px;font-weight:500;color:var(--ink);}
+.border-toggle-sub{font-size:10.5px;color:var(--ink-faint);}
+.toggle-switch{position:relative;width:38px;height:22px;border-radius:12px;background:var(--border);cursor:pointer;flex-shrink:0;transition:background .2s;}
+.toggle-switch.on{background:var(--gold);}
+.toggle-switch::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s;}
+.toggle-switch.on::after{left:18px;}
+
+/* photo border quad outline — now an SVG polygon through the 4 actual corner
+   points, so dragging corner A only bends edges A-B and A-D, not the whole box */
+.border-quad-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;}
+.border-quad-poly{fill:none;stroke:rgba(46,125,82,.85);stroke-width:2;stroke-dasharray:6,4;vector-effect:non-scaling-stroke;}
+.border-quad-poly.editing{stroke:var(--gold);stroke-dasharray:none;}
+.border-corner-handle{
+  position:absolute;width:16px;height:16px;border-radius:50%;
+  background:var(--green);border:2.5px solid #fff;
+  box-shadow:0 1px 5px rgba(0,0,0,.4);
+  z-index:6;transform:translate(-50%,-50%);cursor:grab;
+  display:none;
+}
+.border-corner-handle::before{content:'';position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border-radius:50%;}
+.border-corner-handle.show{display:block;}
+.border-corner-handle.dragging{cursor:grabbing;}
+.border-corner-handle .ch-label{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;color:var(--green);background:#fff;border-radius:3px;padding:0 3px;white-space:nowrap;}
+
+/* ── ROTATE CONTROLS ── */
+.rotate-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--surface-warm);border-radius:9px;border:.5px solid var(--border);}
+.rotate-row .rlabel{font-size:11px;color:var(--ink-muted);font-weight:600;flex-shrink:0;white-space:nowrap;}
+.rotate-row input[type=range]{flex:1;accent-color:var(--gold);height:4px;cursor:pointer;}
+.rotate-val{font-size:11px;font-weight:600;color:var(--ink-muted);width:42px;text-align:right;flex-shrink:0;}
+.rotate-btns{display:flex;gap:4px;flex-shrink:0;}
+.rotate-btn{width:26px;height:26px;border-radius:6px;border:.5px solid var(--border);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink-muted);transition:all .15s;}
+.rotate-btn:hover{border-color:var(--gold);color:var(--gold);}
 .crop-handle:hover{transform:translate(-50%,-50%) scale(1.15);}
 
 /* ── ZOOM CONTROL ── */
@@ -215,23 +228,21 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 .frame-chip-name{font-size:9.5px;font-weight:600;color:var(--ink-muted);text-align:center;line-height:1.2;}
 .frame-chip.on .frame-chip-name{color:var(--gold);}
 
-/* live frame style applied to crop box + preview video */
-.crop-box.frame-fs-sharp,.preview-vid.frame-fs-sharp{border-radius:0!important;}
-.crop-box.frame-fs-rounded,.preview-vid.frame-fs-rounded{border-radius:16px!important;}
-.crop-box.frame-fs-feather,.preview-vid.frame-fs-feather{
+/* live frame style — applies to the rendered <video> only (step 3 + the
+   crop-step preview clip-path). The editing-time quad (SVG polygon) always
+   shows as a plain perspective outline since corner-radius/outline have no
+   meaning on an irregular quadrilateral while you're still shaping it. */
+.preview-vid.frame-fs-sharp{border-radius:0!important;}
+.preview-vid.frame-fs-rounded{border-radius:16px!important;}
+.preview-vid.frame-fs-feather{
   border-radius:16px!important;
   mask-image:radial-gradient(ellipse,black 72%,transparent 100%);
   -webkit-mask-image:radial-gradient(ellipse,black 72%,transparent 100%);
 }
-.crop-box.frame-fs-polaroid,.preview-vid.frame-fs-polaroid{border-radius:2px!important;outline:8px solid #fff;outline-offset:0;}
-.crop-box.frame-fs-vignette,.preview-vid.frame-fs-vignette{border-radius:14px!important;}
-.crop-box.frame-fs-film,.preview-vid.frame-fs-film{border-radius:4px!important;}
-/* keep crop-box's dim-outside shadow working alongside frame outline */
-.crop-box.frame-fs-polaroid{box-shadow:0 0 0 9999px rgba(0,0,0,.42),0 0 0 8px #fff inset;outline:none;}
-.crop-box.frame-fs-film{box-shadow:0 0 0 9999px rgba(0,0,0,.42),0 0 0 3px #fff inset,0 0 0 6px var(--ink) inset;outline:none;}
-.crop-box.frame-fs-vignette{box-shadow:0 0 0 9999px rgba(0,0,0,.42),inset 0 0 22px 8px rgba(0,0,0,.5);}
+.preview-vid.frame-fs-polaroid{border-radius:2px!important;outline:8px solid #fff;outline-offset:0;}
+.preview-vid.frame-fs-vignette{border-radius:14px!important;}
 .preview-vid.frame-fs-vignette::after{content:'';position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 0 26px 9px rgba(0,0,0,.55);pointer-events:none;}
-.preview-vid.frame-fs-film{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px var(--ink);}
+.preview-vid.frame-fs-film{border-radius:4px!important;outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px var(--ink);}
 
 /* edge snap indicators */
 .snap-line{position:absolute;background:rgba(201,147,58,.6);pointer-events:none;display:none;}
@@ -245,10 +256,18 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
   flex:1;padding:8px 0;text-align:center;border-radius:8px;
   border:.5px solid var(--border);background:var(--surface-warm);
   font-size:12px;color:var(--ink-muted);cursor:pointer;font-family:inherit;font-weight:500;
-  transition:all .15s;
+  transition:all .15s;position:relative;
 }
 .mode-tab:hover{border-color:var(--gold-light);}
 .mode-tab.on{background:var(--gold-bg);border-color:var(--gold);color:var(--gold);}
+.mode-tab .mt-dot{position:absolute;top:4px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--green);display:none;}
+.mode-tab.has-save .mt-dot{display:block;}
+
+/* per-mode save row */
+.mode-save-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.mode-saved-chip{display:none;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--green);background:var(--green-bg);border:.5px solid var(--green-light);padding:3px 9px;border-radius:20px;}
+.mode-saved-chip.show{display:inline-flex;}
+.save-mode-btn{font-size:12px;padding:7px 13px;flex-shrink:0;}
 
 /* ── RATIO CHIPS ── */
 .ratio-row{display:flex;gap:6px;margin-bottom:12px;display:none;}
@@ -434,10 +453,24 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
   <!-- ══ PANEL 2: CROP ══ -->
   <div class="panel" id="p2">
     <div class="mode-tabs" id="modeTabs">
-      <button class="mode-tab on" data-m="auto" onclick="setMode('auto',this)">Auto fit</button>
-      <button class="mode-tab" data-m="ratio" onclick="setMode('ratio',this)">By ratio</button>
-      <button class="mode-tab" data-m="free" onclick="setMode('free',this)">Free crop</button>
+      <button class="mode-tab on" data-m="auto" onclick="setMode('auto',this)">Auto fit<span class="mt-dot"></span></button>
+      <button class="mode-tab" data-m="ratio" onclick="setMode('ratio',this)">By ratio<span class="mt-dot"></span></button>
+      <button class="mode-tab" data-m="free" onclick="setMode('free',this)">Free crop<span class="mt-dot"></span></button>
     </div>
+    <div class="mode-save-row">
+      <span class="mode-saved-chip" id="modeSavedChip">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Saved for this mode
+      </span>
+      <button class="btn save-mode-btn" id="saveModeBtn" onclick="saveCurrentMode()" style="margin-left:auto;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save this mode
+      </button>
+    </div>
+    <button class="btn" style="width:100%;margin-bottom:12px;font-size:12px;padding:8px 0;" onclick="attachVideoToBorder()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+      Attach video to all 4 corners of border
+    </button>
 
     <div class="ratio-row" id="ratioRow">
       <div class="ratio-chip on" data-r="9:16" onclick="setRatio('9:16',this)">9:16</div>
@@ -455,30 +488,66 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
       <span class="zoom-reset" onclick="resetZoom()">Reset</span>
     </div>
 
-    <div class="crop-wrap" id="cropWrap" style="height:460px;">
-      <img id="cropImg" class="crop-poster" src="" alt=""/>
-      <!-- detected border outline -->
-      <div id="borderGlow" class="border-glow" style="display:none;"></div>
-      <!-- snap guides -->
-      <div class="snap-line h" id="snapH"></div>
-      <div class="snap-line v" id="snapV"></div>
-      <!-- crop/video box -->
-      <div class="crop-box" id="cropBox" style="display:none;">
-        <div class="crop-corner tl"></div>
-        <div class="crop-corner tr"></div>
-        <div class="crop-corner bl"></div>
-        <div class="crop-corner br"></div>
-        <div class="crop-handle h-tl" data-h="tl"></div>
-        <div class="crop-handle h-tr" data-h="tr"></div>
-        <div class="crop-handle h-bl" data-h="bl"></div>
-        <div class="crop-handle h-br" data-h="br"></div>
-        <div class="crop-handle h-t" data-h="t"></div>
-        <div class="crop-handle h-b" data-h="b"></div>
-        <div class="crop-handle h-l" data-h="l"></div>
-        <div class="crop-handle h-r" data-h="r"></div>
+    <div class="rotate-row">
+      <span class="rlabel">Rotate photo</span>
+      <input type="range" id="photoRotSlider" min="-45" max="45" value="0" step="0.5" oninput="onPhotoRotateInput(this.value)"/>
+      <span class="rotate-val" id="photoRotVal">0°</span>
+      <div class="rotate-btns">
+        <button class="rotate-btn" onclick="nudgePhotoRotate(-90)" title="Rotate left 90°">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 12 11 12"/></svg>
+        </button>
+        <button class="rotate-btn" onclick="nudgePhotoRotate(90)" title="Rotate right 90°">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9"/><polyline points="21 4 21 12 13 12"/></svg>
+        </button>
       </div>
     </div>
-    <div class="crop-hint-txt" id="cropHint">Drag to reposition · drag any handle to resize</div>
+
+    <div class="border-toggle-row">
+      <div>
+        <div class="border-toggle-label">Fix photo border</div>
+        <div class="border-toggle-sub">Drag any green point — only that point moves, edges stay straight</div>
+      </div>
+      <div class="toggle-switch" id="borderToggle" onclick="toggleBorderEdit()"></div>
+    </div>
+
+    <div class="crop-wrap" id="cropWrap" style="height:460px;">
+      <img id="cropImg" class="crop-poster" src="" alt=""/>
+      <div id="rotateLayer" style="position:absolute;inset:0;pointer-events:none;">
+        <!-- detected border outline (legacy glow, kept for the "fit found" pulse on first detect) -->
+        <div id="borderGlow" class="border-glow" style="display:none;"></div>
+        <!-- editable photo-border quad — true 4-point polygon -->
+        <svg class="border-quad-svg" id="borderQuadSvg" style="display:none;">
+          <polygon class="border-quad-poly" id="borderQuadPoly" points=""></polygon>
+        </svg>
+        <div class="border-corner-handle" id="bcA" data-c="A" style="pointer-events:auto;"><span class="ch-label">A</span></div>
+        <div class="border-corner-handle" id="bcB" data-c="B" style="pointer-events:auto;"><span class="ch-label">B</span></div>
+        <div class="border-corner-handle" id="bcC" data-c="C" style="pointer-events:auto;"><span class="ch-label">C</span></div>
+        <div class="border-corner-handle" id="bcD" data-c="D" style="pointer-events:auto;"><span class="ch-label">D</span></div>
+        <div class="border-corner-handle" id="bcAB" data-c="AB" style="pointer-events:auto;width:13px;height:13px;background:#5fa87e;"></div>
+        <div class="border-corner-handle" id="bcBC" data-c="BC" style="pointer-events:auto;width:13px;height:13px;background:#5fa87e;"></div>
+        <div class="border-corner-handle" id="bcCD" data-c="CD" style="pointer-events:auto;width:13px;height:13px;background:#5fa87e;"></div>
+        <div class="border-corner-handle" id="bcDA" data-c="DA" style="pointer-events:auto;width:13px;height:13px;background:#5fa87e;"></div>
+        <!-- snap guides -->
+        <div class="snap-line h" id="snapH"></div>
+        <div class="snap-line v" id="snapV"></div>
+        <!-- crop/video box — true 4-point polygon -->
+        <div class="crop-box" id="cropBox" style="display:none;">
+          <svg class="crop-quad-svg" id="cropQuadSvg">
+            <polygon class="crop-quad-poly" id="cropQuadPoly" points=""></polygon>
+            <g class="crop-quad-grid" id="cropQuadGrid"></g>
+          </svg>
+          <div class="crop-handle" data-h="A"></div>
+          <div class="crop-handle" data-h="B"></div>
+          <div class="crop-handle" data-h="C"></div>
+          <div class="crop-handle" data-h="D"></div>
+          <div class="crop-handle h-edge" data-h="AB"></div>
+          <div class="crop-handle h-edge" data-h="BC"></div>
+          <div class="crop-handle h-edge" data-h="CD"></div>
+          <div class="crop-handle h-edge" data-h="DA"></div>
+        </div>
+      </div>
+    </div>
+    <div class="crop-hint-txt" id="cropHint">Drag any corner — only that corner moves, edges stay straight</div>
 
     <div class="frame-section">
       <div class="frame-label">Frame style</div>
@@ -510,17 +579,40 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
     </div>
   </div>
 
-  <!-- ══ PANEL 3: PREVIEW ══ -->
+  <!-- ══ PANEL 3: PREVIEW & EDIT ══ -->
   <div class="panel" id="p3">
-    <div style="font-size:12px;color:var(--ink-muted);margin-bottom:14px;">This is exactly what viewers will see when they scan your photo with AR.</div>
-    <div class="preview-stage" id="previewStage">
-      <img class="preview-poster" id="prevPoster" src="" alt=""/>
-      <video id="prevVid" class="preview-vid" autoplay muted loop playsinline></video>
+    <div style="font-size:12px;color:var(--ink-muted);margin-bottom:14px;">This is exactly what viewers will see when they scan your photo with AR — you can still adjust everything here.</div>
+
+    <div class="rotate-row">
+      <span class="rlabel">Rotate photo</span>
+      <input type="range" id="photoRotSlider2" min="-45" max="45" value="0" step="0.5" oninput="onPhotoRotateInput2(this.value)"/>
+      <span class="rotate-val" id="photoRotVal2">0°</span>
     </div>
-    <div style="font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:16px;">Video plays edge-to-edge within the detected poster border · <span id="prevFrameLabel">Sharp</span> frame</div>
+
+    <div class="crop-wrap" id="previewWrap" style="height:460px;">
+      <img id="prevPoster" class="crop-poster" src="" alt=""/>
+      <div id="prevRotateLayer" style="position:absolute;inset:0;pointer-events:none;">
+        <video id="prevVid" class="preview-vid" style="position:absolute;object-fit:fill;" autoplay muted loop playsinline></video>
+        <div class="crop-box" id="prevCropBox">
+          <svg class="crop-quad-svg" id="prevQuadSvg">
+            <polygon class="crop-quad-poly" id="prevQuadPoly" points=""></polygon>
+            <g class="crop-quad-grid" id="prevQuadGrid"></g>
+          </svg>
+          <div class="crop-handle" data-h="A"></div>
+          <div class="crop-handle" data-h="B"></div>
+          <div class="crop-handle" data-h="C"></div>
+          <div class="crop-handle" data-h="D"></div>
+          <div class="crop-handle h-edge" data-h="AB"></div>
+          <div class="crop-handle h-edge" data-h="BC"></div>
+          <div class="crop-handle h-edge" data-h="CD"></div>
+          <div class="crop-handle h-edge" data-h="DA"></div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:16px;">Drag any point — only that point moves, edges stay straight · <span id="prevFrameLabel">Sharp</span> frame</div>
 
     <div class="btn-row">
-      <button class="btn" onclick="goStep2()">← Adjust</button>
+      <button class="btn" onclick="goStep2()">← Back to crop tools</button>
       <button class="btn btn-dark" id="uploadBtn" onclick="doUpload()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
         Upload &amp; Create AR Memory
@@ -576,16 +668,106 @@ const API = 'https://memoria-ar-backend.onrender.com';
 let photoFile = null, compressedBlob = null;
 let videoFile = null;
 let photoW = 0, photoH = 0, videoW = 0, videoH = 0;
-let detectedBorder = null; // {xPct,yPct,wPct,hPct}
+let detectedBorder = null; // {xPct,yPct,wPct,hPct} - axis-aligned bounding box from auto-detect
 let detectConfidence = 0;  // 0-100
-let cropState = { xPct:50, yPct:50, wPct:85, hPct:85, ratioKey:'auto' };
+
+/* Photo border corners — independently draggable, A=TL B=TR C=BR D=BL (clockwise).
+   This is the printed card's real edge, separate from the video's crop box,
+   so detection can be nudged to match the print exactly. Dragging one corner
+   moves ONLY that corner — the two edges touching it just follow, the rest
+   of the quad doesn't move (true perspective-style adjust, like Adobe Scan). */
+let borderCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} }; // % of image
+let photoRotation = 0; // degrees, applied to the whole photo
+
+/* Video crop box — now ALSO a true 4-point quad (A/B/C/D, same clockwise
+   naming as the border), not a rectangle. Each corner is independently
+   draggable; dragging one only bends that corner's two edges. The 4 edge
+   midpoints (AB/BC/CD/DA) slide that whole straight edge in/out in parallel
+   (both its corners move together, perpendicular to the edge) — same feel
+   as Adobe Lens/Scan's edge-drag, never a "bulge" or new point.
+   cropState is kept only as a legacy summary (center/size/rotation) used
+   when applying ratios/auto-fit math; videoCorners is the source of truth
+   for rendering and for what gets saved/uploaded. */
+let videoCorners = { A:{x:7.5,y:7.5}, B:{x:92.5,y:7.5}, C:{x:92.5,y:92.5}, D:{x:7.5,y:92.5} };
+let cropState = { xPct:50, yPct:50, wPct:85, hPct:85, ratioKey:'auto', rotation:0 };
 let cropMode = 'auto'; // 'auto'|'ratio'|'free'
 let currentRatio = '9:16';
 let frameStyle = 'sharp'; // sharp|rounded|feather|polaroid|vignette|film
 let zoomPct = 100; // 100-250, scales crop-poster img
-let dragMode = null, dragStart = null, dragHandle = null;
+let editBorderMode = false; // true = dragging photo border corners instead of video box
+let dragMode = null, dragStart = null, dragHandle = null, dragTarget = null; // dragTarget: 'video'|'border'
+let _cropEditorInited = false; // tracks whether crop step has been initialized for the current photo
+let activeSurface = 'crop'; // 'crop' (step 2) | 'preview' (step 3) — both edit the same shared videoCorners/borderCorners
+function surfaceIds() {
+  return activeSurface==='preview'
+    ? { wrap:'previewWrap', img:'prevPoster', box:'prevCropBox', svg:'prevQuadSvg', poly:'prevQuadPoly', grid:'prevQuadGrid' }
+    : { wrap:'cropWrap',    img:'cropImg',    box:'cropBox',     svg:'cropQuadSvg', poly:'cropQuadPoly', grid:'cropQuadGrid' };
+}
+
+/* ══ PER-MODE SAVE ══
+   Each crop mode (auto/ratio/free) keeps its OWN independent snapshot of
+   everything you set up in it — video corners, border corners, rotation,
+   zoom, frame style, selected ratio. "Save this mode" stores the current
+   working state into modeSaves[cropMode]; switching tabs loads whichever
+   snapshot (if any) was saved for that mode, otherwise starts fresh from
+   auto-detect/defaults. You can build out all 3 modes one at a time and
+   come back to any of them later without losing work. */
+let modeSaves = { auto:null, ratio:null, free:null };
+
+function snapshotCurrentState() {
+  return {
+    videoCorners: JSON.parse(JSON.stringify(videoCorners)),
+    borderCorners: JSON.parse(JSON.stringify(borderCorners)),
+    cropState: JSON.parse(JSON.stringify(cropState)),
+    photoRotation, zoomPct, frameStyle, currentRatio,
+  };
+}
+function saveCurrentMode() {
+  modeSaves[cropMode] = snapshotCurrentState();
+  refreshModeSaveUI();
+  showToast('Saved ✓ — "'+modeTabLabel(cropMode)+'" mode is ready');
+}
+function modeTabLabel(m){ return m==='auto'?'Auto fit':m==='ratio'?'By ratio':'Free crop'; }
+function loadModeSnapshot(snap) {
+  videoCorners  = JSON.parse(JSON.stringify(snap.videoCorners));
+  borderCorners = JSON.parse(JSON.stringify(snap.borderCorners));
+  cropState     = JSON.parse(JSON.stringify(snap.cropState));
+  photoRotation = snap.photoRotation; zoomPct = snap.zoomPct;
+  frameStyle    = snap.frameStyle;    currentRatio = snap.currentRatio;
+}
+function refreshModeSaveUI() {
+  document.querySelectorAll('#modeTabs .mode-tab').forEach(tab => {
+    tab.classList.toggle('has-save', !!modeSaves[tab.dataset.m]);
+  });
+  document.getElementById('modeSavedChip').classList.toggle('show', !!modeSaves[cropMode]);
+}
+
 let _xhr = null, _cancelled = false, _retries = 0;
 const MAX_RETRIES = 5;
+
+/* ══ QUAD HELPERS ══
+   Shared utilities for working with a 4-point quad {A,B,C,D} in % of image,
+   used identically by both videoCorners and borderCorners. Clockwise order:
+   A=top-left, B=top-right, C=bottom-right, D=bottom-left. */
+const QUAD_ORDER = ['A','B','C','D'];
+const QUAD_EDGES = { AB:['A','B'], BC:['B','C'], CD:['C','D'], DA:['D','A'] };
+
+function quadFromRect(xPct,yPct,wPct,hPct,rotation) {
+  const hw=wPct/2, hh=hPct/2;
+  const rad=((rotation||0)*Math.PI)/180, cos=Math.cos(rad), sin=Math.sin(rad);
+  const rot=(dx,dy)=>({x:xPct+dx*cos-dy*sin, y:yPct+dx*sin+dy*cos});
+  return { A:rot(-hw,-hh), B:rot(hw,-hh), C:rot(hw,hh), D:rot(-hw,hh) };
+}
+function quadCenter(q){ return { x:(q.A.x+q.B.x+q.C.x+q.D.x)/4, y:(q.A.y+q.B.y+q.C.y+q.D.y)/4 }; }
+function quadToCropStateSummary(q) {
+  // best-fit summary rect/rotation, used only for ratio-lock math, not for rendering
+  const c = quadCenter(q);
+  const wTop=Math.hypot(q.B.x-q.A.x,q.B.y-q.A.y), wBot=Math.hypot(q.C.x-q.D.x,q.C.y-q.D.y);
+  const hL=Math.hypot(q.D.x-q.A.x,q.D.y-q.A.y), hR=Math.hypot(q.C.x-q.B.x,q.C.y-q.B.y);
+  const angle=Math.atan2(q.B.y-q.A.y,q.B.x-q.A.x)*(180/Math.PI);
+  return { xPct:c.x, yPct:c.y, wPct:(wTop+wBot)/2, hPct:(hL+hR)/2, rotation:angle };
+}
+function clampQuadPoint(p){ return { x:Math.min(100,Math.max(0,p.x)), y:Math.min(100,Math.max(0,p.y)) }; }
 
 /* ══ STEPPER ══ */
 function setStep(n) {
@@ -618,6 +800,7 @@ function loadPhoto(file) {
   if (!file.type.startsWith('image/')) { showZoneError('photo','Not an image file'); return; }
   if (file.size > 20*1024*1024) { showZoneError('photo','Photo must be under 20MB'); return; }
   photoFile = file;
+  _cropEditorInited = false; // fresh photo — crop step should re-init from scratch
   setZoneLoading('photo','Optimizing…');
 
   compressPhoto(file).then(({blob, w, h}) => {
@@ -738,7 +921,17 @@ function detectBorder(url, blob, natW, natH) {
       detectConfidence = Math.round(final.confidence);
       const cxPct = detectedBorder.xPct + detectedBorder.wPct/2;
       const cyPct = detectedBorder.yPct + detectedBorder.hPct/2;
-      cropState = { xPct:cxPct, yPct:cyPct, wPct:detectedBorder.wPct, hPct:detectedBorder.hPct, ratioKey:'auto' };
+      cropState = { xPct:cxPct, yPct:cyPct, wPct:detectedBorder.wPct, hPct:detectedBorder.hPct, ratioKey:'auto', rotation:0 };
+      // photo border corners A(TL) B(TR) C(BR) D(BL) — exact print edge, independently editable
+      borderCorners = {
+        A:{x:detectedBorder.xPct,                        y:detectedBorder.yPct},
+        B:{x:detectedBorder.xPct+detectedBorder.wPct,    y:detectedBorder.yPct},
+        C:{x:detectedBorder.xPct+detectedBorder.wPct,    y:detectedBorder.yPct+detectedBorder.hPct},
+        D:{x:detectedBorder.xPct,                        y:detectedBorder.yPct+detectedBorder.hPct},
+      };
+      // video quad starts matched to the same border, independently editable per-corner
+      videoCorners = JSON.parse(JSON.stringify(borderCorners));
+      modeSaves = { auto:null, ratio:null, free:null }; // fresh photo — clear any old per-mode saves
 
       const tier = detectConfidence>=75?'high':detectConfidence>=45?'mid':'low';
       const tierLabel = detectConfidence>=75?'Strong match':detectConfidence>=45?'Likely match':'Weak match';
@@ -754,7 +947,10 @@ function detectBorder(url, blob, natW, natH) {
         `${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% · ${detectConfidence}% confidence`;
     } else {
       detectedBorder = null; detectConfidence = 0;
-      cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto' };
+      cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto', rotation:0 };
+      borderCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} };
+      videoCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} };
+      modeSaves = { auto:null, ratio:null, free:null };
       document.getElementById('photoPill').innerHTML = `<div class="detect-pill low">⚠ No clear edges — full fit</div>`;
       document.getElementById('detectBox').classList.add('show');
       document.getElementById('detectBoxHead').textContent = 'No distinct border found';
@@ -861,43 +1057,57 @@ function fitVideoToBorder() {
   }
   const cxPct = detectedBorder.xPct + detectedBorder.wPct/2;
   const cyPct = detectedBorder.yPct + detectedBorder.hPct/2;
-  cropState = { xPct:cxPct, yPct:cyPct, wPct, hPct, ratioKey:'auto' };
+  cropState = { xPct:cxPct, yPct:cyPct, wPct, hPct, ratioKey:'auto', rotation:0 };
+  videoCorners = quadFromRect(cxPct, cyPct, wPct, hPct, 0);
 }
 
 /* ══ STEP NAVIGATION ══ */
 function goStep1() { setStep(1); }
 
 function goStep2() {
+  activeSurface = 'crop';
   const errEl = document.getElementById('err1');
-  errEl.style.display = 'none';
-  const title = document.getElementById('memTitle').value.trim();
-  if (!title) { errEl.textContent='Please enter a title.'; errEl.style.display='block'; return; }
-  if (!photoFile) { errEl.textContent='Please upload a photo.'; errEl.style.display='block'; return; }
-  if (!videoFile) { errEl.textContent='Please upload a video.'; errEl.style.display='block'; return; }
+  if (errEl) errEl.style.display = 'none';
 
-  // Load photo into crop stage
-  const url = URL.createObjectURL(compressedBlob || photoFile);
-  const img = document.getElementById('cropImg');
-  resetZoom();
-  img.onload = () => {
-    setTimeout(() => { // wait for layout
-      initCropEditor();
-      setMode('auto', document.querySelector('#modeTabs [data-m="auto"]'));
-    }, 60);
-  };
-  img.src = url;
+  // first time arriving at step 2 for this photo — validate + load it in
+  if (!_cropEditorInited) {
+    const title = document.getElementById('memTitle').value.trim();
+    if (!title) { errEl.textContent='Please enter a title.'; errEl.style.display='block'; return; }
+    if (!photoFile) { errEl.textContent='Please upload a photo.'; errEl.style.display='block'; return; }
+    if (!videoFile) { errEl.textContent='Please upload a video.'; errEl.style.display='block'; return; }
+
+    const url = URL.createObjectURL(compressedBlob || photoFile);
+    const img = document.getElementById('cropImg');
+    resetZoom(); photoRotation = 0; editBorderMode = false;
+    img.onload = () => {
+      setTimeout(() => { // wait for layout
+        initCropEditor();
+        setMode('auto', document.querySelector('#modeTabs [data-m="auto"]'));
+        _cropEditorInited = true;
+      }, 60);
+    };
+    img.src = url;
+    setStep(2);
+    return;
+  }
+
+  // returning to step 2 (e.g. from preview) — just re-sync visuals
   setStep(2);
+  refreshModeSaveUI();
+  setTimeout(()=>{ applyImgTransform(); renderCrop(); renderBorderGlow(); renderBorderQuad(); }, 30);
 }
 
 function goStep3() {
+  activeSurface = 'preview';
   buildPreview();
   setStep(3);
 }
 
 /* ══ CROP EDITOR ══ */
 function getImgBox() {
-  const wrap = document.getElementById('cropWrap');
-  const img  = document.getElementById('cropImg');
+  const ids = surfaceIds();
+  const wrap = document.getElementById(ids.wrap);
+  const img  = document.getElementById(ids.img);
   const wr   = wrap.getBoundingClientRect();
   const natW = img.naturalWidth||1, natH = img.naturalHeight||1;
   const wR = wr.width/wr.height, nR = natW/natH;
@@ -917,41 +1127,102 @@ function getImgBox() {
 }
 
 function clampCrop() {
-  // enforce a minimum *pixel* size (not just %) so the box never shrinks
-  // below what 8 touch handles can usably sit on, especially on mobile
+  // enforce a minimum pixel separation between adjacent corners so handles
+  // stay usable on mobile, then clamp every corner to the image bounds
   const ib = getImgBox();
-  const MIN_PX = 90;
-  const minWPct = Math.min(40, (MIN_PX/Math.max(ib.w,1))*100);
-  const minHPct = Math.min(40, (MIN_PX/Math.max(ib.h,1))*100);
-  cropState.wPct = Math.min(98, Math.max(minWPct, cropState.wPct));
-  cropState.hPct = Math.min(98, Math.max(minHPct, cropState.hPct));
-  const hw=cropState.wPct/2, hh=cropState.hPct/2;
-  cropState.xPct = Math.min(100-hw, Math.max(hw, cropState.xPct));
-  cropState.yPct = Math.min(100-hh, Math.max(hh, cropState.yPct));
+  const MIN_PX = 60;
+  const minPct = Math.min(15, (MIN_PX/Math.max(Math.min(ib.w,ib.h),1))*100);
+  QUAD_ORDER.forEach(k => { videoCorners[k] = clampQuadPoint(videoCorners[k]); });
+  // pull opposite-edge corners apart if they've collapsed too close together
+  ['A-B','D-C','A-D','B-C'].forEach(pair => {
+    const [k1,k2] = pair.split('-');
+    const p1=videoCorners[k1], p2=videoCorners[k2];
+    const d = Math.hypot(p2.x-p1.x, p2.y-p1.y);
+    if (d < minPct && d > 0.001) {
+      const ux=(p2.x-p1.x)/d, uy=(p2.y-p1.y)/d, need=(minPct-d)/2;
+      p1.x-=ux*need; p1.y-=uy*need; p2.x+=ux*need; p2.y+=uy*need;
+    }
+  });
 }
 
-const SNAP_THRESH = 2.5; // % — snap to center / border edges
+/* Snap the video box's own 4 corners exactly onto the photo border's A/B/C/D
+   corners — a direct 1:1 corner copy, so it works perfectly even for a
+   tilted/skewed border, not just an axis-aligned rectangle. */
+function attachVideoToBorder() {
+  videoCorners = JSON.parse(JSON.stringify(borderCorners));
+  cropState = quadToCropStateSummary(videoCorners);
+  cropState.ratioKey = 'auto';
+  showToast('Video attached to all 4 corners ✓');
+  clampCrop(); renderCrop();
+}
+
+/* ══ RENDER: video crop quad (true 4-point polygon, SVG) ══ */
 function renderCrop() {
   const ib = getImgBox();
-  const box = document.getElementById('cropBox');
+  const ids = surfaceIds();
+  const box = document.getElementById(ids.box);
   box.style.display = 'block';
-  const wPx = (cropState.wPct/100)*ib.w;
-  const hPx = (cropState.hPct/100)*ib.h;
-  const cxPx = ib.offX + (cropState.xPct/100)*ib.w;
-  const cyPx = ib.offY + (cropState.yPct/100)*ib.h;
-  box.style.left   = (cxPx-wPx/2)+'px';
-  box.style.top    = (cyPx-hPx/2)+'px';
-  box.style.width  = wPx+'px';
-  box.style.height = hPx+'px';
+  const toPx = c => ({ x: ib.offX + (c.x/100)*ib.w, y: ib.offY + (c.y/100)*ib.h });
+  const px = { A:toPx(videoCorners.A), B:toPx(videoCorners.B), C:toPx(videoCorners.C), D:toPx(videoCorners.D) };
 
-  // snap guides
-  const sh = document.getElementById('snapH'), sv = document.getElementById('snapV');
-  const nearCX = Math.abs(cropState.xPct-50)<SNAP_THRESH;
-  const nearCY = Math.abs(cropState.yPct-50)<SNAP_THRESH;
-  sv.classList.toggle('on', nearCX);
-  sh.classList.toggle('on', nearCY);
-  if (nearCX) sv.style.left = ib.offX+ib.w/2+'px';
-  if (nearCY) sh.style.top  = ib.offY+ib.h/2+'px';
+  const poly = document.getElementById(ids.poly);
+  poly.setAttribute('points', QUAD_ORDER.map(k=>`${px[k].x},${px[k].y}`).join(' '));
+
+  // rule-of-thirds-ish grid lines, drawn as straight lines between the
+  // interpolated points along each pair of opposite edges (so the grid
+  // bends with the quad instead of staying axis-aligned)
+  const grid = document.getElementById(ids.grid);
+  if (grid) {
+    const lerp=(p1,p2,t)=>({x:p1.x+(p2.x-p1.x)*t,y:p1.y+(p2.y-p1.y)*t});
+    let lines = '';
+    [1/3,2/3].forEach(t=>{
+      const p1=lerp(px.A,px.D,t), p2=lerp(px.B,px.C,t); // verticals
+      lines += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"/>`;
+      const p3=lerp(px.A,px.B,t), p4=lerp(px.D,px.C,t); // horizontals
+      lines += `<line x1="${p3.x}" y1="${p3.y}" x2="${p4.x}" y2="${p4.y}"/>`;
+    });
+    grid.innerHTML = lines;
+  }
+
+  // position the 8 draggable handle dots: 4 corners + 4 edge midpoints
+  QUAD_ORDER.forEach(k => {
+    const h = box.querySelector(`.crop-handle[data-h="${k}"]`);
+    if (h) { h.style.left = px[k].x+'px'; h.style.top = px[k].y+'px'; }
+  });
+  Object.keys(QUAD_EDGES).forEach(ek => {
+    const [k1,k2] = QUAD_EDGES[ek];
+    const h = box.querySelector(`.crop-handle[data-h="${ek}"]`);
+    if (h) { h.style.left = ((px[k1].x+px[k2].x)/2)+'px'; h.style.top = ((px[k1].y+px[k2].y)/2)+'px'; }
+  });
+
+  // snap guides only exist in the step-2 surface
+  if (activeSurface==='crop') {
+    const center = quadCenter(videoCorners);
+    const sh = document.getElementById('snapH'), sv = document.getElementById('snapV');
+    const nearCX = Math.abs(center.x-50)<SNAP_THRESH;
+    const nearCY = Math.abs(center.y-50)<SNAP_THRESH;
+    sv.classList.toggle('on', nearCX);
+    sh.classList.toggle('on', nearCY);
+    if (nearCX) sv.style.left = ib.offX+ib.w/2+'px';
+    if (nearCY) sh.style.top  = ib.offY+ib.h/2+'px';
+  }
+
+  // keep the live <video> filling the same quad exactly, via a CSS clip-path
+  // polygon on a full-stage-sized element — this is what makes the video
+  // genuinely warp into a perspective quad rather than just a rectangle
+  if (activeSurface==='preview') {
+    const vid = document.getElementById('prevVid');
+    if (vid) {
+      vid.style.left = ib.offX+'px'; vid.style.top = ib.offY+'px';
+      vid.style.width = ib.w+'px'; vid.style.height = ib.h+'px';
+      const pct = c => `${c.x}% ${c.y}%`;
+      vid.style.clipPath = `polygon(${QUAD_ORDER.map(k=>pct(videoCorners[k])).join(',')})`;
+      vid.style.webkitClipPath = vid.style.clipPath;
+      vid.style.transform = '';
+      FRAME_STYLES.forEach(fs => vid.classList.remove('frame-fs-'+fs));
+      vid.classList.add('frame-fs-'+frameStyle);
+    }
+  }
 }
 
 function renderBorderGlow() {
@@ -965,32 +1236,86 @@ function renderBorderGlow() {
   el.style.height = (detectedBorder.hPct/100)*ib.h+'px';
 }
 
-function initCropEditor() {
-  renderBorderGlow();
-  renderCrop();
-  applyFrameStyleToCropBox();
+/* ══ PHOTO BORDER (A/B/C/D corners) — true 4-point polygon, SVG ══ */
+function renderBorderQuad() {
+  const ib = getImgBox();
+  const toPx = c => ({ x: ib.offX + (c.x/100)*ib.w, y: ib.offY + (c.y/100)*ib.h });
+  const px = { A:toPx(borderCorners.A), B:toPx(borderCorners.B), C:toPx(borderCorners.C), D:toPx(borderCorners.D) };
 
-  const box = document.getElementById('cropBox');
-  box.querySelectorAll('.crop-handle').forEach(h => {
-    h.onmousedown  = e => { e.stopPropagation(); startDrag(e,'resize',h.dataset.h); };
-    h.ontouchstart = e => { e.stopPropagation(); startDrag(e,'resize',h.dataset.h); };
+  const svg = document.getElementById('borderQuadSvg');
+  const poly = document.getElementById('borderQuadPoly');
+  poly.setAttribute('points', QUAD_ORDER.map(k=>`${px[k].x},${px[k].y}`).join(' '));
+  poly.classList.toggle('editing', editBorderMode);
+  svg.style.display = editBorderMode ? 'block' : (detectedBorder ? 'block' : 'none');
+
+  QUAD_ORDER.forEach(k => {
+    const h = document.getElementById('bc'+k);
+    h.style.left = px[k].x+'px'; h.style.top = px[k].y+'px';
+    h.classList.toggle('show', editBorderMode);
   });
-  box.onmousedown  = e => { if (e.target.classList.contains('crop-handle')) return; startDrag(e,'move'); };
-  box.ontouchstart = e => { if (e.target.classList.contains('crop-handle')) return; startDrag(e,'move'); };
-  window.onresize = () => { renderBorderGlow(); renderCrop(); };
+  Object.keys(QUAD_EDGES).forEach(ek => {
+    const [k1,k2] = QUAD_EDGES[ek];
+    const h = document.getElementById('bc'+ek);
+    h.style.left = ((px[k1].x+px[k2].x)/2)+'px'; h.style.top = ((px[k1].y+px[k2].y)/2)+'px';
+    h.classList.toggle('show', editBorderMode);
+  });
 }
 
-function startDrag(e, mode, handle) {
-  e.preventDefault();
-  dragMode = mode;
-  dragHandle = handle || null;
+function toggleBorderEdit() {
+  editBorderMode = !editBorderMode;
+  document.getElementById('borderToggle').classList.toggle('on', editBorderMode);
+  document.getElementById('cropHint').textContent = editBorderMode
+    ? 'Drag any point — only that point moves, edges stay straight'
+    : (cropMode==='auto' ? (detectedBorder?'Auto-fitted to detected border · drag to fine-tune':'No border detected — full photo fit · drag to adjust') : document.getElementById('cropHint').textContent);
+  renderBorderQuad();
+}
+
+/* Drag handler shared by both quads (border + video). `kind` is 'corner' or
+   'edge'. A corner drag moves only that single point — its two adjacent
+   edges follow, nothing else changes (true perspective adjust). An edge
+   drag slides BOTH corners on that edge together, by the same delta, so the
+   whole edge stays straight and just moves in parallel (Adobe-style). */
+function startQuadDrag(e, target, key) {
+  e.preventDefault(); e.stopPropagation();
+  const kind = QUAD_EDGES[key] ? 'edge' : 'corner';
+  dragMode = kind; dragHandle = key; dragTarget = target;
   const pt = e.touches?e.touches[0]:e;
-  dragStart = { px:pt.clientX, py:pt.clientY, ...cropState };
-  document.getElementById('cropBox').classList.add('dragging');
+  const corners = target==='border' ? borderCorners : videoCorners;
+  dragStart = { px:pt.clientX, py:pt.clientY, corners: JSON.parse(JSON.stringify(corners)) };
+  const elId = target==='border' ? 'bc'+key : null;
+  if (elId) document.getElementById(elId).classList.add('dragging');
   document.addEventListener('mousemove', onDragMove);
   document.addEventListener('mouseup', endDrag);
   document.addEventListener('touchmove', onDragMove, {passive:false});
   document.addEventListener('touchend', endDrag);
+}
+// kept for any stray references; routes into the shared handler
+function startBorderDrag(e, corner) { startQuadDrag(e, 'border', corner); }
+
+function initCropEditor() {
+  renderBorderGlow();
+  renderCrop();
+  renderBorderQuad();
+
+  wireQuadHandles('cropBox', 'video');
+  wireQuadHandles(null, 'border'); // border handles live outside #cropBox, in rotateLayer
+
+  window.onresize = () => { renderBorderGlow(); renderCrop(); renderBorderQuad(); };
+}
+
+/* Attaches mouse/touch handlers to all 8 handles (4 corner + 4 edge) for
+   either the video quad (inside the given box id) or the border quad
+   (fixed #bcA.. / #bcAB.. ids). Called once per surface init. */
+function wireQuadHandles(boxId, target) {
+  const allKeys = [...QUAD_ORDER, ...Object.keys(QUAD_EDGES)];
+  allKeys.forEach(k => {
+    const el = target==='border'
+      ? document.getElementById('bc'+k)
+      : (boxId ? document.querySelector('#'+boxId+' .crop-handle[data-h="'+k+'"]') : null);
+    if (!el) return;
+    el.onmousedown  = e => startQuadDrag(e, target, k);
+    el.ontouchstart = e => startQuadDrag(e, target, k);
+  });
 }
 
 function onDragMove(e) {
@@ -1000,73 +1325,48 @@ function onDragMove(e) {
   const ib = getImgBox();
   const dxP = ((pt.clientX-dragStart.px)/ib.w)*100;
   const dyP = ((pt.clientY-dragStart.py)/ib.h)*100;
+  const corners = dragTarget==='border' ? borderCorners : videoCorners;
+  const asp = dragTarget==='video' ? getLockedAspect() : null;
 
-  if (dragMode==='move') {
-    cropState.xPct = dragStart.xPct + dxP;
-    cropState.yPct = dragStart.yPct + dyP;
-    if (Math.abs(cropState.xPct-50)<SNAP_THRESH) cropState.xPct=50;
-    if (Math.abs(cropState.yPct-50)<SNAP_THRESH) cropState.yPct=50;
-  } else {
-    resizeFromHandle(dragHandle, dxP, dyP, ib);
+  if (dragMode === 'corner') {
+    const start = dragStart.corners[dragHandle];
+    let next = { x: start.x + dxP, y: start.y + dyP };
+    if (asp !== null) next = applyAspectLockToCorner(dragHandle, next, dragStart.corners, ib, asp);
+    corners[dragHandle] = clampQuadPoint(next);
+  } else if (dragMode === 'edge') {
+    // slide both corners on this edge by the same delta, perpendicular to
+    // the edge's own direction, so the edge stays straight and just moves
+    const [k1,k2] = QUAD_EDGES[dragHandle];
+    const s1=dragStart.corners[k1], s2=dragStart.corners[k2];
+    const ex=s2.x-s1.x, ey=s2.y-s1.y, elen=Math.hypot(ex,ey)||1;
+    const nx=-ey/elen, ny=ex/elen; // unit normal to the edge
+    const delta = dxP*nx + dyP*ny; // project drag onto the normal direction
+    corners[k1] = clampQuadPoint({ x:s1.x+nx*delta, y:s1.y+ny*delta });
+    corners[k2] = clampQuadPoint({ x:s2.x+nx*delta, y:s2.y+ny*delta });
   }
+
+  if (dragTarget==='border') { renderBorderQuad(); return; }
   clampCrop();
   renderCrop();
 }
 
-/* Resize from any of the 8 handles. Corner handles resize both axes (locked
-   aspect if one is active); edge-midpoint handles resize a single axis.
-   The box's opposite edge stays anchored so dragging feels natural. */
-function resizeFromHandle(handle, dxP, dyP, ib) {
-  const asp = getLockedAspect();
-  const d0 = dragStart;
-  let left   = d0.xPct - d0.wPct/2;
-  let right  = d0.xPct + d0.wPct/2;
-  let top    = d0.yPct - d0.hPct/2;
-  let bottom = d0.yPct + d0.hPct/2;
-
-  const movesLeft   = handle.includes('l');
-  const movesRight  = handle.includes('r');
-  const movesTop    = handle.includes('t');
-  const movesBottom = handle.includes('b');
-
-  if (movesLeft)   left   = Math.min(right-4,  d0.xPct - d0.wPct/2 + dxP);
-  if (movesRight)  right  = Math.max(left+4,   d0.xPct + d0.wPct/2 + dxP);
-  if (movesTop)    top    = Math.min(bottom-4, d0.yPct - d0.hPct/2 + dyP);
-  if (movesBottom) bottom = Math.max(top+4,    d0.yPct + d0.hPct/2 + dyP);
-
-  let wPct = right-left, hPct = bottom-top;
-
-  if (asp !== null) {
-    // lock aspect: recompute the non-anchored dimension from whichever edge moved
-    const wPx = (wPct/100)*ib.w, hPx = (hPct/100)*ib.h;
-    if (handle==='t'||handle==='b') {
-      const newWpx = hPx*asp;
-      const newWpct = (newWpx/ib.w)*100;
-      const cx = d0.xPct;
-      left = cx-newWpct/2; right = cx+newWpct/2; wPct = newWpct;
-    } else if (handle==='l'||handle==='r') {
-      const newHpx = wPx/asp;
-      const newHpct = (newHpx/ib.h)*100;
-      const cy = d0.yPct;
-      top = cy-newHpct/2; bottom = cy+newHpct/2; hPct = newHpct;
-    } else {
-      // corner: derive height from width to keep aspect, anchored at opposite corner
-      const newHpx = wPx/asp;
-      const newHpct = (newHpx/ib.h)*100;
-      if (movesTop) { top = bottom-newHpct; } else { bottom = top+newHpct; }
-      hPct = newHpct;
-    }
-  }
-
-  cropState.xPct = (left+right)/2;
-  cropState.yPct = (top+bottom)/2;
-  cropState.wPct = wPct;
-  cropState.hPct = hPct;
+/* When a ratio/aspect lock is active on the video quad, dragging one corner
+   keeps the quad an axis-aligned rectangle of that ratio by also moving the
+   two corners adjacent to it, anchored at the single opposite corner —
+   matches how 'By ratio' mode behaved before, just expressed per-corner. */
+function applyAspectLockToCorner(handle, proposed, startCorners, ib, asp) {
+  const opposite = { A:'C', B:'D', C:'A', D:'B' }[handle];
+  const anchor = startCorners[opposite];
+  const dxPx = (proposed.x-anchor.x)/100*ib.w, dyPx = (proposed.y-anchor.y)/100*ib.h;
+  const w = Math.max(8, Math.abs(dxPx)), h = w/asp;
+  const signX = dxPx>=0?1:-1, signY = dyPx>=0?1:-1;
+  const newDxPx = signX*w, newDyPx = signY*h;
+  return { x: anchor.x + (newDxPx/ib.w)*100, y: anchor.y + (newDyPx/ib.h)*100 };
 }
 
 function endDrag() {
-  dragMode = null; dragHandle = null;
-  document.getElementById('cropBox').classList.remove('dragging');
+  document.querySelectorAll('.border-corner-handle.dragging').forEach(h=>h.classList.remove('dragging'));
+  dragMode = null; dragHandle = null; dragTarget = null;
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mouseup', endDrag);
   document.removeEventListener('touchmove', onDragMove);
@@ -1074,18 +1374,63 @@ function endDrag() {
 }
 
 /* ══ ZOOM ══ */
+function applyImgTransform() {
+  const ids = surfaceIds();
+  const t = `scale(${zoomPct/100}) rotate(${photoRotation}deg)`;
+  const img = document.getElementById(ids.img);
+  if (img) img.style.transform = t;
+  const layerId = activeSurface==='preview' ? 'prevRotateLayer' : 'rotateLayer';
+  const layer = document.getElementById(layerId);
+  if (layer) layer.style.transform = `rotate(${photoRotation}deg)`;
+}
 function onZoomInput(v) {
   zoomPct = parseInt(v,10);
   document.getElementById('zoomVal').textContent = zoomPct+'%';
-  document.getElementById('cropImg').style.transform = `scale(${zoomPct/100})`;
-  renderBorderGlow(); renderCrop();
+  applyImgTransform();
+  renderBorderGlow(); renderCrop(); renderBorderQuad();
 }
 function resetZoom() {
   zoomPct = 100;
   document.getElementById('zoomSlider').value = 100;
   document.getElementById('zoomVal').textContent = '100%';
-  document.getElementById('cropImg').style.transform = 'scale(1)';
-  renderBorderGlow(); renderCrop();
+  applyImgTransform();
+  renderBorderGlow(); renderCrop(); renderBorderQuad();
+}
+
+/* ══ PHOTO ROTATE ══
+   Rotates the whole photo (and the overlay layers move with it visually
+   since they're all positioned relative to the same getImgBox()). 90°
+   nudges swap width/height conceptually for natural "landscape→portrait"
+   fixes; the free slider (-45..45°) handles small tilt corrections. The
+   step-2 and step-3 sliders are kept in sync since they edit the same
+   shared photoRotation value. */
+function onPhotoRotateInput(v) {
+  photoRotation = parseFloat(v);
+  syncRotateSliders();
+  applyImgTransform();
+  renderBorderGlow(); renderCrop(); renderBorderQuad();
+}
+function onPhotoRotateInput2(v) {
+  photoRotation = parseFloat(v);
+  syncRotateSliders();
+  applyImgTransform();
+  renderBorderGlow(); renderCrop(); renderBorderQuad();
+}
+function syncRotateSliders() {
+  const label = Math.round(photoRotation)+'°';
+  const s1 = document.getElementById('photoRotSlider'), v1 = document.getElementById('photoRotVal');
+  const s2 = document.getElementById('photoRotSlider2'), v2 = document.getElementById('photoRotVal2');
+  if (v1) v1.textContent = label;
+  if (v2) v2.textContent = label;
+  if (s1 && Math.abs(photoRotation) <= 45) s1.value = photoRotation;
+  if (s2 && Math.abs(photoRotation) <= 45) s2.value = photoRotation;
+}
+function nudgePhotoRotate(deg) {
+  photoRotation = ((photoRotation + deg) % 360 + 360) % 360;
+  if (photoRotation > 180) photoRotation -= 360; // keep in -180..180 range
+  syncRotateSliders();
+  applyImgTransform();
+  renderBorderGlow(); renderCrop(); renderBorderQuad();
 }
 
 /* ══ FRAME STYLE ══ */
@@ -1094,15 +1439,9 @@ function setFrameStyle(fs, chip) {
   frameStyle = fs;
   document.querySelectorAll('#frameGrid .frame-chip').forEach(c=>c.classList.remove('on'));
   if (chip) chip.classList.add('on');
-  applyFrameStyleToCropBox();
   const lbl = document.getElementById('prevFrameLabel');
   if (lbl) lbl.textContent = chip ? chip.querySelector('.frame-chip-name').textContent : fs;
-}
-function applyFrameStyleToCropBox() {
-  const box = document.getElementById('cropBox');
-  if (!box) return;
-  FRAME_STYLES.forEach(fs => box.classList.remove('frame-fs-'+fs));
-  box.classList.add('frame-fs-'+frameStyle);
+  if (activeSurface==='preview') renderCrop(); // re-apply frame classes to the live <video>
 }
 
 const RATIOS = {'9:16':9/16,'1:1':1,'4:5':4/5,'16:9':16/9,'3:4':3/4};
@@ -1116,6 +1455,10 @@ function getLockedAspect() {
   return null;
 }
 
+/* Switching tabs loads that mode's saved snapshot if one exists (from a
+   previous "Save this mode"); otherwise it falls back to sensible defaults
+   for that mode, same as before. Either way you can keep editing and the
+   other modes' saved work is untouched until you explicitly save over it. */
 function setMode(m, btn) {
   cropMode = m;
   document.querySelectorAll('#modeTabs .mode-tab').forEach(b=>b.classList.remove('on'));
@@ -1123,29 +1466,43 @@ function setMode(m, btn) {
   const rr = document.getElementById('ratioRow');
   rr.style.display = m==='ratio' ? 'flex' : 'none';
 
-  if (m==='auto') {
+  if (modeSaves[m]) {
+    loadModeSnapshot(modeSaves[m]);
+    document.getElementById('photoRotSlider').value = photoRotation;
+    document.getElementById('photoRotVal').textContent = Math.round(photoRotation)+'°';
+    document.getElementById('zoomSlider').value = zoomPct;
+    document.getElementById('zoomVal').textContent = zoomPct+'%';
+    document.querySelectorAll('#frameGrid .frame-chip').forEach(c=>c.classList.toggle('on', c.dataset.fs===frameStyle));
+    if (m==='ratio') document.querySelectorAll('#ratioRow .ratio-chip').forEach(c=>c.classList.toggle('on', c.dataset.r===currentRatio));
+    document.getElementById('cropHint').textContent = 'Loaded your saved "'+modeTabLabel(m)+'" setup · drag any point to adjust';
+    applyImgTransform();
+  } else if (m==='auto') {
     document.getElementById('cropHint').textContent = detectedBorder
-      ? 'Auto-fitted to detected border · drag to fine-tune'
+      ? 'Auto-fitted to detected border · drag any point to fine-tune'
       : 'No border detected — full photo fit · drag to adjust';
     if (detectedBorder) fitVideoToBorder();
-    else cropState = {xPct:50,yPct:50,wPct:90,hPct:90,ratioKey:'auto'};
+    else { cropState = {xPct:50,yPct:50,wPct:90,hPct:90,ratioKey:'auto'}; videoCorners = quadFromRect(50,50,90,90,0); }
     cropState.ratioKey='auto';
   } else if (m==='ratio') {
-    document.getElementById('cropHint').textContent = 'Locked to chosen ratio · drag to reposition or resize';
+    document.getElementById('cropHint').textContent = 'Locked to chosen ratio · drag any point to reposition or resize';
     applyRatioToCurrentBox(RATIOS[currentRatio]||9/16);
     cropState.ratioKey = currentRatio;
   } else {
-    document.getElementById('cropHint').textContent = 'Free crop — drag corner to resize freely';
+    document.getElementById('cropHint').textContent = 'Free crop — drag any of the 8 points to adjust independently';
     cropState.ratioKey='free';
   }
-  clampCrop(); renderCrop();
+  clampCrop(); renderCrop(); renderBorderQuad();
+  refreshModeSaveUI();
 }
 
 function applyRatioToCurrentBox(asp) {
   const ib = getImgBox();
-  const curWpx = (cropState.wPct/100)*ib.w;
+  const summary = quadToCropStateSummary(videoCorners);
+  const curWpx = (summary.wPct/100)*ib.w;
   const newHpx = curWpx/asp;
-  cropState.hPct = (newHpx/ib.h)*100;
+  const newHPct = (newHpx/ib.h)*100;
+  cropState = { xPct:summary.xPct, yPct:summary.yPct, wPct:summary.wPct, hPct:newHPct, ratioKey:currentRatio, rotation:0 };
+  videoCorners = quadFromRect(summary.xPct, summary.yPct, summary.wPct, newHPct, 0);
 }
 
 function setRatio(r, chip) {
@@ -1161,31 +1518,18 @@ function setRatio(r, chip) {
 function buildPreview() {
   const poster = document.getElementById('prevPoster');
   const vid    = document.getElementById('prevVid');
-  const stage  = document.getElementById('previewStage');
 
   const photoUrl = URL.createObjectURL(compressedBlob || photoFile);
   const vidUrl   = URL.createObjectURL(videoFile);
 
   poster.onload = () => {
-    const pW = poster.offsetWidth;
-    const pH = poster.offsetHeight;
-    stage.style.height = pH+'px';
-
-    const leftPx = ((cropState.xPct - cropState.wPct/2)/100) * pW;
-    const topPx  = ((cropState.yPct - cropState.hPct/2)/100) * pH;
-    const wPx    = (cropState.wPct/100) * pW;
-    const hPx    = (cropState.hPct/100) * pH;
-
-    vid.style.left   = leftPx+'px';
-    vid.style.top    = topPx+'px';
-    vid.style.width  = wPx+'px';
-    vid.style.height = hPx+'px';
-    FRAME_STYLES.forEach(fs => vid.classList.remove('frame-fs-'+fs));
-    vid.classList.add('frame-fs-'+frameStyle);
-
-    vid.src = vidUrl;
-    vid.muted = true;
-    vid.play().catch(()=>{});
+    setTimeout(() => {
+      wireQuadHandles('prevCropBox', 'video'); // safe to re-wire on every visit
+      renderBorderGlow(); renderCrop(); renderBorderQuad();
+      vid.src = vidUrl;
+      vid.muted = true;
+      vid.play().catch(()=>{});
+    }, 30);
   };
   poster.src = photoUrl;
 }
@@ -1193,16 +1537,31 @@ function buildPreview() {
 /* ══ UPLOAD ══ */
 function doUpload() {
   _cancelled=false; _retries=0;
+  const summary = quadToCropStateSummary(videoCorners);
   const rect = {
     ratio:  cropState.ratioKey,
-    x:      parseFloat(cropState.xPct.toFixed(4)),
-    y:      parseFloat(cropState.yPct.toFixed(4)),
-    width:  parseFloat(cropState.wPct.toFixed(4)),
-    height: parseFloat(cropState.hPct.toFixed(4)),
+    x:      parseFloat(summary.xPct.toFixed(4)),
+    y:      parseFloat(summary.yPct.toFixed(4)),
+    width:  parseFloat(summary.wPct.toFixed(4)),
+    height: parseFloat(summary.hPct.toFixed(4)),
+    rotation: parseFloat((summary.rotation||0).toFixed(2)),
     frameStyle: frameStyle,
     detectConfidence: detectConfidence,
+    // exact corner-to-corner positions, % of original (unrotated) photo —
+    // A=top-left, B=top-right, C=bottom-right, D=bottom-left, both clockwise.
+    // These are the real source of truth (independent per-corner edits),
+    // the x/y/width/height/rotation summary above is a best-fit fallback only.
+    photoBorderCorners: roundCorners(borderCorners),
+    videoCorners: roundCorners(videoCorners),
+    photoRotation: parseFloat(photoRotation.toFixed(2)),
   };
   startUpload(rect);
+}
+
+function roundCorners(c) {
+  const r = {};
+  QUAD_ORDER.forEach(k => { r[k] = { x: parseFloat(c[k].x.toFixed(3)), y: parseFloat(c[k].y.toFixed(3)) }; });
+  return r;
 }
 
 function startUpload(rect) {
