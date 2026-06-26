@@ -13,352 +13,425 @@
   --ink:#0D0B0A;--ink-muted:#6B6560;--ink-faint:#B0AAA4;
   --surface:#FDFAF7;--surface-warm:#F5EFE6;--surface-card:#FFFCF9;
   --gold:#C9933A;--gold-light:#F0D99A;--gold-bg:#FBF5E6;
-  --border:#E8E0D4;--green:#2E7D52;--green-bg:#EAF5EF;
-  --red:#C94040;--red-bg:#FDEEEE;--blue:#2563EB;--blue-bg:#EFF6FF;
+  --border:#E8E0D4;--green:#2E7D52;--green-bg:#EAF5EF;--green-light:#b2d8c2;
+  --red:#C94040;--red-bg:#FDEEEE;
+  --radius:12px;
 }
 body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh;}
 
-/* TOPBAR */
-.topbar{height:60px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:var(--surface-card);position:sticky;top:0;z-index:40;}
-.topbar-left{display:flex;align-items:center;gap:14px;}
-.back-btn{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:8px;font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;border:0.5px solid var(--border);background:var(--surface-card);color:var(--ink-muted);text-decoration:none;transition:all .15s;}
-.back-btn:hover{border-color:var(--ink-muted);color:var(--ink)}
-.topbar-title{font-size:15px;font-weight:500;color:var(--ink)}
-.logo{font-family:'Instrument Serif',Georgia,serif;font-size:18px;letter-spacing:-0.02em;color:var(--ink);text-decoration:none;}
+/* ── TOPBAR ── */
+.topbar{height:58px;border-bottom:.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:var(--surface-card);position:sticky;top:0;z-index:60;}
+.logo{font-family:'Instrument Serif',serif;font-size:19px;letter-spacing:-.02em;color:var(--ink);text-decoration:none;}
 .logo span{color:var(--gold)}
+.back-btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:8px;font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;border:.5px solid var(--border);background:transparent;color:var(--ink-muted);text-decoration:none;transition:all .15s;}
+.back-btn:hover{border-color:var(--ink-muted);color:var(--ink);background:var(--surface-warm)}
 
-/* STEPS */
-.steps-bar{display:flex;align-items:center;gap:0;padding:20px 28px;border-bottom:0.5px solid var(--border);background:var(--surface-card);}
-.step{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:8px;font-size:13px;color:var(--ink-faint);font-weight:500;transition:all .2s;}
+/* ── STEPPER ── */
+.stepper{display:flex;align-items:center;gap:0;padding:16px 24px;border-bottom:.5px solid var(--border);background:var(--surface-card);}
+.step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-faint);font-weight:500;padding:6px 10px;border-radius:8px;transition:all .2s;}
 .step.active{color:var(--ink);background:var(--gold-bg);}
 .step.done{color:var(--green);}
-.step-num{width:24px;height:24px;border-radius:50%;background:var(--surface-warm);border:0.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;transition:all .2s;}
+.step-num{width:22px;height:22px;border-radius:50%;border:.5px solid var(--border);background:var(--surface-warm);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;transition:all .2s;}
 .step.active .step-num{background:var(--gold);border-color:var(--gold);color:#fff;}
 .step.done .step-num{background:var(--green);border-color:var(--green);color:#fff;}
-.step-sep{width:32px;height:1px;background:var(--border);flex-shrink:0;margin:0 4px;}
+.step-sep{flex:1;max-width:48px;height:.5px;background:var(--border);margin:0 4px;}
 
-/* MAIN LAYOUT */
-.page-wrap{display:grid;grid-template-columns:1fr 420px;min-height:calc(100vh - 120px);gap:0;}
-.left-panel{padding:32px 36px;border-right:0.5px solid var(--border);}
-.right-panel{padding:28px 24px;background:var(--surface-card);}
+/* ── LAYOUT ── */
+.layout{display:grid;grid-template-columns:1fr 360px;min-height:calc(100vh - 106px);}
+.main-col{padding:28px 32px;border-right:.5px solid var(--border);overflow:hidden;}
+.side-col{padding:24px 20px;background:var(--surface-card);}
 
-/* UPLOAD ZONES */
-.upload-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
-.upload-zone{border:1.5px dashed var(--border);border-radius:14px;padding:28px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative;overflow:hidden;}
-.upload-zone:hover{border-color:var(--gold);background:var(--gold-bg)}
-.upload-zone.has-file{border-color:var(--green);background:var(--green-bg);border-style:solid}
-.upload-zone.drag{border-color:var(--gold);background:var(--gold-bg)}
-.upload-icon-wrap{width:48px;height:48px;border-radius:12px;background:var(--gold-bg);border:0.5px solid var(--gold-light);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;}
-.upload-zone.has-file .upload-icon-wrap{background:var(--green-bg);border-color:#b2d8c2}
-.uz-label{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:4px}
-.uz-sub{font-size:12px;color:var(--ink-muted)}
-.uz-hint{font-size:11px;color:var(--ink-faint);margin-top:4px}
+/* ── STEP PANELS ── */
+.panel{display:none;animation:fadeIn .2s ease;}
+.panel.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-/* SCAN ANIMATION */
-.scan-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(13,11,10,.72);border-radius:13px;color:#fff;gap:10px;opacity:0;pointer-events:none;transition:opacity .3s;}
-.scan-overlay.active{opacity:1;pointer-events:all;}
-.scan-spinner{width:36px;height:36px;border:2.5px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg)}}
-.scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanline 1.6s ease-in-out infinite;border-radius:1px;box-shadow:0 0 8px var(--gold);}
-@keyframes scanline{0%{top:20%;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:80%;opacity:0}}
-.scan-text{font-size:12px;color:rgba(255,255,255,.85);font-weight:500}
-
-/* DETECTED BORDER BADGE */
-.detect-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--green-bg);border:0.5px solid #b2d8c2;border-radius:20px;font-size:12px;color:var(--green);font-weight:500;margin-top:10px;}
-.detect-badge svg{flex-shrink:0}
-
-/* CROP EDITOR */
-.crop-section{display:none;}
-.crop-section.show{display:block;}
-.crop-title{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;}
-.crop-subtitle{font-size:12px;color:var(--ink-muted);margin-bottom:16px;}
-.crop-mode-tabs{display:flex;gap:8px;margin-bottom:14px;}
-.crop-tab{flex:1;padding:8px;text-align:center;border-radius:8px;border:0.5px solid var(--border);background:var(--surface-warm);font-size:12px;color:var(--ink-muted);cursor:pointer;transition:all .15s;font-family:inherit;font-weight:500;}
-.crop-tab:hover{border-color:var(--gold-light)}
-.crop-tab.active{background:var(--gold-bg);border-color:var(--gold);color:var(--gold);}
-
-/* CROP STAGE */
-.crop-stage{position:relative;width:100%;border-radius:12px;overflow:hidden;background:#111;margin-bottom:10px;touch-action:none;user-select:none;}
-.crop-stage img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;}
-.detected-border-glow{position:absolute;pointer-events:none;border:2px solid rgba(46,125,82,.7);border-radius:4px;box-shadow:0 0 0 2000px rgba(0,0,0,.4),inset 0 0 20px rgba(46,125,82,.15);transition:all .4s cubic-bezier(.25,.8,.25,1);}
-.detected-border-glow::before{content:'';position:absolute;inset:-4px;border:1.5px dashed rgba(46,125,82,.5);border-radius:6px;animation:borderPulse 2s ease-in-out infinite;}
-@keyframes borderPulse{0%,100%{opacity:.5}50%{opacity:1}}
-.crop-box{position:absolute;border:2px solid var(--gold);border-radius:6px;background:rgba(201,147,58,.12);cursor:move;transition:box-shadow .15s;}
-.crop-box:active{box-shadow:0 0 0 9999px rgba(0,0,0,.45);}
-.crop-box-active{box-shadow:0 0 0 9999px rgba(0,0,0,.45);}
-.crop-box::after{content:'';position:absolute;inset:0;border-radius:6px;background:repeating-linear-gradient(0deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.25) calc(33.33% - .5px),rgba(255,255,255,.25) calc(33.33%)),repeating-linear-gradient(90deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.25) calc(33.33% - .5px),rgba(255,255,255,.25) calc(33.33%));pointer-events:none;}
-.crop-handle{position:absolute;width:16px;height:16px;background:var(--gold);border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3);}
-.crop-handle.br{right:-9px;bottom:-9px;cursor:nwse-resize;}
-.crop-hint{font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:14px;}
-
-/* VIDEO PREVIEW ON POSTER */
-.preview-stage{position:relative;border-radius:12px;overflow:hidden;background:#111;margin-bottom:12px;}
-.preview-poster{display:block;width:100%;height:auto;}
-.preview-video{position:absolute;object-fit:fill;pointer-events:none;}
-
-/* RIGHT PANEL FORM */
-.form-group{margin-bottom:16px;}
-.form-group label{display:block;font-size:12px;font-weight:500;margin-bottom:6px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.04em;}
-.form-group input,.form-group textarea{width:100%;border:0.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;font-family:inherit;color:var(--ink);background:var(--surface);transition:border-color .2s;outline:none;}
-.form-group input:focus,.form-group textarea:focus{border-color:var(--gold)}
-.form-group textarea{resize:none;height:72px;line-height:1.5}
-.info-row{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--gold-bg);border:0.5px solid var(--gold-light);border-radius:8px;font-size:12px;color:var(--gold);margin-bottom:16px;}
-.btn-full{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:10px;font-size:14px;font-family:inherit;font-weight:500;cursor:pointer;border:none;background:var(--ink);color:#fff;transition:all .15s;margin-top:8px;}
-.btn-full:hover{opacity:.87}
-.btn-full:disabled{opacity:.5;cursor:default}
-.btn-secondary{background:var(--surface-warm);color:var(--ink);border:0.5px solid var(--border);}
-.btn-secondary:hover{border-color:var(--ink-muted)}
-.progress-bar{height:5px;border-radius:10px;background:var(--surface-warm);margin-top:10px;overflow:hidden;display:none;}
-.progress-bar.show{display:block}
-.progress-fill{height:100%;background:var(--gold);border-radius:10px;width:0%;transition:width .3s ease;}
-.upload-stats{font-size:11px;color:var(--ink-faint);display:flex;justify-content:space-between;margin-top:5px;display:none;}
-.upload-stats.show{display:flex}
-.err-box{display:none;color:var(--red);font-size:13px;padding:10px 14px;background:var(--red-bg);border-radius:8px;margin-top:8px;}
-
-/* SIZE LABELS */
-.section-label{font-size:11px;font-weight:500;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
-
-/* TOAST */
-#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);background:rgba(13,11,10,.92);color:#fff;font-size:13px;padding:10px 20px;border-radius:30px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:999;}
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-
-/* AUTO DETECT ANIMATION */
-@keyframes scanPulse{0%,100%{opacity:.6}50%{opacity:1}}
-.auto-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border-radius:12px;background:var(--blue-bg);color:var(--blue);font-weight:500;border:0.5px solid #bfdbfe;}
-.auto-tag-green{background:var(--green-bg);color:var(--green);border-color:#b2d8c2;}
-
-@media(max-width:900px){
-  .page-wrap{grid-template-columns:1fr;} 
-  .right-panel{border-top:0.5px solid var(--border);}
-  .left-panel{padding:20px 16px;}
-  .topbar{padding:0 16px;}
-  .steps-bar{padding:12px 16px;gap:0;overflow-x:auto;}
+/* ── UPLOAD ZONES ── */
+.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.drop-zone{
+  border:1.5px dashed var(--border);border-radius:var(--radius);
+  padding:28px 16px;text-align:center;cursor:pointer;
+  transition:border-color .2s,background .2s;position:relative;overflow:hidden;
+  min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
 }
-@media(max-width:640px){
-  .upload-row{grid-template-columns:1fr;}
+.drop-zone:hover{border-color:var(--gold);background:var(--gold-bg)}
+.drop-zone.drag{border-color:var(--gold);background:var(--gold-bg)}
+.drop-zone.has-file{border-color:var(--green);background:var(--green-bg);border-style:solid}
+.drop-zone.errored{border-color:var(--red);background:var(--red-bg)}
+.zone-icon{width:46px;height:46px;border-radius:11px;border:.5px solid var(--gold-light);background:var(--gold-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
+.drop-zone.has-file .zone-icon{background:var(--green-bg);border-color:var(--green-light);}
+.drop-zone.errored .zone-icon{background:var(--red-bg);border-color:#f5b8b8;}
+.zone-name{font-size:13px;font-weight:500;color:var(--ink);}
+.zone-sub{font-size:12px;color:var(--ink-muted);}
+.zone-hint{font-size:11px;color:var(--ink-faint);}
+
+/* ── SCAN ANIM ── */
+.scan-overlay{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;background:rgba(13,11,10,.68);border-radius:11px;
+  opacity:0;pointer-events:none;transition:opacity .25s;
+}
+.scan-overlay.on{opacity:1;pointer-events:all;}
+.scan-spin{width:30px;height:30px;border:2.5px solid rgba(255,255,255,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .75s linear infinite;}
+.scan-beam{position:absolute;left:14px;right:14px;height:1.5px;background:linear-gradient(90deg,transparent 0%,var(--gold) 40%,rgba(255,215,100,.8) 50%,var(--gold) 60%,transparent 100%);border-radius:1px;box-shadow:0 0 10px 2px rgba(201,147,58,.55);animation:beam 1.5s ease-in-out infinite;}
+@keyframes beam{0%{top:18%;opacity:0}8%{opacity:1}92%{opacity:1}100%{top:82%;opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-txt{font-size:12px;color:rgba(255,255,255,.8);font-weight:500;letter-spacing:.01em;}
+
+/* ── DETECT RESULT ── */
+.detect-pill{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;
+  font-size:11px;font-weight:600;margin-top:8px;
+}
+.detect-pill.ok{background:var(--green-bg);color:var(--green);border:.5px solid var(--green-light);}
+.detect-pill.warn{background:var(--gold-bg);color:var(--gold);border:.5px solid var(--gold-light);}
+
+/* ── AUTO-DETECT STATUS BOX ── */
+.detect-box{
+  border-radius:var(--radius);border:.5px solid var(--border);
+  background:var(--surface-card);padding:14px 16px;margin-bottom:16px;
+  display:none;
+}
+.detect-box.show{display:block;}
+.detect-box-head{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:7px;}
+.detect-box-body{font-size:12px;color:var(--ink-muted);line-height:1.6;}
+
+/* ── CROP STAGE ── */
+.crop-wrap{position:relative;width:100%;border-radius:14px;overflow:hidden;background:#0d0b0a;margin-bottom:10px;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center;}
+.crop-poster{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;border-radius:14px;}
+
+/* Border glow — shows detected border of photo */
+.border-glow{
+  position:absolute;pointer-events:none;
+  border:1.5px solid rgba(46,125,82,.75);border-radius:8px;
+  transition:all .5s cubic-bezier(.25,.8,.25,1);
+}
+.border-glow::before{
+  content:'';position:absolute;inset:-3px;border-radius:10px;
+  border:1px dashed rgba(46,125,82,.4);
+  animation:pulseGlow 2.5s ease-in-out infinite;
+}
+.border-glow::after{
+  content:'Auto-detected border';position:absolute;
+  top:-22px;left:0;font-size:10px;font-weight:600;
+  color:var(--green);background:var(--green-bg);
+  padding:2px 7px;border-radius:4px;white-space:nowrap;
+  border:.5px solid var(--green-light);
+}
+@keyframes pulseGlow{0%,100%{opacity:.4;box-shadow:0 0 0 0 rgba(46,125,82,0)}50%{opacity:1;box-shadow:0 0 12px 2px rgba(46,125,82,.18)}}
+
+/* Video crop box */
+.crop-box{
+  position:absolute;cursor:move;
+  border:2px solid var(--gold);
+  border-radius:6px;
+  background:rgba(201,147,58,.10);
+  /* shadow outside = dim everything else */
+  box-shadow:0 0 0 9999px rgba(0,0,0,.42);
+  transition:box-shadow .1s;
+}
+.crop-box.dragging{box-shadow:0 0 0 9999px rgba(0,0,0,.52);}
+
+/* rule-of-thirds grid inside crop box */
+.crop-box::after{
+  content:'';position:absolute;inset:0;border-radius:5px;pointer-events:none;
+  background:
+    repeating-linear-gradient(0deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.22) calc(33.33% - .5px),rgba(255,255,255,.22) 33.33%),
+    repeating-linear-gradient(90deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.22) calc(33.33% - .5px),rgba(255,255,255,.22) 33.33%);
+}
+
+/* corner handles */
+.crop-corner{
+  position:absolute;width:14px;height:14px;
+  border-color:var(--gold);border-style:solid;border-width:0;
+  pointer-events:none;
+}
+.crop-corner.tl{top:-2px;left:-2px;border-top-width:3px;border-left-width:3px;border-radius:3px 0 0 0;}
+.crop-corner.tr{top:-2px;right:-2px;border-top-width:3px;border-right-width:3px;border-radius:0 3px 0 0;}
+.crop-corner.bl{bottom:-2px;left:-2px;border-bottom-width:3px;border-left-width:3px;border-radius:0 0 0 3px;}
+.crop-corner.br{bottom:-2px;right:-2px;border-bottom-width:3px;border-right-width:3px;border-radius:0 0 3px 0;}
+
+/* resize handle dot */
+.crop-resize{
+  position:absolute;right:-7px;bottom:-7px;
+  width:16px;height:16px;border-radius:50%;
+  background:var(--gold);border:2px solid #fff;
+  cursor:nwse-resize;box-shadow:0 1px 4px rgba(0,0,0,.35);
+  z-index:2;
+}
+
+/* edge snap indicators */
+.snap-line{position:absolute;background:rgba(201,147,58,.6);pointer-events:none;display:none;}
+.snap-line.h{height:1px;left:0;right:0;}
+.snap-line.v{width:1px;top:0;bottom:0;}
+.snap-line.on{display:block;}
+
+/* ── CROP MODE TABS ── */
+.mode-tabs{display:flex;gap:6px;margin-bottom:12px;}
+.mode-tab{
+  flex:1;padding:8px 0;text-align:center;border-radius:8px;
+  border:.5px solid var(--border);background:var(--surface-warm);
+  font-size:12px;color:var(--ink-muted);cursor:pointer;font-family:inherit;font-weight:500;
+  transition:all .15s;
+}
+.mode-tab:hover{border-color:var(--gold-light);}
+.mode-tab.on{background:var(--gold-bg);border-color:var(--gold);color:var(--gold);}
+
+/* ── RATIO CHIPS ── */
+.ratio-row{display:flex;gap:6px;margin-bottom:12px;display:none;}
+.ratio-chip{
+  flex:1;padding:7px 0;text-align:center;border-radius:7px;
+  border:.5px solid var(--border);background:var(--surface-warm);
+  font-size:11px;font-weight:600;color:var(--ink-muted);cursor:pointer;transition:all .15s;
+}
+.ratio-chip:hover{border-color:var(--gold-light);}
+.ratio-chip.on{background:var(--gold-bg);border-color:var(--gold);color:var(--gold);}
+
+.crop-hint-txt{font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:14px;}
+
+/* ── PREVIEW ── */
+.preview-stage{
+  position:relative;border-radius:14px;overflow:hidden;background:#0d0b0a;
+  display:inline-block;width:100%;margin-bottom:10px;
+}
+.preview-poster{display:block;width:100%;height:auto;border-radius:14px;}
+.preview-vid{
+  position:absolute;
+  object-fit:fill;   /* fills the positioned box edge-to-edge */
+  border-radius:10px;/* smooth corners matching the crop box shape */
+}
+
+/* ── FORM ELEMENTS ── */
+.fgroup{margin-bottom:14px;}
+.fgroup label{display:block;font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+.fgroup input,.fgroup textarea{width:100%;border:.5px solid var(--border);border-radius:8px;padding:9px 13px;font-size:13.5px;font-family:inherit;color:var(--ink);background:var(--surface);outline:none;transition:border-color .2s;}
+.fgroup input:focus,.fgroup textarea:focus{border-color:var(--gold);}
+.fgroup textarea{resize:none;height:64px;line-height:1.5;}
+.char-count{font-size:11px;color:var(--ink-faint);float:right;margin-top:3px;}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 18px;border-radius:9px;font-size:13.5px;font-family:inherit;font-weight:500;cursor:pointer;border:.5px solid var(--border);background:var(--surface-warm);color:var(--ink);text-decoration:none;transition:all .15s;}
+.btn:hover{border-color:var(--ink-muted);background:var(--surface-warm);}
+.btn:disabled{opacity:.45;cursor:default;}
+.btn-dark{background:var(--ink);color:#fff;border-color:var(--ink);}
+.btn-dark:hover:not(:disabled){opacity:.86;background:var(--ink);}
+.btn-row{display:flex;gap:10px;margin-top:4px;}
+.btn-row .btn{flex:1;}
+.btn-row .btn-dark{flex:2;}
+
+/* ── PROGRESS ── */
+.prog-wrap{margin-top:12px;display:none;}
+.prog-wrap.on{display:block;}
+.prog-bar{height:4px;border-radius:10px;background:var(--surface-warm);overflow:hidden;}
+.prog-fill{height:100%;border-radius:10px;background:var(--gold);width:0%;transition:width .25s ease;}
+.prog-stats{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-faint);margin-top:5px;}
+
+/* ── STATUS BOXES (side panel) ── */
+.side-section{margin-bottom:18px;}
+.side-label{font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.thumb-img{width:100%;border-radius:10px;border:.5px solid var(--border);max-height:180px;object-fit:contain;background:#111;display:block;}
+.meta-box{font-size:12px;color:var(--ink-muted);padding:10px 12px;background:var(--surface-warm);border-radius:8px;border:.5px solid var(--border);line-height:1.65;}
+.meta-box strong{color:var(--ink);font-weight:500;}
+.info-box{display:flex;align-items:flex-start;gap:8px;padding:10px 13px;border-radius:9px;font-size:12px;line-height:1.5;margin-bottom:12px;}
+.info-box.gold{background:var(--gold-bg);border:.5px solid var(--gold-light);color:var(--gold);}
+.info-box.green{background:var(--green-bg);border:.5px solid var(--green-light);color:var(--green);}
+.info-box.red{background:var(--red-bg);border:.5px solid #f5b8b8;color:var(--red);}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(13,11,10,.92);color:#fff;font-size:13px;padding:9px 20px;border-radius:28px;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;z-index:999;}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── ERR ── */
+.err-txt{display:none;color:var(--red);font-size:12.5px;padding:9px 13px;background:var(--red-bg);border-radius:8px;margin-top:8px;border:.5px solid #f5b8b8;}
+
+@media(max-width:860px){
+  .layout{grid-template-columns:1fr;}
+  .side-col{border-top:.5px solid var(--border);}
+  .main-col{padding:18px 16px;}
+  .upload-grid{grid-template-columns:1fr;}
+  .stepper{gap:0;overflow-x:auto;}
 }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="topbar-left">
+  <div style="display:flex;align-items:center;gap:12px;">
     <a href="dashboard.html" class="back-btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Dashboard
     </a>
-    <div class="topbar-title">Add Memory</div>
   </div>
   <a href="../index.html" class="logo">Memo<span>ria</span></a>
 </div>
 
-<div class="steps-bar">
-  <div class="step active" id="step1Indicator">
-    <div class="step-num" id="stepNum1">1</div>
-    Upload files
-  </div>
+<div class="stepper">
+  <div class="step active" id="si1"><div class="step-num" id="sn1">1</div>Upload</div>
   <div class="step-sep"></div>
-  <div class="step" id="step2Indicator">
-    <div class="step-num" id="stepNum2">2</div>
-    Crop &amp; position
-  </div>
+  <div class="step" id="si2"><div class="step-num" id="sn2">2</div>Crop &amp; fit</div>
   <div class="step-sep"></div>
-  <div class="step" id="step3Indicator">
-    <div class="step-num" id="stepNum3">3</div>
-    Preview &amp; save
-  </div>
+  <div class="step" id="si3"><div class="step-num" id="sn3">3</div>Preview &amp; save</div>
 </div>
 
-<div class="page-wrap">
-  <!-- LEFT: main editing area -->
-  <div class="left-panel">
+<div class="layout">
+<div class="main-col">
 
-    <!-- STEP 1: UPLOAD -->
-    <div id="panelStep1">
-      <div class="section-label" style="margin-bottom:16px">Upload your files</div>
-      <div class="upload-row">
-        <!-- PHOTO ZONE -->
-        <div class="upload-zone" id="photoZone" onclick="document.getElementById('photoInput').click()" ondragover="handleDrag(event,'photo')" ondragleave="handleDragLeave(event,'photo')" ondrop="handleDrop(event,'photo')">
-          <div class="scan-overlay" id="photoScanOverlay">
-            <div class="scan-line"></div>
-            <div class="scan-spinner"></div>
-            <div class="scan-text">Detecting border…</div>
-          </div>
-          <div class="upload-icon-wrap" id="photoIconWrap">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          </div>
-          <div class="uz-label" id="photoLabel">Upload Photo</div>
-          <div class="uz-sub" id="photoSub">Click or drag &amp; drop</div>
-          <div class="uz-hint" id="photoHint">JPG, PNG · max 20MB</div>
-          <div id="photoBadge"></div>
-        </div>
-        <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)"/>
+  <!-- ══ PANEL 1: UPLOAD ══ -->
+  <div class="panel active" id="p1">
+    <div style="font-size:12px;color:var(--ink-muted);margin-bottom:16px;">Upload your printed photo and the video that plays when it's scanned.</div>
 
-        <!-- VIDEO ZONE -->
-        <div class="upload-zone" id="videoZone" onclick="document.getElementById('videoInput').click()" ondragover="handleDrag(event,'video')" ondragleave="handleDragLeave(event,'video')" ondrop="handleDrop(event,'video')">
-          <div class="scan-overlay" id="videoScanOverlay">
-            <div class="scan-spinner"></div>
-            <div class="scan-text">Reading video…</div>
-          </div>
-          <div class="upload-icon-wrap" id="videoIconWrap">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-          </div>
-          <div class="uz-label" id="videoLabel">Upload Video</div>
-          <div class="uz-sub" id="videoSub">Click or drag &amp; drop</div>
-          <div class="uz-hint" id="videoHint">MP4, MOV · max 500MB</div>
-          <div id="videoBadge"></div>
+    <div class="upload-grid">
+      <!-- PHOTO -->
+      <div class="drop-zone" id="photoZone"
+        onclick="document.getElementById('photoIn').click()"
+        ondragover="onDragOver(event,'photo')" ondragleave="onDragLeave(event,'photo')" ondrop="onDrop(event,'photo')">
+        <div class="scan-overlay" id="photoOverlay">
+          <div class="scan-beam"></div>
+          <div class="scan-spin"></div>
+          <div class="scan-txt">Detecting border…</div>
         </div>
-        <input type="file" id="videoInput" accept="video/*" style="display:none" onchange="handleVideoSelect(this)"/>
+        <div class="zone-icon" id="photoIcon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </div>
+        <div class="zone-name" id="photoName">Upload Photo</div>
+        <div class="zone-sub" id="photoSub">Click or drag &amp; drop</div>
+        <div class="zone-hint" id="photoHint">JPG, PNG · max 20MB</div>
+        <div id="photoPill"></div>
       </div>
+      <input type="file" id="photoIn" accept="image/*" style="display:none" onchange="onPhotoFile(this)"/>
 
-      <!-- AUTO-DETECT STATUS -->
-      <div id="autoDetectStatus" style="display:none;margin-bottom:16px;padding:12px 16px;background:var(--surface-card);border:0.5px solid var(--border);border-radius:10px;">
-        <div style="font-size:13px;font-weight:500;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:8px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Auto-detection complete
+      <!-- VIDEO -->
+      <div class="drop-zone" id="videoZone"
+        onclick="document.getElementById('videoIn').click()"
+        ondragover="onDragOver(event,'video')" ondragleave="onDragLeave(event,'video')" ondrop="onDrop(event,'video')">
+        <div class="scan-overlay" id="videoOverlay">
+          <div class="scan-spin"></div>
+          <div class="scan-txt">Reading video…</div>
         </div>
-        <div id="detectSummary" style="font-size:12px;color:var(--ink-muted)"></div>
+        <div class="zone-icon" id="videoIcon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        </div>
+        <div class="zone-name" id="videoName">Upload Video</div>
+        <div class="zone-sub" id="videoSub">Click or drag &amp; drop</div>
+        <div class="zone-hint" id="videoHint">MP4, MOV, WebM · max 500MB</div>
+        <div id="videoPill"></div>
       </div>
+      <input type="file" id="videoIn" accept="video/*" style="display:none" onchange="onVideoFile(this)"/>
+    </div>
 
-      <button class="btn-full" id="nextBtn" onclick="goToStep2()" disabled>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        Next: Crop &amp; Position
+    <!-- detection result box -->
+    <div class="detect-box" id="detectBox">
+      <div class="detect-box-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span id="detectBoxHead">Auto-detection complete</span>
+      </div>
+      <div class="detect-box-body" id="detectBoxBody"></div>
+    </div>
+
+    <div class="err-txt" id="err1"></div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-dark" id="nextBtn1" onclick="goStep2()" disabled style="width:100%;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        Next: Crop &amp; Fit Video
       </button>
-      <div class="err-box" id="step1Err"></div>
     </div>
-
-    <!-- STEP 2: CROP EDITOR -->
-    <div id="panelStep2" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <div>
-          <div class="section-label" style="margin-bottom:2px">Position video on photo</div>
-          <div style="font-size:12px;color:var(--ink-muted)">Define where the video plays when the photo is scanned</div>
-        </div>
-        <div id="autoCropBadge" class="auto-tag auto-tag-green" style="display:none">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Auto-fitted
-        </div>
-      </div>
-
-      <!-- CROP MODE TABS -->
-      <div class="crop-mode-tabs" id="cropModeTabs">
-        <button class="crop-tab active" data-mode="auto" onclick="setCropMode('auto',this)">
-          Auto fit (recommended)
-        </button>
-        <button class="crop-tab" data-mode="ratio" onclick="setCropMode('ratio',this)">
-          By ratio
-        </button>
-        <button class="crop-tab" data-mode="free" onclick="setCropMode('free',this)">
-          Free crop
-        </button>
-      </div>
-
-      <!-- RATIO CHIPS (shown only in ratio mode) -->
-      <div id="ratioChipsRow" style="display:none;margin-bottom:12px;">
-        <div style="display:flex;gap:8px;">
-          <div class="crop-tab active" data-ratio="9:16" onclick="setRatioFromChip('9:16',this)" style="flex:1;padding:8px 0;text-align:center;border-radius:8px;border:0.5px solid var(--border);background:var(--gold-bg);border-color:var(--gold);color:var(--gold);font-size:12px;cursor:pointer;font-weight:500;">9:16 Reel</div>
-          <div class="crop-tab" data-ratio="1:1" onclick="setRatioFromChip('1:1',this)" style="flex:1;padding:8px 0;text-align:center;border-radius:8px;border:0.5px solid var(--border);background:var(--surface-warm);font-size:12px;color:var(--ink-muted);cursor:pointer;font-weight:500;transition:all .15s;">1:1 Square</div>
-          <div class="crop-tab" data-ratio="4:5" onclick="setRatioFromChip('4:5',this)" style="flex:1;padding:8px 0;text-align:center;border-radius:8px;border:0.5px solid var(--border);background:var(--surface-warm);font-size:12px;color:var(--ink-muted);cursor:pointer;font-weight:500;transition:all .15s;">4:5 Post</div>
-          <div class="crop-tab" data-ratio="16:9" onclick="setRatioFromChip('16:9',this)" style="flex:1;padding:8px 0;text-align:center;border-radius:8px;border:0.5px solid var(--border);background:var(--surface-warm);font-size:12px;color:var(--ink-muted);cursor:pointer;font-weight:500;transition:all .15s;">16:9 Wide</div>
-        </div>
-      </div>
-
-      <!-- CROP STAGE -->
-      <div class="crop-stage" id="cropStage" style="height:400px;">
-        <img id="cropImg" src="" alt=""/>
-        <!-- detected border overlay -->
-        <div id="detectedBorderEl" class="detected-border-glow" style="display:none;"></div>
-        <!-- draggable crop box -->
-        <div class="crop-box" id="cropBox" style="display:none;">
-          <div class="crop-handle br" id="cropHandle"></div>
-        </div>
-      </div>
-      <div class="crop-hint" id="cropHint">Auto-fitted to your photo border · drag to adjust</div>
-
-      <div style="display:flex;gap:10px;margin-top:4px;">
-        <button class="btn-full btn-secondary" style="flex:1" onclick="goToStep1()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          Back
-        </button>
-        <button class="btn-full" style="flex:2" onclick="goToStep3()">
-          Preview &amp; Save
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- STEP 3: PREVIEW -->
-    <div id="panelStep3" style="display:none">
-      <div class="section-label" style="margin-bottom:12px">Preview — video on poster</div>
-      <div style="font-size:12px;color:var(--ink-muted);margin-bottom:16px;">This is exactly what happens when someone scans your photo with AR.</div>
-      <div class="preview-stage" id="previewStage">
-        <img id="previewPoster" class="preview-poster" src="" alt="poster"/>
-        <video id="previewVideo" class="preview-video" autoplay muted loop playsinline></video>
-      </div>
-      <div style="font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:16px;">
-        Video plays exactly at the positioned area on your photo
-      </div>
-      <div style="display:flex;gap:10px;">
-        <button class="btn-full btn-secondary" style="flex:1" onclick="goToStep2()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          Adjust
-        </button>
-        <button class="btn-full" style="flex:2" id="uploadFinalBtn" onclick="doUpload()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-          Upload &amp; Create AR Target
-        </button>
-      </div>
-      <div class="progress-bar" id="uploadProgress"><div class="progress-fill" id="uploadFill"></div></div>
-      <div class="upload-stats" id="uploadStats">
-        <span id="uploadStatsText"></span>
-        <span id="uploadSpeedText"></span>
-      </div>
-      <div class="err-box" id="uploadErr"></div>
-    </div>
-
   </div>
 
-  <!-- RIGHT: DETAILS FORM (always visible) -->
-  <div class="right-panel">
-    <div class="section-label" style="margin-bottom:20px">Memory details</div>
-
-    <div class="form-group">
-      <label>Title *</label>
-      <input type="text" id="memTitle" placeholder="e.g. Wedding day at Taj Palace" maxlength="100"/>
-    </div>
-    <div class="form-group">
-      <label>Description <span style="font-size:10px;color:var(--ink-faint);text-transform:none;letter-spacing:0">(optional)</span></label>
-      <textarea id="memDesc" placeholder="Add a note about this memory…"></textarea>
+  <!-- ══ PANEL 2: CROP ══ -->
+  <div class="panel" id="p2">
+    <div class="mode-tabs" id="modeTabs">
+      <button class="mode-tab on" data-m="auto" onclick="setMode('auto',this)">Auto fit</button>
+      <button class="mode-tab" data-m="ratio" onclick="setMode('ratio',this)">By ratio</button>
+      <button class="mode-tab" data-m="free" onclick="setMode('free',this)">Free crop</button>
     </div>
 
-    <div class="info-row" id="infoRow" style="display:none;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span id="infoText">Upload both files to continue</span>
+    <div class="ratio-row" id="ratioRow">
+      <div class="ratio-chip on" data-r="9:16" onclick="setRatio('9:16',this)">9:16</div>
+      <div class="ratio-chip" data-r="1:1" onclick="setRatio('1:1',this)">1:1</div>
+      <div class="ratio-chip" data-r="4:5" onclick="setRatio('4:5',this)">4:5</div>
+      <div class="ratio-chip" data-r="16:9" onclick="setRatio('16:9',this)">16:9</div>
+      <div class="ratio-chip" data-r="3:4" onclick="setRatio('3:4',this)">3:4</div>
     </div>
 
-    <!-- THUMBNAIL PREVIEW (photo) -->
-    <div id="photoThumbWrap" style="display:none;margin-bottom:16px;">
-      <div class="section-label" style="margin-bottom:8px">Photo preview</div>
-      <img id="photoThumb" style="width:100%;border-radius:10px;border:0.5px solid var(--border);object-fit:contain;max-height:200px;background:#000;" src="" alt=""/>
-      <div id="photoMeta" style="font-size:11px;color:var(--ink-faint);margin-top:5px;"></div>
-    </div>
-
-    <!-- VIDEO THUMBNAIL -->
-    <div id="videoThumbWrap" style="display:none;margin-bottom:16px;">
-      <div class="section-label" style="margin-bottom:8px">Video info</div>
-      <div id="videoMeta" style="font-size:12px;color:var(--ink-muted);padding:10px 14px;background:var(--surface-warm);border-radius:8px;border:0.5px solid var(--border);"></div>
-    </div>
-
-    <!-- DETECTED INFO -->
-    <div id="detectedInfoPanel" style="display:none;padding:14px;background:var(--green-bg);border:0.5px solid #b2d8c2;border-radius:10px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Auto-detected
+    <div class="crop-wrap" id="cropWrap" style="height:420px;">
+      <img id="cropImg" class="crop-poster" src="" alt=""/>
+      <!-- detected border outline -->
+      <div id="borderGlow" class="border-glow" style="display:none;"></div>
+      <!-- snap guides -->
+      <div class="snap-line h" id="snapH"></div>
+      <div class="snap-line v" id="snapV"></div>
+      <!-- crop/video box -->
+      <div class="crop-box" id="cropBox" style="display:none;">
+        <div class="crop-corner tl"></div>
+        <div class="crop-corner tr"></div>
+        <div class="crop-corner bl"></div>
+        <div class="crop-corner br"></div>
+        <div class="crop-resize" id="cropResize"></div>
       </div>
-      <div id="detectedInfoText" style="font-size:12px;color:var(--green);line-height:1.6;"></div>
     </div>
+    <div class="crop-hint-txt" id="cropHint">Drag to reposition · drag corner to resize</div>
 
+    <div class="btn-row">
+      <button class="btn" onclick="goStep1()">← Back</button>
+      <button class="btn btn-dark" onclick="goStep3()">Preview &amp; Save →</button>
+    </div>
   </div>
+
+  <!-- ══ PANEL 3: PREVIEW ══ -->
+  <div class="panel" id="p3">
+    <div style="font-size:12px;color:var(--ink-muted);margin-bottom:14px;">This is exactly what viewers will see when they scan your photo with AR.</div>
+    <div class="preview-stage" id="previewStage">
+      <img class="preview-poster" id="prevPoster" src="" alt=""/>
+      <video id="prevVid" class="preview-vid" autoplay muted loop playsinline></video>
+    </div>
+    <div style="font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:16px;">Video plays edge-to-edge within the detected poster border</div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="goStep2()">← Adjust</button>
+      <button class="btn btn-dark" id="uploadBtn" onclick="doUpload()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+        Upload &amp; Create AR Memory
+      </button>
+    </div>
+    <div class="prog-wrap" id="progWrap">
+      <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+      <div class="prog-stats"><span id="progLoaded"></span><span id="progSpeed"></span></div>
+    </div>
+    <div class="err-txt" id="err3"></div>
+  </div>
+
+</div><!-- /main-col -->
+
+<!-- ══ SIDE COLUMN ══ -->
+<div class="side-col">
+  <div class="side-section">
+    <div class="fgroup">
+      <label>Title <span style="color:var(--red)">*</span></label>
+      <input type="text" id="memTitle" placeholder="e.g. Wedding at Taj Palace" maxlength="100" oninput="updateCharCount()"/>
+      <div class="char-count"><span id="charCount">0</span>/100</div>
+    </div>
+    <div class="fgroup">
+      <label>Description <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="memDesc" placeholder="A note about this memory…" maxlength="500"></textarea>
+    </div>
+  </div>
+
+  <div class="side-section" id="photoPreviewSec" style="display:none;">
+    <div class="side-label">Photo</div>
+    <img class="thumb-img" id="photoThumb" src="" alt=""/>
+    <div class="meta-box" id="photoMeta" style="margin-top:6px;"></div>
+  </div>
+
+  <div class="side-section" id="videoPreviewSec" style="display:none;">
+    <div class="side-label">Video</div>
+    <div class="meta-box" id="videoMeta"></div>
+  </div>
+
+  <div id="borderInfoSec" style="display:none;">
+    <div class="side-label">Detection</div>
+    <div class="info-box green" id="borderInfoBox"></div>
+  </div>
+</div>
 </div>
 
 <div id="toast"></div>
@@ -366,630 +439,612 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 <script>
 const API = 'https://memoria-ar-backend.onrender.com';
 
-/* ── STATE ── */
-let photoFile = null, videoFile = null;
-let compressedPhotoBlob = null;
-let photoNaturalW = 0, photoNaturalH = 0;
-let videoNaturalW = 0, videoNaturalH = 0;
-let detectedBorder = null; // { x, y, w, h } as % of photo
-let cropState = { xPct: 50, yPct: 50, widthPct: 80, heightPct: 80, ratioKey: 'auto' };
-let currentCropMode = 'auto'; // 'auto' | 'ratio' | 'free'
-let currentStep = 1;
-let _activeXhr = null, _uploadCancelled = false, _retryCount = 0;
+/* ══ STATE ══ */
+let photoFile = null, compressedBlob = null;
+let videoFile = null;
+let photoW = 0, photoH = 0, videoW = 0, videoH = 0;
+let detectedBorder = null; // {xPct,yPct,wPct,hPct}
+let cropState = { xPct:50, yPct:50, wPct:85, hPct:85, ratioKey:'auto' };
+let cropMode = 'auto'; // 'auto'|'ratio'|'free'
+let currentRatio = '9:16';
+let dragMode = null, dragStart = null;
+let _xhr = null, _cancelled = false, _retries = 0;
 const MAX_RETRIES = 5;
 
-/* ── STEP INDICATOR ── */
-function setStepUI(step) {
-  currentStep = step;
+/* ══ STEPPER ══ */
+function setStep(n) {
   [1,2,3].forEach(i => {
-    const ind = document.getElementById('step'+i+'Indicator');
-    const num = document.getElementById('stepNum'+i);
-    ind.classList.remove('active','done');
-    num.innerHTML = i;
-    if (i < step) { ind.classList.add('done'); num.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`; }
-    else if (i === step) ind.classList.add('active');
+    const si = document.getElementById('si'+i);
+    const sn = document.getElementById('sn'+i);
+    si.classList.remove('active','done');
+    sn.innerHTML = i;
+    if (i < n) { si.classList.add('done'); sn.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`; }
+    else if (i === n) si.classList.add('active');
+    document.getElementById('p'+i).classList.toggle('active', i===n);
   });
-  document.getElementById('panelStep1').style.display = step === 1 ? 'block' : 'none';
-  document.getElementById('panelStep2').style.display = step === 2 ? 'block' : 'none';
-  document.getElementById('panelStep3').style.display = step === 3 ? 'block' : 'none';
 }
 
-/* ── DRAG/DROP ── */
-function handleDrag(e, type) {
+/* ══ DRAG/DROP ══ */
+function onDragOver(e, t) { e.preventDefault(); document.getElementById(t+'Zone').classList.add('drag'); }
+function onDragLeave(e, t) { document.getElementById(t+'Zone').classList.remove('drag'); }
+function onDrop(e, t) {
   e.preventDefault();
-  document.getElementById(type+'Zone').classList.add('drag');
-}
-function handleDragLeave(e, type) {
-  document.getElementById(type+'Zone').classList.remove('drag');
-}
-function handleDrop(e, type) {
-  e.preventDefault();
-  document.getElementById(type+'Zone').classList.remove('drag');
+  document.getElementById(t+'Zone').classList.remove('drag');
   const f = e.dataTransfer.files[0];
   if (!f) return;
-  if (type === 'photo') processPhoto(f);
-  else processVideo(f);
+  t === 'photo' ? loadPhoto(f) : loadVideo(f);
 }
+function onPhotoFile(inp) { if (inp.files[0]) loadPhoto(inp.files[0]); }
+function onVideoFile(inp) { if (inp.files[0]) loadVideo(inp.files[0]); }
 
-/* ── PHOTO SELECT ── */
-function handlePhotoSelect(input) {
-  if (!input.files.length) return;
-  processPhoto(input.files[0]);
-}
-
-function processPhoto(file) {
+/* ══ PHOTO LOAD ══ */
+function loadPhoto(file) {
+  if (!file.type.startsWith('image/')) { showZoneError('photo','Not an image file'); return; }
+  if (file.size > 20*1024*1024) { showZoneError('photo','Photo must be under 20MB'); return; }
   photoFile = file;
-  const zone = document.getElementById('photoZone');
-  zone.classList.add('has-file');
-  document.getElementById('photoLabel').textContent = file.name.length > 20 ? file.name.slice(0,18)+'…' : file.name;
-  document.getElementById('photoSub').textContent = 'Processing…';
-  document.getElementById('photoHint').textContent = '';
+  setZoneLoading('photo','Optimizing…');
 
-  // Show scan overlay
-  document.getElementById('photoScanOverlay').classList.add('active');
-
-  compressPhoto(file).then(({ blob, width, height }) => {
-    compressedPhotoBlob = blob;
-    photoFile = blob;
-    photoNaturalW = width; photoNaturalH = height;
-
-    // Show photo thumbnail in right panel
+  compressPhoto(file).then(({blob, w, h}) => {
+    compressedBlob = blob; photoW = w; photoH = h;
     const url = URL.createObjectURL(blob);
+    // show thumb
     document.getElementById('photoThumb').src = url;
-    document.getElementById('photoThumbWrap').style.display = 'block';
-    const saved = Math.max(0, Math.round((1 - blob.size / file.size) * 100));
-    document.getElementById('photoMeta').textContent = `${width}×${height}px · ${(blob.size/1024/1024).toFixed(1)}MB${saved > 0 ? ` · ${saved}% optimized` : ''}`;
+    document.getElementById('photoPreviewSec').style.display = 'block';
+    const saved = Math.max(0,Math.round((1-blob.size/file.size)*100));
+    document.getElementById('photoMeta').innerHTML =
+      `<strong>${file.name}</strong><br>${w}×${h}px · ${fmt(blob.size)}${saved>5?` · ${saved}% smaller`:''}`;
 
-    document.getElementById('photoSub').textContent = `${(blob.size/1024/1024).toFixed(1)}MB · ready`;
-
-    // AUTO BORDER DETECT
-    detectPhotoBorder(url, blob, width, height);
+    setZoneDone('photo', file.name, fmt(blob.size));
+    // Start border detection
+    detectBorder(url, blob, w, h);
   }).catch(() => {
-    compressedPhotoBlob = null;
-    photoFile = file;
+    compressedBlob = null; photoFile = file;
     const url = URL.createObjectURL(file);
     document.getElementById('photoThumb').src = url;
-    document.getElementById('photoThumbWrap').style.display = 'block';
-    document.getElementById('photoSub').textContent = `${(file.size/1024/1024).toFixed(1)}MB · ready`;
-    document.getElementById('photoScanOverlay').classList.remove('active');
-    checkBothReady();
+    document.getElementById('photoPreviewSec').style.display = 'block';
+    document.getElementById('photoMeta').innerHTML = `<strong>${file.name}</strong><br>${fmt(file.size)}`;
+    setZoneDone('photo', file.name, fmt(file.size));
+    document.getElementById('photoOverlay').classList.remove('on');
+    checkReady();
   });
 }
 
-/* ── BORDER DETECTION ──
-   Loads the photo onto a canvas, samples the edge region,
-   finds the bounding box of non-border content using edge brightness.
-   Works great for photos printed on white/light backgrounds. */
-function detectPhotoBorder(url, blob, natW, natH) {
+/* ══ BORDER DETECTION ══ */
+function detectBorder(url, blob, natW, natH) {
+  document.getElementById('photoOverlay').classList.add('on');
   const img = new Image();
   img.onload = () => {
-    const SAMPLE_W = 400, SAMPLE_H = Math.round((natH / natW) * SAMPLE_W);
-    const canvas = document.createElement('canvas');
-    canvas.width = SAMPLE_W; canvas.height = SAMPLE_H;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, SAMPLE_W, SAMPLE_H);
-    const data = ctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+    // Sample at 320px wide for speed
+    const sw = 320, sh = Math.round((natH/natW)*sw);
+    const cv = document.createElement('canvas');
+    cv.width = sw; cv.height = sh;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0, sw, sh);
+    const px = ctx.getImageData(0,0,sw,sh).data;
 
-    function brightness(x, y) {
-      const idx = (y * SAMPLE_W + x) * 4;
-      return (data[idx] + data[idx+1] + data[idx+2]) / 3;
-    }
+    function bri(x,y){ const i=(y*sw+x)*4; return (px[i]+px[i+1]+px[i+2])/3; }
 
-    // Sample corner brightness to estimate "border" color
-    const corners = [
-      brightness(0,0), brightness(SAMPLE_W-1,0),
-      brightness(0,SAMPLE_H-1), brightness(SAMPLE_W-1,SAMPLE_H-1)
-    ];
-    const borderBrightness = corners.reduce((a,b)=>a+b,0)/4;
-    const THRESH = 28; // difference from border color considered "content"
+    // Estimate border brightness from all 4 corners averaged
+    const corners = [bri(0,0),bri(sw-1,0),bri(0,sh-1),bri(sw-1,sh-1)];
+    const bgBri = corners.reduce((a,b)=>a+b,0)/4;
+    const THRESH = 22;
 
-    // Find bounding box of non-border pixels
-    let minX = SAMPLE_W, maxX = 0, minY = SAMPLE_H, maxY = 0;
-    for (let y = 0; y < SAMPLE_H; y++) {
-      for (let x = 0; x < SAMPLE_W; x++) {
-        const diff = Math.abs(brightness(x, y) - borderBrightness);
-        if (diff > THRESH) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
+    let minX=sw,maxX=0,minY=sh,maxY=0,found=false;
+    for (let y=0;y<sh;y++) {
+      for (let x=0;x<sw;x++) {
+        if (Math.abs(bri(x,y)-bgBri)>THRESH) {
+          if(x<minX)minX=x; if(x>maxX)maxX=x;
+          if(y<minY)minY=y; if(y>maxY)maxY=y;
+          found=true;
         }
       }
     }
 
-    const margin = 4;
-    minX = Math.max(0, minX - margin);
-    minY = Math.max(0, minY - margin);
-    maxX = Math.min(SAMPLE_W-1, maxX + margin);
-    maxY = Math.min(SAMPLE_H-1, maxY + margin);
+    document.getElementById('photoOverlay').classList.remove('on');
 
-    const bW = maxX - minX, bH = maxY - minY;
-    const detected = bW > SAMPLE_W * 0.1 && bH > SAMPLE_H * 0.1;
-
-    if (detected) {
+    const PAD = 3;
+    if (found && (maxX-minX)>sw*0.08 && (maxY-minY)>sh*0.08) {
+      minX=Math.max(0,minX-PAD); minY=Math.max(0,minY-PAD);
+      maxX=Math.min(sw-1,maxX+PAD); maxY=Math.min(sh-1,maxY+PAD);
       detectedBorder = {
-        xPct: (minX / SAMPLE_W) * 100,
-        yPct: (minY / SAMPLE_H) * 100,
-        wPct: (bW / SAMPLE_W) * 100,
-        hPct: (bH / SAMPLE_H) * 100,
+        xPct:(minX/sw)*100, yPct:(minY/sh)*100,
+        wPct:((maxX-minX)/sw)*100, hPct:((maxY-minY)/sh)*100,
       };
       const cxPct = detectedBorder.xPct + detectedBorder.wPct/2;
       const cyPct = detectedBorder.yPct + detectedBorder.hPct/2;
-      cropState = { xPct: cxPct, yPct: cyPct, widthPct: detectedBorder.wPct, heightPct: detectedBorder.hPct, ratioKey: 'auto' };
+      cropState = { xPct:cxPct, yPct:cyPct, wPct:detectedBorder.wPct, hPct:detectedBorder.hPct, ratioKey:'auto' };
 
-      // Show detection badge
-      document.getElementById('photoScanOverlay').classList.remove('active');
-      document.getElementById('photoBadge').innerHTML = `<div class="detect-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Border detected</div>`;
-      document.getElementById('autoDetectStatus').style.display = 'block';
-      document.getElementById('detectSummary').textContent = `Photo border detected at ${Math.round(detectedBorder.wPct)}×${Math.round(detectedBorder.hPct)}% of image. Video will auto-fit to this area.`;
-      document.getElementById('detectedInfoPanel').style.display = 'block';
-      document.getElementById('detectedInfoText').innerHTML = `Photo border: ${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}%<br>Video will auto-fit the detected print area`;
+      document.getElementById('photoPill').innerHTML = `<div class="detect-pill ok">✓ Border detected</div>`;
+      document.getElementById('detectBox').classList.add('show');
+      document.getElementById('detectBoxHead').textContent = 'Auto-detection complete';
+      document.getElementById('detectBoxBody').textContent =
+        `Photo border detected at ${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% of image. The video will be fitted edge-to-edge inside this area.`;
+      document.getElementById('borderInfoSec').style.display = 'block';
+      document.getElementById('borderInfoBox').innerHTML =
+        `Detected at ${Math.round(detectedBorder.xPct)}%, ${Math.round(detectedBorder.yPct)}% offset · `+
+        `${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}%`;
     } else {
       detectedBorder = null;
-      document.getElementById('photoScanOverlay').classList.remove('active');
-      document.getElementById('photoBadge').innerHTML = `<div style="font-size:11px;color:var(--ink-faint);margin-top:6px">No border detected — full fit used</div>`;
-      cropState = { xPct: 50, yPct: 50, widthPct: 90, heightPct: 90, ratioKey: 'auto' };
+      cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto' };
+      document.getElementById('photoPill').innerHTML = `<div class="detect-pill warn">⚠ No border — full fit</div>`;
+      document.getElementById('detectBox').classList.add('show');
+      document.getElementById('detectBoxHead').textContent = 'No distinct border found';
+      document.getElementById('detectBoxBody').textContent =
+        `No clear print border detected. The video will be fitted to the full photo area. You can adjust manually in Step 2.`;
     }
-
-    checkBothReady();
+    checkReady();
   };
   img.onerror = () => {
-    document.getElementById('photoScanOverlay').classList.remove('active');
-    checkBothReady();
+    document.getElementById('photoOverlay').classList.remove('on');
+    checkReady();
   };
   img.src = url;
 }
 
-/* ── VIDEO SELECT ── */
-function handleVideoSelect(input) {
-  if (!input.files.length) return;
-  processVideo(input.files[0]);
-}
-
-function processVideo(file) {
+/* ══ VIDEO LOAD ══ */
+function loadVideo(file) {
+  if (!file.type.startsWith('video/')) { showZoneError('video','Not a video file'); return; }
+  if (file.size > 500*1024*1024) { showZoneError('video','Video must be under 500MB'); return; }
   videoFile = file;
-  const zone = document.getElementById('videoZone');
-  zone.classList.add('has-file');
-  document.getElementById('videoScanOverlay').classList.add('active');
-  document.getElementById('videoLabel').textContent = file.name.length > 20 ? file.name.slice(0,18)+'…' : file.name;
-  document.getElementById('videoSub').textContent = 'Reading…';
+  setZoneLoading('video','Reading…');
+  document.getElementById('videoOverlay').classList.add('on');
 
-  // Load video to get dimensions
-  const tempVid = document.createElement('video');
+  const tmp = document.createElement('video');
   const url = URL.createObjectURL(file);
-  tempVid.onloadedmetadata = () => {
-    videoNaturalW = tempVid.videoWidth;
-    videoNaturalH = tempVid.videoHeight;
-    const dur = tempVid.duration;
-    const durStr = isNaN(dur) ? '' : ` · ${Math.round(dur)}s`;
-    document.getElementById('videoScanOverlay').classList.remove('active');
-    document.getElementById('videoSub').textContent = `${(file.size/1024/1024).toFixed(1)}MB · ready`;
-    document.getElementById('videoHint').textContent = `${videoNaturalW}×${videoNaturalH}${durStr}`;
-    document.getElementById('videoBadge').innerHTML = `<div class="detect-badge" style="margin-top:6px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${videoNaturalW}×${videoNaturalH}</div>`;
-    document.getElementById('videoThumbWrap').style.display = 'block';
-    document.getElementById('videoMeta').innerHTML = `<strong>${file.name}</strong><br>${videoNaturalW}×${videoNaturalH}px · ${(file.size/1024/1024).toFixed(1)}MB${durStr}`;
+  tmp.onloadedmetadata = () => {
+    videoW = tmp.videoWidth; videoH = tmp.videoHeight;
+    const dur = isNaN(tmp.duration)?'':` · ${Math.round(tmp.duration)}s`;
     URL.revokeObjectURL(url);
-    checkBothReady();
+    document.getElementById('videoOverlay').classList.remove('on');
+    setZoneDone('video', file.name, fmt(file.size));
+    document.getElementById('videoPreviewSec').style.display = 'block';
+    document.getElementById('videoPill').innerHTML = `<div class="detect-pill ok">✓ ${videoW}×${videoH}${dur}</div>`;
+    document.getElementById('videoMeta').innerHTML =
+      `<strong>${file.name}</strong><br>${videoW}×${videoH}px${dur} · ${fmt(file.size)}`;
+    checkReady();
   };
-  tempVid.onerror = () => {
-    document.getElementById('videoScanOverlay').classList.remove('active');
-    document.getElementById('videoSub').textContent = `${(file.size/1024/1024).toFixed(1)}MB · ready`;
+  tmp.onerror = () => {
     URL.revokeObjectURL(url);
-    checkBothReady();
+    document.getElementById('videoOverlay').classList.remove('on');
+    setZoneDone('video', file.name, fmt(file.size));
+    document.getElementById('videoPreviewSec').style.display = 'block';
+    document.getElementById('videoMeta').innerHTML = `<strong>${file.name}</strong><br>${fmt(file.size)}`;
+    checkReady();
   };
-  tempVid.src = url;
+  tmp.src = url;
 }
 
-function checkBothReady() {
-  const ready = photoFile && videoFile;
-  document.getElementById('nextBtn').disabled = !ready;
-  if (ready) {
-    document.getElementById('infoRow').style.display = 'flex';
-    document.getElementById('infoText').textContent = 'Both files ready — click Next to position the video';
-    // If we have both dimensions, auto-fit crop based on video aspect
-    if (videoNaturalW && videoNaturalH && detectedBorder) {
-      fitVideoToBorder();
-    }
-  }
+function checkReady() {
+  const ok = !!photoFile && !!videoFile;
+  document.getElementById('nextBtn1').disabled = !ok;
+  if (ok && videoW && videoH && detectedBorder) fitVideoToBorder();
 }
 
-/* Auto-fits crop box to photo border, adjusted to video's aspect ratio */
+/* Fit video inside detected border, locked to video's true aspect ratio */
 function fitVideoToBorder() {
-  if (!detectedBorder) return;
-  const vidAspect = videoNaturalW / videoNaturalH;
-  const borderAspect = detectedBorder.wPct / detectedBorder.hPct;
-
-  let wPct = detectedBorder.wPct;
-  let hPct = detectedBorder.hPct;
-
-  // If video aspect is very different from border, fit video inside border (letterbox-style)
-  if (Math.abs(vidAspect - borderAspect) > 0.1) {
-    const borderWpx = detectedBorder.wPct;
-    const borderHpx = detectedBorder.hPct;
-    if (vidAspect > borderAspect) {
-      // video wider — fit width, reduce height
-      hPct = wPct / vidAspect;
-    } else {
-      // video taller — fit height, reduce width
-      wPct = hPct * vidAspect;
-    }
+  if (!detectedBorder || !videoW || !videoH) return;
+  const vidAsp = videoW / videoH;
+  const borderAsp = detectedBorder.wPct / detectedBorder.hPct;
+  let wPct = detectedBorder.wPct, hPct = detectedBorder.hPct;
+  if (Math.abs(vidAsp - borderAsp) > 0.05) {
+    if (vidAsp > borderAsp) { hPct = wPct / vidAsp; }
+    else { wPct = hPct * vidAsp; }
   }
-
   const cxPct = detectedBorder.xPct + detectedBorder.wPct/2;
   const cyPct = detectedBorder.yPct + detectedBorder.hPct/2;
-  cropState = { xPct: cxPct, yPct: cyPct, widthPct: wPct, heightPct: hPct, ratioKey: 'auto' };
+  cropState = { xPct:cxPct, yPct:cyPct, wPct, hPct, ratioKey:'auto' };
 }
 
-/* ── STEP NAV ── */
-function goToStep1() { setStepUI(1); }
+/* ══ STEP NAVIGATION ══ */
+function goStep1() { setStep(1); }
 
-function goToStep2() {
-  const title = document.getElementById('memTitle').value.trim();
-  const errEl = document.getElementById('step1Err');
+function goStep2() {
+  const errEl = document.getElementById('err1');
   errEl.style.display = 'none';
-  if (!title) { errEl.textContent = 'Please enter a title.'; errEl.style.display = 'block'; return; }
-  if (!photoFile) { errEl.textContent = 'Please upload a photo.'; errEl.style.display = 'block'; return; }
-  if (!videoFile) { errEl.textContent = 'Please upload a video.'; errEl.style.display = 'block'; return; }
+  const title = document.getElementById('memTitle').value.trim();
+  if (!title) { errEl.textContent='Please enter a title.'; errEl.style.display='block'; return; }
+  if (!photoFile) { errEl.textContent='Please upload a photo.'; errEl.style.display='block'; return; }
+  if (!videoFile) { errEl.textContent='Please upload a video.'; errEl.style.display='block'; return; }
 
-  const photoUrl = URL.createObjectURL(photoFile);
-  document.getElementById('cropImg').src = photoUrl;
-  document.getElementById('cropImg').onload = () => {
-    initCropEditor();
-    showDetectedBorder();
-    setCropMode('auto', document.querySelector('#cropModeTabs [data-mode="auto"]'));
-    document.getElementById('autoCropBadge').style.display = detectedBorder ? 'inline-flex' : 'none';
-  };
-  setStepUI(2);
-}
-
-function goToStep3() {
-  buildPreview();
-  setStepUI(3);
-}
-
-/* ── CROP EDITOR ── */
-let cropDragMode = null, cropDragStart = null;
-
-function initCropEditor() {
-  const box = document.getElementById('cropBox');
-  const handle = document.getElementById('cropHandle');
-  box.style.display = 'block';
-  renderCropBox();
-
-  box.onmousedown = e => { if (e.target === handle) return; startCropDrag(e, 'move'); };
-  box.ontouchstart = e => { if (e.target === handle) return; startCropDrag(e, 'move'); };
-  handle.onmousedown = e => startCropDrag(e, 'resize');
-  handle.ontouchstart = e => startCropDrag(e, 'resize');
-  window.onresize = renderCropBox;
-}
-
-function getCropImgBox() {
-  const stage = document.getElementById('cropStage');
+  // Load photo into crop stage
+  const url = URL.createObjectURL(compressedBlob || photoFile);
   const img = document.getElementById('cropImg');
-  const sr = stage.getBoundingClientRect();
-  const natW = img.naturalWidth || 1, natH = img.naturalHeight || 1;
-  const stageR = sr.width / sr.height, natR = natW / natH;
+  img.onload = () => {
+    setTimeout(() => { // wait for layout
+      initCropEditor();
+      setMode('auto', document.querySelector('#modeTabs [data-m="auto"]'));
+    }, 60);
+  };
+  img.src = url;
+  setStep(2);
+}
+
+function goStep3() {
+  buildPreview();
+  setStep(3);
+}
+
+/* ══ CROP EDITOR ══ */
+function getImgBox() {
+  const wrap = document.getElementById('cropWrap');
+  const img  = document.getElementById('cropImg');
+  const wr   = wrap.getBoundingClientRect();
+  const natW = img.naturalWidth||1, natH = img.naturalHeight||1;
+  const wR = wr.width/wr.height, nR = natW/natH;
   let w, h, offX, offY;
-  if (natR > stageR) { w = sr.width; h = w / natR; offX = 0; offY = (sr.height - h) / 2; }
-  else { h = sr.height; w = h * natR; offY = 0; offX = (sr.width - w) / 2; }
-  return { w, h, offX, offY };
+  if (nR > wR) { w=wr.width; h=w/nR; offX=0; offY=(wr.height-h)/2; }
+  else          { h=wr.height; w=h*nR; offY=0; offX=(wr.width-w)/2; }
+  return {w,h,offX,offY};
 }
 
 function clampCrop() {
-  cropState.widthPct = Math.min(98, Math.max(5, cropState.widthPct));
-  cropState.heightPct = Math.min(98, Math.max(5, cropState.heightPct));
-  const hw = cropState.widthPct / 2, hh = cropState.heightPct / 2;
-  cropState.xPct = Math.min(100 - hw, Math.max(hw, cropState.xPct));
-  cropState.yPct = Math.min(100 - hh, Math.max(hh, cropState.yPct));
+  cropState.wPct = Math.min(98, Math.max(4, cropState.wPct));
+  cropState.hPct = Math.min(98, Math.max(4, cropState.hPct));
+  const hw=cropState.wPct/2, hh=cropState.hPct/2;
+  cropState.xPct = Math.min(100-hw, Math.max(hw, cropState.xPct));
+  cropState.yPct = Math.min(100-hh, Math.max(hh, cropState.yPct));
 }
 
-function renderCropBox() {
-  const ib = getCropImgBox();
-  const wPx = (cropState.widthPct / 100) * ib.w;
-  const hPx = (cropState.heightPct / 100) * ib.h;
-  const cxPx = ib.offX + (cropState.xPct / 100) * ib.w;
-  const cyPx = ib.offY + (cropState.yPct / 100) * ib.h;
+const SNAP_THRESH = 2.5; // % — snap to center / border edges
+function renderCrop() {
+  const ib = getImgBox();
   const box = document.getElementById('cropBox');
-  box.style.left = (cxPx - wPx/2) + 'px';
-  box.style.top = (cyPx - hPx/2) + 'px';
-  box.style.width = wPx + 'px';
-  box.style.height = hPx + 'px';
+  box.style.display = 'block';
+  const wPx = (cropState.wPct/100)*ib.w;
+  const hPx = (cropState.hPct/100)*ib.h;
+  const cxPx = ib.offX + (cropState.xPct/100)*ib.w;
+  const cyPx = ib.offY + (cropState.yPct/100)*ib.h;
+  box.style.left   = (cxPx-wPx/2)+'px';
+  box.style.top    = (cyPx-hPx/2)+'px';
+  box.style.width  = wPx+'px';
+  box.style.height = hPx+'px';
+
+  // snap guides
+  const sh = document.getElementById('snapH'), sv = document.getElementById('snapV');
+  const nearCX = Math.abs(cropState.xPct-50)<SNAP_THRESH;
+  const nearCY = Math.abs(cropState.yPct-50)<SNAP_THRESH;
+  sv.classList.toggle('on', nearCX);
+  sh.classList.toggle('on', nearCY);
+  if (nearCX) sv.style.left = ib.offX+ib.w/2+'px';
+  if (nearCY) sh.style.top  = ib.offY+ib.h/2+'px';
 }
 
-function showDetectedBorder() {
-  const el = document.getElementById('detectedBorderEl');
-  if (!detectedBorder) { el.style.display = 'none'; return; }
-  const ib = getCropImgBox();
-  const lPx = ib.offX + (detectedBorder.xPct / 100) * ib.w;
-  const tPx = ib.offY + (detectedBorder.yPct / 100) * ib.h;
-  const wPx = (detectedBorder.wPct / 100) * ib.w;
-  const hPx = (detectedBorder.hPct / 100) * ib.h;
+function renderBorderGlow() {
+  const el = document.getElementById('borderGlow');
+  if (!detectedBorder) { el.style.display='none'; return; }
+  const ib = getImgBox();
   el.style.display = 'block';
-  el.style.left = lPx + 'px';
-  el.style.top = tPx + 'px';
-  el.style.width = wPx + 'px';
-  el.style.height = hPx + 'px';
+  el.style.left   = (ib.offX + (detectedBorder.xPct/100)*ib.w)+'px';
+  el.style.top    = (ib.offY + (detectedBorder.yPct/100)*ib.h)+'px';
+  el.style.width  = (detectedBorder.wPct/100)*ib.w+'px';
+  el.style.height = (detectedBorder.hPct/100)*ib.h+'px';
 }
 
-function startCropDrag(e, mode) {
-  e.preventDefault();
-  cropDragMode = mode;
-  const pt = e.touches ? e.touches[0] : e;
-  cropDragStart = { px: pt.clientX, py: pt.clientY, ...cropState };
-  document.getElementById('cropBox').classList.add('crop-box-active');
-  document.addEventListener('mousemove', onCropDragMove);
-  document.addEventListener('mouseup', onCropDragEnd);
-  document.addEventListener('touchmove', onCropDragMove, { passive: false });
-  document.addEventListener('touchend', onCropDragEnd);
+function initCropEditor() {
+  renderBorderGlow();
+  renderCrop();
+
+  const box    = document.getElementById('cropBox');
+  const resize = document.getElementById('cropResize');
+
+  box.onmousedown = e => { if (e.target===resize) return; startDrag(e,'move'); };
+  box.ontouchstart= e => { if (e.target===resize) return; startDrag(e,'move'); };
+  resize.onmousedown = e => startDrag(e,'resize');
+  resize.ontouchstart= e => startDrag(e,'resize');
+  window.onresize = () => { renderBorderGlow(); renderCrop(); };
 }
 
-function onCropDragMove(e) {
-  if (!cropDragMode) return;
+function startDrag(e, mode) {
   e.preventDefault();
-  const pt = e.touches ? e.touches[0] : e;
-  const ib = getCropImgBox();
-  const dxPct = ((pt.clientX - cropDragStart.px) / ib.w) * 100;
-  const dyPct = ((pt.clientY - cropDragStart.py) / ib.h) * 100;
+  dragMode = mode;
+  const pt = e.touches?e.touches[0]:e;
+  dragStart = { px:pt.clientX, py:pt.clientY, ...cropState };
+  document.getElementById('cropBox').classList.add('dragging');
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('touchmove', onDragMove, {passive:false});
+  document.addEventListener('touchend', endDrag);
+}
 
-  if (cropDragMode === 'move') {
-    cropState.xPct = cropDragStart.xPct + dxPct;
-    cropState.yPct = cropDragStart.yPct + dyPct;
+function onDragMove(e) {
+  if (!dragMode) return;
+  e.preventDefault();
+  const pt = e.touches?e.touches[0]:e;
+  const ib = getImgBox();
+  const dxP = ((pt.clientX-dragStart.px)/ib.w)*100;
+  const dyP = ((pt.clientY-dragStart.py)/ib.h)*100;
+
+  if (dragMode==='move') {
+    cropState.xPct = dragStart.xPct + dxP;
+    cropState.yPct = dragStart.yPct + dyP;
+    // Snap to centre
+    if (Math.abs(cropState.xPct-50)<SNAP_THRESH) cropState.xPct=50;
+    if (Math.abs(cropState.yPct-50)<SNAP_THRESH) cropState.yPct=50;
   } else {
-    const vidAspect = (videoNaturalW && videoNaturalH) ? videoNaturalW / videoNaturalH : null;
-    let newWpx = (cropDragStart.widthPct/100)*ib.w + (pt.clientX - cropDragStart.px);
-    newWpx = Math.max(40, newWpx);
-    cropState.widthPct = (newWpx / ib.w) * 100;
-    if (currentCropMode === 'free' || !vidAspect) {
-      let newHpx = (cropDragStart.heightPct/100)*ib.h + (pt.clientY - cropDragStart.py);
-      newHpx = Math.max(40, newHpx);
-      cropState.heightPct = (newHpx / ib.h) * 100;
+    const asp = getLockedAspect();
+    let newWpx = (dragStart.wPct/100)*ib.w + (pt.clientX-dragStart.px);
+    newWpx = Math.max(36, newWpx);
+    cropState.wPct = (newWpx/ib.w)*100;
+    if (asp !== null) {
+      const newHpx = newWpx / asp;
+      cropState.hPct = (newHpx/ib.h)*100;
     } else {
-      const newHpx = newWpx / vidAspect;
-      cropState.heightPct = (newHpx / ib.h) * 100;
+      let newHpx = (dragStart.hPct/100)*ib.h + (pt.clientY-dragStart.py);
+      newHpx = Math.max(36, newHpx);
+      cropState.hPct = (newHpx/ib.h)*100;
     }
   }
   clampCrop();
-  renderCropBox();
+  renderCrop();
 }
 
-function onCropDragEnd() {
-  cropDragMode = null;
-  document.getElementById('cropBox').classList.remove('crop-box-active');
-  document.removeEventListener('mousemove', onCropDragMove);
-  document.removeEventListener('mouseup', onCropDragEnd);
-  document.removeEventListener('touchmove', onCropDragMove);
-  document.removeEventListener('touchend', onCropDragEnd);
+function endDrag() {
+  dragMode = null;
+  document.getElementById('cropBox').classList.remove('dragging');
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', endDrag);
+  document.removeEventListener('touchmove', onDragMove);
+  document.removeEventListener('touchend', endDrag);
 }
 
-function setCropMode(mode, btn) {
-  currentCropMode = mode;
-  document.querySelectorAll('#cropModeTabs .crop-tab').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-
-  const ratioRow = document.getElementById('ratioChipsRow');
-  const hint = document.getElementById('cropHint');
-
-  if (mode === 'auto') {
-    ratioRow.style.display = 'none';
-    // Auto: use detected border + video aspect
-    if (detectedBorder) {
-      fitVideoToBorder();
-      hint.textContent = 'Auto-fitted to detected photo border · drag to fine-tune';
-    } else {
-      // Fill whole photo
-      cropState = { xPct: 50, yPct: 50, widthPct: 90, heightPct: 90, ratioKey: 'auto' };
-      hint.textContent = 'No border detected — using full photo area · drag to adjust';
-    }
-    clampCrop(); renderCropBox();
-  } else if (mode === 'ratio') {
-    ratioRow.style.display = 'block';
-    hint.textContent = 'Locked to video aspect ratio · drag to reposition';
-    applyVideoRatio();
-  } else {
-    ratioRow.style.display = 'none';
-    hint.textContent = 'Free crop — drag to move, drag corner to resize freely';
+const RATIOS = {'9:16':9/16,'1:1':1,'4:5':4/5,'16:9':16/9,'3:4':3/4};
+function getLockedAspect() {
+  if (cropMode==='free') return null;
+  if (cropMode==='auto') {
+    if (videoW && videoH) return videoW/videoH;
+    return null;
   }
+  if (cropMode==='ratio') return RATIOS[currentRatio]||null;
+  return null;
 }
 
-function applyVideoRatio() {
-  if (!videoNaturalW || !videoNaturalH) return;
-  const vidAspect = videoNaturalW / videoNaturalH;
-  const ib = getCropImgBox();
-  // Fit video aspect inside current crop area
-  const curW = (cropState.widthPct/100)*ib.w;
-  const newH = curW / vidAspect;
-  cropState.heightPct = (newH / ib.h) * 100;
-  cropState.ratioKey = 'video';
-  clampCrop(); renderCropBox();
+function setMode(m, btn) {
+  cropMode = m;
+  document.querySelectorAll('#modeTabs .mode-tab').forEach(b=>b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  const rr = document.getElementById('ratioRow');
+  rr.style.display = m==='ratio' ? 'flex' : 'none';
+
+  if (m==='auto') {
+    document.getElementById('cropHint').textContent = detectedBorder
+      ? 'Auto-fitted to detected border · drag to fine-tune'
+      : 'No border detected — full photo fit · drag to adjust';
+    if (detectedBorder) fitVideoToBorder();
+    else cropState = {xPct:50,yPct:50,wPct:90,hPct:90,ratioKey:'auto'};
+    cropState.ratioKey='auto';
+  } else if (m==='ratio') {
+    document.getElementById('cropHint').textContent = 'Locked to chosen ratio · drag to reposition or resize';
+    applyRatioToCurrentBox(RATIOS[currentRatio]||9/16);
+    cropState.ratioKey = currentRatio;
+  } else {
+    document.getElementById('cropHint').textContent = 'Free crop — drag corner to resize freely';
+    cropState.ratioKey='free';
+  }
+  clampCrop(); renderCrop();
 }
 
-const RATIO_MAP = { '9:16': 9/16, '1:1': 1, '4:5': 4/5, '16:9': 16/9 };
-function setRatioFromChip(ratio, btn) {
-  document.querySelectorAll('#ratioChipsRow [data-ratio]').forEach(b => {
-    b.style.background = 'var(--surface-warm)'; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--ink-muted)';
-  });
-  btn.style.background = 'var(--gold-bg)'; btn.style.borderColor = 'var(--gold)'; btn.style.color = 'var(--gold)';
-  const ib = getCropImgBox();
-  const target = RATIO_MAP[ratio];
-  const curW = (cropState.widthPct/100)*ib.w;
-  const newH = curW / target;
-  cropState.heightPct = (newH / ib.h) * 100;
-  cropState.ratioKey = ratio;
-  clampCrop(); renderCropBox();
+function applyRatioToCurrentBox(asp) {
+  const ib = getImgBox();
+  const curWpx = (cropState.wPct/100)*ib.w;
+  const newHpx = curWpx/asp;
+  cropState.hPct = (newHpx/ib.h)*100;
 }
 
-/* ── PREVIEW ── */
+function setRatio(r, chip) {
+  currentRatio = r;
+  document.querySelectorAll('#ratioRow .ratio-chip').forEach(c=>c.classList.remove('on'));
+  if (chip) chip.classList.add('on');
+  cropState.ratioKey = r;
+  applyRatioToCurrentBox(RATIOS[r]||9/16);
+  clampCrop(); renderCrop();
+}
+
+/* ══ PREVIEW ══ */
 function buildPreview() {
-  const posterImg = document.getElementById('previewPoster');
-  const video = document.getElementById('previewVideo');
-  const stage = document.getElementById('previewStage');
+  const poster = document.getElementById('prevPoster');
+  const vid    = document.getElementById('prevVid');
+  const stage  = document.getElementById('previewStage');
 
-  const photoUrl = URL.createObjectURL(compressedPhotoBlob || photoFile);
-  const videoUrl = URL.createObjectURL(videoFile);
+  const photoUrl = URL.createObjectURL(compressedBlob || photoFile);
+  const vidUrl   = URL.createObjectURL(videoFile);
 
-  posterImg.onload = () => {
-    const posterW = posterImg.offsetWidth;
-    const posterH = posterImg.offsetHeight;
-    stage.style.height = posterH + 'px';
+  poster.onload = () => {
+    const pW = poster.offsetWidth;
+    const pH = poster.offsetHeight;
+    stage.style.height = pH+'px';
 
-    // Place video at crop position
-    const leftPx = ((cropState.xPct - cropState.widthPct/2) / 100) * posterW;
-    const topPx = ((cropState.yPct - cropState.heightPct/2) / 100) * posterH;
-    const wPx = (cropState.widthPct / 100) * posterW;
-    const hPx = (cropState.heightPct / 100) * posterH;
+    const leftPx = ((cropState.xPct - cropState.wPct/2)/100) * pW;
+    const topPx  = ((cropState.yPct - cropState.hPct/2)/100) * pH;
+    const wPx    = (cropState.wPct/100) * pW;
+    const hPx    = (cropState.hPct/100) * pH;
 
-    video.style.left = leftPx + 'px';
-    video.style.top = topPx + 'px';
-    video.style.width = wPx + 'px';
-    video.style.height = hPx + 'px';
-    video.src = videoUrl;
-    video.play().catch(()=>{});
+    vid.style.left   = leftPx+'px';
+    vid.style.top    = topPx+'px';
+    vid.style.width  = wPx+'px';
+    vid.style.height = hPx+'px';
+    vid.style.borderRadius = '10px'; // smooth corners
+
+    vid.src = vidUrl;
+    vid.muted = true;
+    vid.play().catch(()=>{});
   };
-  posterImg.src = photoUrl;
+  poster.src = photoUrl;
 }
 
-/* ── COMPRESS PHOTO ── */
-function compressPhoto(file, maxEdge = 1600, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width, height } = img;
-      if (width > maxEdge || height > maxEdge) {
-        if (width >= height) { height = Math.round(height * (maxEdge / width)); width = maxEdge; }
-        else { width = Math.round(width * (maxEdge / height)); height = maxEdge; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      canvas.toBlob(blob => {
-        if (!blob) return reject(new Error('toBlob failed'));
-        resolve({ blob: blob.size < file.size ? blob : file, width, height });
-      }, 'image/jpeg', quality);
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-
-/* ── UPLOAD ── */
+/* ══ UPLOAD ══ */
 function doUpload() {
-  _uploadCancelled = false; _retryCount = 0;
+  _cancelled=false; _retries=0;
   const rect = {
-    ratio: cropState.ratioKey,
-    x: cropState.xPct,
-    y: cropState.yPct,
-    width: cropState.widthPct,
-    height: cropState.heightPct,
+    ratio:  cropState.ratioKey,
+    x:      parseFloat(cropState.xPct.toFixed(4)),
+    y:      parseFloat(cropState.yPct.toFixed(4)),
+    width:  parseFloat(cropState.wPct.toFixed(4)),
+    height: parseFloat(cropState.hPct.toFixed(4)),
   };
-  startUploadAttempt(rect);
+  startUpload(rect);
 }
 
-function fmtBytes(b) {
-  if (b >= 1048576) return (b/1048576).toFixed(1)+' MB';
-  return (b/1024).toFixed(0)+' KB';
-}
-
-function startUploadAttempt(rect) {
+function startUpload(rect) {
   const title = document.getElementById('memTitle').value.trim();
-  const desc = document.getElementById('memDesc').value.trim();
-  const errEl = document.getElementById('uploadErr');
+  const desc  = document.getElementById('memDesc').value.trim();
+  const errEl = document.getElementById('err3');
   errEl.style.display = 'none';
 
-  const btn = document.getElementById('uploadFinalBtn');
-  const progress = document.getElementById('uploadProgress');
-  const fill = document.getElementById('uploadFill');
-  const stats = document.getElementById('uploadStats');
-  const statsText = document.getElementById('uploadStatsText');
-  const speedText = document.getElementById('uploadSpeedText');
+  const btn     = document.getElementById('uploadBtn');
+  const prog    = document.getElementById('progWrap');
+  const fill    = document.getElementById('progFill');
+  const loaded  = document.getElementById('progLoaded');
+  const speed   = document.getElementById('progSpeed');
 
-  btn.textContent = _retryCount > 0 ? 'Reconnecting…' : 'Uploading…';
+  btn.textContent = _retries>0 ? 'Reconnecting…' : 'Uploading…';
   btn.disabled = true;
-  progress.classList.add('show');
-  fill.style.transition = 'width 0.2s ease';
-  stats.classList.add('show');
+  prog.classList.add('on');
+  fill.style.transition = 'width .2s ease';
 
-  const totalBytes = photoFile.size + videoFile.size;
-  let lastLoaded = 0, lastTime = performance.now();
+  const totalBytes = (compressedBlob||photoFile).size + videoFile.size;
+  let lastLoaded=0, lastTime=performance.now();
 
-  const form = new FormData();
-  form.append('title', title);
-  if (desc) form.append('description', desc);
-  form.append('photo', compressedPhotoBlob || photoFile, 'photo.jpg');
-  form.append('video', videoFile);
-  form.append('videoRect', JSON.stringify(rect));
+  const fd = new FormData();
+  fd.append('title', title);
+  if (desc) fd.append('description', desc);
+  fd.append('photo', compressedBlob||photoFile, 'photo.jpg');
+  fd.append('video', videoFile);
+  fd.append('videoRect', JSON.stringify(rect));
+  if (detectedBorder) fd.append('detectedBorder', JSON.stringify(detectedBorder));
+  if (videoW) fd.append('videoWidth',  String(videoW));
+  if (videoH) fd.append('videoHeight', String(videoH));
 
   const xhr = new XMLHttpRequest();
-  _activeXhr = xhr;
+  _xhr = xhr;
 
-  xhr.upload.addEventListener('progress', e => {
+  xhr.upload.onprogress = e => {
     if (!e.lengthComputable) return;
-    const pct = Math.round((e.loaded / e.total) * 70);
-    fill.style.width = pct + '%';
+    const pct = Math.round((e.loaded/e.total)*70);
+    fill.style.width = pct+'%';
     btn.textContent = `Uploading… ${pct}%`;
-    const now = performance.now(), dt = (now - lastTime) / 1000;
-    if (dt > 0.4) {
-      const bps = (e.loaded - lastLoaded) / dt;
-      speedText.textContent = bps > 0 ? `${fmtBytes(bps)}/s` : '';
-      lastLoaded = e.loaded; lastTime = now;
+    const now=performance.now(), dt=(now-lastTime)/1000;
+    if (dt>.4) {
+      const bps=(e.loaded-lastLoaded)/dt;
+      speed.textContent = bps>0?fmtB(bps)+'/s':'';
+      lastLoaded=e.loaded; lastTime=now;
     }
-    statsText.textContent = `${fmtBytes(e.loaded)} / ${fmtBytes(totalBytes)}`;
-  });
+    loaded.textContent = fmtB(e.loaded)+' / '+fmtB(totalBytes);
+  };
 
-  xhr.upload.addEventListener('load', () => {
-    fill.style.transition = 'width 1.5s ease';
-    fill.style.width = '95%';
-    btn.textContent = 'Processing…';
-    speedText.textContent = '';
-  });
+  xhr.upload.onload = () => {
+    fill.style.transition='width 1.4s ease';
+    fill.style.width='95%';
+    btn.textContent='Processing…';
+    speed.textContent='';
+  };
 
-  xhr.addEventListener('load', () => {
-    _activeXhr = null;
-    fill.style.width = '100%';
-    let json = {};
-    try { json = JSON.parse(xhr.responseText); } catch(_){}
-    if (xhr.status < 200 || xhr.status >= 300) {
-      errEl.textContent = json.message || 'Upload failed. Please try again.';
-      errEl.style.display = 'block';
-      btn.textContent = 'Upload & Create AR Target'; btn.disabled = false;
+  xhr.onload = () => {
+    _xhr=null;
+    fill.style.width='100%';
+    let json={};
+    try{json=JSON.parse(xhr.responseText);}catch(_){}
+    if (xhr.status<200||xhr.status>=300) {
+      let msg = json.message||'Upload failed — please try again.';
+      if (json.errors && json.errors.length) {
+        msg += ' (' + json.errors.map(e=>e.msg||e.message).join('; ') + ')';
+      }
+      errEl.textContent=msg; errEl.style.display='block';
+      btn.textContent='Upload & Create AR Memory'; btn.disabled=false;
       return;
     }
-    setTimeout(() => { window.location.href = 'dashboard.html?uploaded=1'; }, 300);
-  });
+    setTimeout(()=>{ window.location.href='dashboard.html?success=1'; },300);
+  };
 
-  xhr.addEventListener('error', () => { _activeXhr = null; retryOrFail(rect, btn, speedText, 'Network error.'); });
-  xhr.addEventListener('timeout', () => { _activeXhr = null; retryOrFail(rect, btn, speedText, 'Timed out.'); });
-  xhr.addEventListener('abort', () => { _activeXhr = null; });
-  xhr.timeout = 300_000;
-  xhr.open('POST', `${API}/api/memories/upload`);
-  xhr.send(form);
+  xhr.onerror   = ()=>{ _xhr=null; retry(rect,btn,speed,'Network error.'); };
+  xhr.ontimeout = ()=>{ _xhr=null; retry(rect,btn,speed,'Upload timed out.'); };
+  xhr.onabort   = ()=>{ _xhr=null; };
+  xhr.timeout = 360_000;
+  xhr.open('POST', API+'/api/memories/upload');
+  xhr.send(fd);
 }
 
-function retryOrFail(rect, btn, speedText, label) {
-  if (_uploadCancelled) { btn.textContent = 'Upload & Create AR Target'; btn.disabled = false; return; }
-  if (_retryCount < MAX_RETRIES) {
-    _retryCount++;
-    const delay = Math.min(8000, 800 * Math.pow(2, _retryCount-1));
-    btn.textContent = `Connection lost — retrying in ${Math.round(delay/1000)}s…`;
-    setTimeout(() => { if (!_uploadCancelled) startUploadAttempt(rect); }, delay);
+function retry(rect,btn,speed,label) {
+  if (_cancelled) { btn.textContent='Upload & Create AR Memory'; btn.disabled=false; return; }
+  if (_retries<MAX_RETRIES) {
+    _retries++;
+    const ms = Math.min(8000, 800*Math.pow(2,_retries-1));
+    btn.textContent=`Connection lost — retrying in ${Math.round(ms/1000)}s…`;
+    setTimeout(()=>{ if(!_cancelled) startUpload(rect); }, ms);
   } else {
-    document.getElementById('uploadErr').textContent = `${label} Couldn't reconnect after several tries.`;
-    document.getElementById('uploadErr').style.display = 'block';
-    btn.textContent = 'Upload & Create AR Target'; btn.disabled = false;
+    document.getElementById('err3').textContent = label+' Could not reconnect after several tries.';
+    document.getElementById('err3').style.display='block';
+    btn.textContent='Upload & Create AR Memory'; btn.disabled=false;
   }
+}
+
+/* ══ ZONE HELPERS ══ */
+function setZoneLoading(t, msg) {
+  const n=document.getElementById(t+'Name'), s=document.getElementById(t+'Sub');
+  n.textContent=msg; s.textContent='';
+}
+function setZoneDone(t, name, size) {
+  const zone=document.getElementById(t+'Zone');
+  zone.classList.remove('drag','errored'); zone.classList.add('has-file');
+  const icon=document.getElementById(t+'Icon');
+  icon.innerHTML=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  document.getElementById(t+'Name').textContent = name.length>22?name.slice(0,20)+'…':name;
+  document.getElementById(t+'Sub').textContent  = size;
+  document.getElementById(t+'Hint').textContent = 'Ready ✓';
+}
+function showZoneError(t, msg) {
+  const zone=document.getElementById(t+'Zone');
+  zone.classList.remove('drag','has-file'); zone.classList.add('errored');
+  document.getElementById(t+'Name').textContent='Error';
+  document.getElementById(t+'Sub').textContent=msg;
+  document.getElementById(t+'Hint').textContent='Try again';
+  setTimeout(()=>{ zone.classList.remove('errored'); resetZone(t); },3000);
+}
+function resetZone(t) {
+  document.getElementById(t+'Name').textContent = t==='photo'?'Upload Photo':'Upload Video';
+  document.getElementById(t+'Sub').textContent='Click or drag & drop';
+  document.getElementById(t+'Hint').textContent=t==='photo'?'JPG, PNG · max 20MB':'MP4, MOV, WebM · max 500MB';
+}
+
+/* ══ COMPRESS PHOTO ══ */
+function compressPhoto(file, maxEdge=1600, q=0.85) {
+  return new Promise((res,rej) => {
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      let {width:w,height:h}=img;
+      if(w>maxEdge||h>maxEdge){
+        if(w>=h){h=Math.round(h*(maxEdge/w));w=maxEdge;}
+        else{w=Math.round(w*(maxEdge/h));h=maxEdge;}
+      }
+      const cv=document.createElement('canvas');
+      cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      cv.toBlob(blob=>{
+        if(!blob)return rej(new Error('toBlob'));
+        res({blob:blob.size<file.size?blob:file,w,h});
+      },'image/jpeg',q);
+    };
+    img.onerror=rej; img.src=url;
+  });
+}
+
+/* ══ UTILS ══ */
+function fmt(b) { return b>=1048576?(b/1048576).toFixed(1)+'MB':(b/1024).toFixed(0)+'KB'; }
+function fmtB(b){ return b>=1048576?(b/1048576).toFixed(1)+' MB':(b/1024).toFixed(0)+' KB'; }
+
+function updateCharCount() {
+  document.getElementById('charCount').textContent = document.getElementById('memTitle').value.length;
 }
 
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('on');
+  clearTimeout(window._tt);
+  window._tt=setTimeout(()=>t.classList.remove('on'),2800);
 }
 
-// Check if came back from successful upload
-const params = new URLSearchParams(location.search);
-if (params.get('uploaded') === '1') showToast('Memory created! ✓');
+// If redirected back after success
+if (new URLSearchParams(location.search).get('success')==='1') showToast('Memory created! ✓');
 </script>
 </body>
 </html>
