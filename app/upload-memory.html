@@ -842,6 +842,40 @@ function detectBorder(url, blob, natW, natH) {
   document.getElementById('photoOverlay').classList.add('on');
   const img = new Image();
   img.onload = () => {
+    try {
+      runDetectionPasses(img, natW, natH);
+    } catch (err) {
+      // Any failure in the pixel-scan (e.g. a tainted canvas, an odd image
+      // format) must never block the user — fall back to "no border found"
+      // instead of leaving the Next button stuck disabled with no feedback.
+      console.error('Border detection failed, falling back to full-photo fit:', err);
+      applyNoBorderFallback();
+    }
+    document.getElementById('photoOverlay').classList.remove('on');
+    checkReady();
+  };
+  img.onerror = () => {
+    document.getElementById('photoOverlay').classList.remove('on');
+    applyNoBorderFallback();
+    checkReady();
+  };
+  img.src = url;
+}
+
+function applyNoBorderFallback() {
+  detectedBorder = null; detectConfidence = 0;
+  cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto', rotation:0 };
+  borderCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} };
+  videoCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} };
+  modeSaves = { auto:null, ratio:null, free:null };
+  document.getElementById('photoPill').innerHTML = `<div class="detect-pill low">⚠ No clear edges — full fit</div>`;
+  document.getElementById('detectBox').classList.add('show');
+  document.getElementById('detectBoxHead').textContent = 'No distinct border found';
+  document.getElementById('detectBoxBody').textContent =
+    `Couldn't analyze this photo automatically. The video will fit the full photo area; adjust manually in Step 2.`;
+}
+
+function runDetectionPasses(img, natW, natH) {
     const SW = 480, SH = Math.round((natH/natW)*SW);
     const cv = document.createElement('canvas');
     cv.width = SW; cv.height = SH;
@@ -892,8 +926,6 @@ function detectBorder(url, blob, natW, natH) {
       maxX=Math.min(SW-1,maxX+PAD); maxY=Math.min(SH-1,maxY+PAD);
       brightResult = { minX,maxX,minY,maxY, confidence: scoreBoxConfidence(rowEnergy,colEnergy,minX,maxX,minY,maxY,SW,SH) };
     }
-
-    document.getElementById('photoOverlay').classList.remove('on');
 
     // ── ENSEMBLE: pick the higher-confidence pass, or blend if they agree ──
     let final = null;
@@ -946,24 +978,8 @@ function detectBorder(url, blob, natW, natH) {
         `Detected at ${Math.round(detectedBorder.xPct)}%, ${Math.round(detectedBorder.yPct)}% offset · `+
         `${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% · ${detectConfidence}% confidence`;
     } else {
-      detectedBorder = null; detectConfidence = 0;
-      cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto', rotation:0 };
-      borderCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} };
-      videoCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} };
-      modeSaves = { auto:null, ratio:null, free:null };
-      document.getElementById('photoPill').innerHTML = `<div class="detect-pill low">⚠ No clear edges — full fit</div>`;
-      document.getElementById('detectBox').classList.add('show');
-      document.getElementById('detectBoxHead').textContent = 'No distinct border found';
-      document.getElementById('detectBoxBody').textContent =
-        `Couldn't find a confident card edge — background contrast was too low. The video will fit the full photo area; adjust manually in Step 2.`;
+      applyNoBorderFallback();
     }
-    checkReady();
-  };
-  img.onerror = () => {
-    document.getElementById('photoOverlay').classList.remove('on');
-    checkReady();
-  };
-  img.src = url;
 }
 
 /* Scan inward from each side to find where edge-energy crosses from
