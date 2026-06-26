@@ -762,7 +762,28 @@ function loadPhoto(file) {
 function detectBorder(url, blob, natW, natH) {
   document.getElementById('photoOverlay').classList.add('on');
   const img = new Image();
+  let settled = false;
+  // Safety net: if the browser never fires onload/onerror (corrupt file,
+  // stalled decode, odd mobile browser quirk), don't leave the Next button
+  // disabled forever — fall back to full-photo fit after a few seconds.
+  const safetyTimer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    document.getElementById('photoOverlay').classList.remove('on');
+    detectedBorder = null; detectConfidence = 0;
+    cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto', rotation:0 };
+    borderCorners = { A:{x:5,y:5}, B:{x:95,y:5}, C:{x:95,y:95}, D:{x:5,y:95} };
+    document.getElementById('photoPill').innerHTML = `<div class="detect-pill low">⚠ Couldn't analyze photo — full fit</div>`;
+    document.getElementById('detectBox').classList.add('show');
+    document.getElementById('detectBoxHead').textContent = 'Detection timed out';
+    document.getElementById('detectBoxBody').textContent =
+      `Border analysis took too long and was skipped. The video will fit the full photo area; adjust manually in Step 2.`;
+    checkReady();
+  }, 6000);
   img.onload = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(safetyTimer);
     const SW = 480, SH = Math.round((natH/natW)*SW);
     const cv = document.createElement('canvas');
     cv.width = SW; cv.height = SH;
@@ -876,6 +897,9 @@ function detectBorder(url, blob, natW, natH) {
     checkReady();
   };
   img.onerror = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(safetyTimer);
     document.getElementById('photoOverlay').classList.remove('on');
     checkReady();
   };
@@ -932,7 +956,22 @@ function loadVideo(file) {
 
   const tmp = document.createElement('video');
   const url = URL.createObjectURL(file);
+  let settled = false;
+  // Safety net: some mobile browsers/codecs are flaky about firing
+  // loadedmetadata for certain containers — never leave Next stuck disabled.
+  const safetyTimer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    document.getElementById('videoOverlay').classList.remove('on');
+    setZoneDone('video', file.name, fmt(file.size));
+    document.getElementById('videoPreviewSec').style.display = 'block';
+    document.getElementById('videoPill').innerHTML = `<div class="detect-pill low">⚠ Couldn't read video details — continuing anyway</div>`;
+    document.getElementById('videoMeta').innerHTML = `<strong>${file.name}</strong><br>${fmt(file.size)}`;
+    checkReady();
+  }, 8000);
   tmp.onloadedmetadata = () => {
+    if (settled) return;
+    settled = true; clearTimeout(safetyTimer);
     videoW = tmp.videoWidth; videoH = tmp.videoHeight;
     const dur = isNaN(tmp.duration)?'':` · ${Math.round(tmp.duration)}s`;
     URL.revokeObjectURL(url);
@@ -945,6 +984,8 @@ function loadVideo(file) {
     checkReady();
   };
   tmp.onerror = () => {
+    if (settled) return;
+    settled = true; clearTimeout(safetyTimer);
     URL.revokeObjectURL(url);
     document.getElementById('videoOverlay').classList.remove('on');
     setZoneDone('video', file.name, fmt(file.size));
@@ -1011,6 +1052,7 @@ function goStep3() {
 }
 
 /* ══ CROP EDITOR ══ */
+const SNAP_THRESH = 2.5; // % — snap to center / border edges
 function getImgBox() {
   const ids = surfaceIds();
   const wrap = document.getElementById(ids.wrap);
@@ -1624,7 +1666,11 @@ function resetZone(t) {
 function compressPhoto(file, maxEdge=1600, q=0.85) {
   return new Promise((res,rej) => {
     const img=new Image(), url=URL.createObjectURL(file);
+    let settled=false;
+    const safety = setTimeout(()=>{ if(!settled){ settled=true; rej(new Error('decode timeout')); } }, 8000);
     img.onload=()=>{
+      if (settled) return;
+      settled=true; clearTimeout(safety);
       URL.revokeObjectURL(url);
       let {width:w,height:h}=img;
       if(w>maxEdge||h>maxEdge){
@@ -1639,7 +1685,8 @@ function compressPhoto(file, maxEdge=1600, q=0.85) {
         res({blob:blob.size<file.size?blob:file,w,h});
       },'image/jpeg',q);
     };
-    img.onerror=rej; img.src=url;
+    img.onerror=()=>{ if(settled) return; settled=true; clearTimeout(safety); rej(new Error('decode error')); };
+    img.src=url;
   });
 }
 
