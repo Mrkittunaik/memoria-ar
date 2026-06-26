@@ -98,7 +98,8 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 
 /* ── CROP STAGE ── */
 .crop-wrap{position:relative;width:100%;border-radius:14px;overflow:hidden;background:#0d0b0a;margin-bottom:10px;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center;}
-.crop-poster{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;border-radius:14px;}
+.crop-poster{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;border-radius:14px;transition:transform .08s linear;}
+@media(max-width:860px){.crop-wrap{height:340px!important;}}
 
 /* Border glow — shows detected border of photo */
 .border-glow{
@@ -140,7 +141,7 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
     repeating-linear-gradient(90deg,transparent,transparent calc(33.33% - .5px),rgba(255,255,255,.22) calc(33.33% - .5px),rgba(255,255,255,.22) 33.33%);
 }
 
-/* corner handles */
+/* corner handles (decorative L-brackets) */
 .crop-corner{
   position:absolute;width:14px;height:14px;
   border-color:var(--gold);border-style:solid;border-width:0;
@@ -151,14 +152,86 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 .crop-corner.bl{bottom:-2px;left:-2px;border-bottom-width:3px;border-left-width:3px;border-radius:0 0 0 3px;}
 .crop-corner.br{bottom:-2px;right:-2px;border-bottom-width:3px;border-right-width:3px;border-radius:0 0 3px 0;}
 
-/* resize handle dot */
-.crop-resize{
-  position:absolute;right:-7px;bottom:-7px;
-  width:16px;height:16px;border-radius:50%;
+/* draggable resize handle dots — one per corner + 4 edge midpoints */
+.crop-handle{
+  position:absolute;width:15px;height:15px;border-radius:50%;
   background:var(--gold);border:2px solid #fff;
-  cursor:nwse-resize;box-shadow:0 1px 4px rgba(0,0,0,.35);
-  z-index:2;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);
+  z-index:3;transform:translate(-50%,-50%);
 }
+/* invisible touch-target halo — visual dot stays small, hit area doesn't.
+   Corners get z-index priority over edge handles since corner-drags are
+   used far more often and sit at the same physical point as two edges. */
+.crop-handle::before{
+  content:'';position:absolute;left:50%;top:50%;
+  width:32px;height:32px;transform:translate(-50%,-50%);
+  border-radius:50%;
+}
+.crop-handle.h-tl,.crop-handle.h-tr,.crop-handle.h-bl,.crop-handle.h-br{z-index:5;}
+.crop-handle.h-t,.crop-handle.h-b,.crop-handle.h-l,.crop-handle.h-r{z-index:4;}
+.crop-handle.h-tl{top:0;left:0;cursor:nwse-resize;}
+.crop-handle.h-tr{top:0;left:100%;cursor:nesw-resize;}
+.crop-handle.h-bl{top:100%;left:0;cursor:nesw-resize;}
+.crop-handle.h-br{top:100%;left:100%;cursor:nwse-resize;}
+.crop-handle.h-t{top:0;left:50%;cursor:ns-resize;width:13px;height:13px;}
+.crop-handle.h-b{top:100%;left:50%;cursor:ns-resize;width:13px;height:13px;}
+.crop-handle.h-l{top:50%;left:0;cursor:ew-resize;width:13px;height:13px;}
+.crop-handle.h-r{top:50%;left:100%;cursor:ew-resize;width:13px;height:13px;}
+.crop-handle:hover{transform:translate(-50%,-50%) scale(1.15);}
+
+/* ── ZOOM CONTROL ── */
+.zoom-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--surface-warm);border-radius:9px;border:.5px solid var(--border);}
+.zoom-row svg{flex-shrink:0;color:var(--ink-muted);}
+.zoom-row input[type=range]{flex:1;accent-color:var(--gold);height:4px;cursor:pointer;}
+.zoom-val{font-size:11px;font-weight:600;color:var(--ink-muted);width:38px;text-align:right;flex-shrink:0;}
+.zoom-reset{font-size:11px;color:var(--gold);cursor:pointer;font-weight:600;flex-shrink:0;white-space:nowrap;}
+.zoom-reset:hover{text-decoration:underline;}
+
+/* ── CONFIDENCE PILL ── */
+.detect-pill.high{background:var(--green-bg);color:var(--green);border:.5px solid var(--green-light);}
+.detect-pill.mid{background:var(--gold-bg);color:var(--gold);border:.5px solid var(--gold-light);}
+.detect-pill.low{background:var(--red-bg);color:var(--red);border:.5px solid #f5b8b8;}
+.conf-bar-wrap{display:inline-block;width:34px;height:4px;border-radius:3px;background:rgba(0,0,0,.12);overflow:hidden;margin-left:5px;vertical-align:middle;}
+.conf-bar-fill{height:100%;border-radius:3px;background:currentColor;}
+
+/* ── FRAME STYLE PICKER ── */
+.frame-section{margin-bottom:14px;}
+.frame-label{font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.frame-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;}
+.frame-chip{
+  border:1.5px solid var(--border);border-radius:10px;background:var(--surface-warm);
+  cursor:pointer;padding:7px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;
+  transition:all .15s;
+}
+.frame-chip:hover{border-color:var(--gold-light);}
+.frame-chip.on{border-color:var(--gold);background:var(--gold-bg);}
+.frame-swatch{width:30px;height:30px;background:linear-gradient(135deg,#5b7a99,#3d5570);position:relative;}
+.frame-swatch.fs-sharp{border-radius:0;}
+.frame-swatch.fs-rounded{border-radius:8px;}
+.frame-swatch.fs-feather{border-radius:8px;mask-image:radial-gradient(circle,black 55%,transparent 100%);-webkit-mask-image:radial-gradient(circle,black 55%,transparent 100%);}
+.frame-swatch.fs-polaroid{border-radius:2px;outline:4px solid #fff;outline-offset:0;box-shadow:0 0 0 1px var(--border);}
+.frame-swatch.fs-vignette{border-radius:8px;box-shadow:inset 0 0 9px 3px rgba(0,0,0,.65);}
+.frame-swatch.fs-film{border-radius:3px;outline:2px solid var(--ink);outline-offset:2px;}
+.frame-chip-name{font-size:9.5px;font-weight:600;color:var(--ink-muted);text-align:center;line-height:1.2;}
+.frame-chip.on .frame-chip-name{color:var(--gold);}
+
+/* live frame style applied to crop box + preview video */
+.crop-box.frame-fs-sharp,.preview-vid.frame-fs-sharp{border-radius:0!important;}
+.crop-box.frame-fs-rounded,.preview-vid.frame-fs-rounded{border-radius:16px!important;}
+.crop-box.frame-fs-feather,.preview-vid.frame-fs-feather{
+  border-radius:16px!important;
+  mask-image:radial-gradient(ellipse,black 72%,transparent 100%);
+  -webkit-mask-image:radial-gradient(ellipse,black 72%,transparent 100%);
+}
+.crop-box.frame-fs-polaroid,.preview-vid.frame-fs-polaroid{border-radius:2px!important;outline:8px solid #fff;outline-offset:0;}
+.crop-box.frame-fs-vignette,.preview-vid.frame-fs-vignette{border-radius:14px!important;}
+.crop-box.frame-fs-film,.preview-vid.frame-fs-film{border-radius:4px!important;}
+/* keep crop-box's dim-outside shadow working alongside frame outline */
+.crop-box.frame-fs-polaroid{box-shadow:0 0 0 9999px rgba(0,0,0,.42),0 0 0 8px #fff inset;outline:none;}
+.crop-box.frame-fs-film{box-shadow:0 0 0 9999px rgba(0,0,0,.42),0 0 0 3px #fff inset,0 0 0 6px var(--ink) inset;outline:none;}
+.crop-box.frame-fs-vignette{box-shadow:0 0 0 9999px rgba(0,0,0,.42),inset 0 0 22px 8px rgba(0,0,0,.5);}
+.preview-vid.frame-fs-vignette::after{content:'';position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 0 26px 9px rgba(0,0,0,.55);pointer-events:none;}
+.preview-vid.frame-fs-film{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px var(--ink);}
 
 /* edge snap indicators */
 .snap-line{position:absolute;background:rgba(201,147,58,.6);pointer-events:none;display:none;}
@@ -249,7 +322,28 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
   .side-col{border-top:.5px solid var(--border);}
   .main-col{padding:18px 16px;}
   .upload-grid{grid-template-columns:1fr;}
-  .stepper{gap:0;overflow-x:auto;}
+  .stepper{gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+}
+@media(max-width:480px){
+  .crop-wrap{height:300px!important;}
+  .zoom-row{padding:7px 10px;gap:7px;}
+  .zoom-row svg{display:none;} /* icons crowd narrow screens; slider + value are enough */
+  .zoom-val{width:34px;font-size:10.5px;}
+  .zoom-reset{font-size:10.5px;}
+  .frame-grid{grid-template-columns:repeat(3,1fr);gap:6px;}
+  .frame-chip{padding:6px 2px 5px;}
+  .frame-swatch{width:26px;height:26px;}
+  .frame-chip-name{font-size:8.8px;}
+  .mode-tab{font-size:11px;padding:7px 0;}
+  .ratio-chip{font-size:10px;padding:6px 0;}
+  .btn-row{gap:8px;}
+  .btn{padding:9px 12px;font-size:13px;}
+  .topbar{padding:0 14px;height:52px;}
+  .logo{font-size:17px;}
+  .back-btn{padding:6px 10px;font-size:12px;}
+  .stepper{padding:12px 14px;}
+  .step{font-size:11.5px;padding:5px 7px;gap:6px;}
+  .step-num{width:19px;height:19px;font-size:10px;}
 }
 </style>
 </head>
@@ -288,7 +382,7 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
         <div class="scan-overlay" id="photoOverlay">
           <div class="scan-beam"></div>
           <div class="scan-spin"></div>
-          <div class="scan-txt">Detecting border…</div>
+          <div class="scan-txt">Scanning edges…</div>
         </div>
         <div class="zone-icon" id="photoIcon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -353,7 +447,15 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
       <div class="ratio-chip" data-r="3:4" onclick="setRatio('3:4',this)">3:4</div>
     </div>
 
-    <div class="crop-wrap" id="cropWrap" style="height:420px;">
+    <div class="zoom-row">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <input type="range" id="zoomSlider" min="100" max="250" value="100" oninput="onZoomInput(this.value)"/>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <span class="zoom-val" id="zoomVal">100%</span>
+      <span class="zoom-reset" onclick="resetZoom()">Reset</span>
+    </div>
+
+    <div class="crop-wrap" id="cropWrap" style="height:460px;">
       <img id="cropImg" class="crop-poster" src="" alt=""/>
       <!-- detected border outline -->
       <div id="borderGlow" class="border-glow" style="display:none;"></div>
@@ -366,10 +468,41 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
         <div class="crop-corner tr"></div>
         <div class="crop-corner bl"></div>
         <div class="crop-corner br"></div>
-        <div class="crop-resize" id="cropResize"></div>
+        <div class="crop-handle h-tl" data-h="tl"></div>
+        <div class="crop-handle h-tr" data-h="tr"></div>
+        <div class="crop-handle h-bl" data-h="bl"></div>
+        <div class="crop-handle h-br" data-h="br"></div>
+        <div class="crop-handle h-t" data-h="t"></div>
+        <div class="crop-handle h-b" data-h="b"></div>
+        <div class="crop-handle h-l" data-h="l"></div>
+        <div class="crop-handle h-r" data-h="r"></div>
       </div>
     </div>
-    <div class="crop-hint-txt" id="cropHint">Drag to reposition · drag corner to resize</div>
+    <div class="crop-hint-txt" id="cropHint">Drag to reposition · drag any handle to resize</div>
+
+    <div class="frame-section">
+      <div class="frame-label">Frame style</div>
+      <div class="frame-grid" id="frameGrid">
+        <div class="frame-chip on" data-fs="sharp" onclick="setFrameStyle('sharp',this)">
+          <div class="frame-swatch fs-sharp"></div><div class="frame-chip-name">Sharp</div>
+        </div>
+        <div class="frame-chip" data-fs="rounded" onclick="setFrameStyle('rounded',this)">
+          <div class="frame-swatch fs-rounded"></div><div class="frame-chip-name">Rounded</div>
+        </div>
+        <div class="frame-chip" data-fs="feather" onclick="setFrameStyle('feather',this)">
+          <div class="frame-swatch fs-feather"></div><div class="frame-chip-name">Soft feather</div>
+        </div>
+        <div class="frame-chip" data-fs="polaroid" onclick="setFrameStyle('polaroid',this)">
+          <div class="frame-swatch fs-polaroid"></div><div class="frame-chip-name">Polaroid</div>
+        </div>
+        <div class="frame-chip" data-fs="vignette" onclick="setFrameStyle('vignette',this)">
+          <div class="frame-swatch fs-vignette"></div><div class="frame-chip-name">Vignette</div>
+        </div>
+        <div class="frame-chip" data-fs="film" onclick="setFrameStyle('film',this)">
+          <div class="frame-swatch fs-film"></div><div class="frame-chip-name">Film edge</div>
+        </div>
+      </div>
+    </div>
 
     <div class="btn-row">
       <button class="btn" onclick="goStep1()">← Back</button>
@@ -384,7 +517,7 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
       <img class="preview-poster" id="prevPoster" src="" alt=""/>
       <video id="prevVid" class="preview-vid" autoplay muted loop playsinline></video>
     </div>
-    <div style="font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:16px;">Video plays edge-to-edge within the detected poster border</div>
+    <div style="font-size:11px;color:var(--ink-faint);text-align:center;margin-bottom:16px;">Video plays edge-to-edge within the detected poster border · <span id="prevFrameLabel">Sharp</span> frame</div>
 
     <div class="btn-row">
       <button class="btn" onclick="goStep2()">← Adjust</button>
@@ -444,10 +577,13 @@ let photoFile = null, compressedBlob = null;
 let videoFile = null;
 let photoW = 0, photoH = 0, videoW = 0, videoH = 0;
 let detectedBorder = null; // {xPct,yPct,wPct,hPct}
+let detectConfidence = 0;  // 0-100
 let cropState = { xPct:50, yPct:50, wPct:85, hPct:85, ratioKey:'auto' };
 let cropMode = 'auto'; // 'auto'|'ratio'|'free'
 let currentRatio = '9:16';
-let dragMode = null, dragStart = null;
+let frameStyle = 'sharp'; // sharp|rounded|feather|polaroid|vignette|film
+let zoomPct = 100; // 100-250, scales crop-poster img
+let dragMode = null, dragStart = null, dragHandle = null;
 let _xhr = null, _cancelled = false, _retries = 0;
 const MAX_RETRIES = 5;
 
@@ -509,68 +645,121 @@ function loadPhoto(file) {
   });
 }
 
-/* ══ BORDER DETECTION ══ */
+/* ══ BORDER DETECTION ══
+   Two independent passes, cross-checked for accuracy:
+   1) GRADIENT SCAN — finds the actual straight edges of the printed card by
+      measuring edge energy (Sobel-style gradient) along each row/column and
+      locating where it spikes from "background" to "card content". Works
+      regardless of whether the background is lighter or darker than the photo.
+   2) BRIGHTNESS SCAN — the older corner-contrast method, kept as a fallback
+      for flat/low-texture backgrounds where gradients are too weak to trust.
+   Whichever pass reports higher confidence wins; if both agree closely we
+   average them for a tighter, more accurate box. */
 function detectBorder(url, blob, natW, natH) {
   document.getElementById('photoOverlay').classList.add('on');
   const img = new Image();
   img.onload = () => {
-    // Sample at 320px wide for speed
-    const sw = 320, sh = Math.round((natH/natW)*sw);
+    const SW = 480, SH = Math.round((natH/natW)*SW);
     const cv = document.createElement('canvas');
-    cv.width = sw; cv.height = sh;
+    cv.width = SW; cv.height = SH;
     const ctx = cv.getContext('2d');
-    ctx.drawImage(img, 0, 0, sw, sh);
-    const px = ctx.getImageData(0,0,sw,sh).data;
+    ctx.drawImage(img, 0, 0, SW, SH);
+    const px = ctx.getImageData(0,0,SW,SH).data;
 
-    function bri(x,y){ const i=(y*sw+x)*4; return (px[i]+px[i+1]+px[i+2])/3; }
+    // grayscale lookup
+    const gray = new Float32Array(SW*SH);
+    for (let i=0;i<SW*SH;i++){
+      const o=i*4;
+      gray[i] = px[o]*0.299 + px[o+1]*0.587 + px[o+2]*0.114;
+    }
+    const at = (x,y) => gray[Math.min(SH-1,Math.max(0,y))*SW + Math.min(SW-1,Math.max(0,x))];
 
-    // Estimate border brightness from all 4 corners averaged
-    const corners = [bri(0,0),bri(sw-1,0),bri(0,sh-1),bri(sw-1,sh-1)];
+    // ── PASS 1: gradient / edge-energy scan ──
+    const rowEnergy = new Float32Array(SH);
+    const colEnergy = new Float32Array(SW);
+    for (let y=0;y<SH;y++){
+      for (let x=0;x<SW;x++){
+        const gx = at(x+1,y)-at(x-1,y);
+        const gy = at(x,y+1)-at(x,y-1);
+        const mag = Math.sqrt(gx*gx+gy*gy);
+        rowEnergy[y]+=mag; colEnergy[x]+=mag;
+      }
+    }
+    const gradResult = findBorderFromEnergy(rowEnergy,colEnergy,SW,SH);
+
+    // ── PASS 2: brightness/corner-contrast scan (fallback) ──
+    function bri(x,y){ return at(x,y); }
+    const corners=[bri(0,0),bri(SW-1,0),bri(0,SH-1),bri(SW-1,SH-1)];
     const bgBri = corners.reduce((a,b)=>a+b,0)/4;
     const THRESH = 22;
-
-    let minX=sw,maxX=0,minY=sh,maxY=0,found=false;
-    for (let y=0;y<sh;y++) {
-      for (let x=0;x<sw;x++) {
-        if (Math.abs(bri(x,y)-bgBri)>THRESH) {
+    let minX=SW,maxX=0,minY=SH,maxY=0,found=false;
+    for (let y=0;y<SH;y+=2){
+      for (let x=0;x<SW;x+=2){
+        if (Math.abs(bri(x,y)-bgBri)>THRESH){
           if(x<minX)minX=x; if(x>maxX)maxX=x;
           if(y<minY)minY=y; if(y>maxY)maxY=y;
           found=true;
         }
       }
     }
+    let brightResult = null;
+    if (found && (maxX-minX)>SW*0.08 && (maxY-minY)>SH*0.08) {
+      const PAD=3;
+      minX=Math.max(0,minX-PAD); minY=Math.max(0,minY-PAD);
+      maxX=Math.min(SW-1,maxX+PAD); maxY=Math.min(SH-1,maxY+PAD);
+      brightResult = { minX,maxX,minY,maxY, confidence: scoreBoxConfidence(rowEnergy,colEnergy,minX,maxX,minY,maxY,SW,SH) };
+    }
 
     document.getElementById('photoOverlay').classList.remove('on');
 
-    const PAD = 3;
-    if (found && (maxX-minX)>sw*0.08 && (maxY-minY)>sh*0.08) {
-      minX=Math.max(0,minX-PAD); minY=Math.max(0,minY-PAD);
-      maxX=Math.min(sw-1,maxX+PAD); maxY=Math.min(sh-1,maxY+PAD);
+    // ── ENSEMBLE: pick the higher-confidence pass, or blend if they agree ──
+    let final = null;
+    if (gradResult && brightResult) {
+      const closeX = Math.abs(gradResult.minX-brightResult.minX)<SW*0.04 && Math.abs(gradResult.maxX-brightResult.maxX)<SW*0.04;
+      const closeY = Math.abs(gradResult.minY-brightResult.minY)<SH*0.04 && Math.abs(gradResult.maxY-brightResult.maxY)<SH*0.04;
+      if (closeX && closeY) {
+        final = {
+          minX:(gradResult.minX+brightResult.minX)/2, maxX:(gradResult.maxX+brightResult.maxX)/2,
+          minY:(gradResult.minY+brightResult.minY)/2, maxY:(gradResult.maxY+brightResult.maxY)/2,
+          confidence: Math.min(98, Math.round((gradResult.confidence+brightResult.confidence)/2 + 12)),
+        };
+      } else {
+        final = gradResult.confidence >= brightResult.confidence ? gradResult : brightResult;
+      }
+    } else {
+      final = gradResult || brightResult;
+    }
+
+    if (final && (final.maxX-final.minX)>SW*0.06 && (final.maxY-final.minY)>SH*0.06) {
       detectedBorder = {
-        xPct:(minX/sw)*100, yPct:(minY/sh)*100,
-        wPct:((maxX-minX)/sw)*100, hPct:((maxY-minY)/sh)*100,
+        xPct:(final.minX/SW)*100, yPct:(final.minY/SH)*100,
+        wPct:((final.maxX-final.minX)/SW)*100, hPct:((final.maxY-final.minY)/SH)*100,
       };
+      detectConfidence = Math.round(final.confidence);
       const cxPct = detectedBorder.xPct + detectedBorder.wPct/2;
       const cyPct = detectedBorder.yPct + detectedBorder.hPct/2;
       cropState = { xPct:cxPct, yPct:cyPct, wPct:detectedBorder.wPct, hPct:detectedBorder.hPct, ratioKey:'auto' };
 
-      document.getElementById('photoPill').innerHTML = `<div class="detect-pill ok">✓ Border detected</div>`;
+      const tier = detectConfidence>=75?'high':detectConfidence>=45?'mid':'low';
+      const tierLabel = detectConfidence>=75?'Strong match':detectConfidence>=45?'Likely match':'Weak match';
+      document.getElementById('photoPill').innerHTML =
+        `<div class="detect-pill ${tier}">✓ Border found · ${tierLabel} <span class="conf-bar-wrap"><span class="conf-bar-fill" style="width:${detectConfidence}%"></span></span></div>`;
       document.getElementById('detectBox').classList.add('show');
       document.getElementById('detectBoxHead').textContent = 'Auto-detection complete';
       document.getElementById('detectBoxBody').textContent =
-        `Photo border detected at ${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% of image. The video will be fitted edge-to-edge inside this area.`;
+        `Card edges found at ${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% of the photo, ${detectConfidence}% confidence. The video will fit edge-to-edge inside this area — fine-tune it in Step 2 if needed.`;
       document.getElementById('borderInfoSec').style.display = 'block';
       document.getElementById('borderInfoBox').innerHTML =
         `Detected at ${Math.round(detectedBorder.xPct)}%, ${Math.round(detectedBorder.yPct)}% offset · `+
-        `${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}%`;
+        `${Math.round(detectedBorder.wPct)}% × ${Math.round(detectedBorder.hPct)}% · ${detectConfidence}% confidence`;
     } else {
-      detectedBorder = null;
+      detectedBorder = null; detectConfidence = 0;
       cropState = { xPct:50, yPct:50, wPct:90, hPct:90, ratioKey:'auto' };
-      document.getElementById('photoPill').innerHTML = `<div class="detect-pill warn">⚠ No border — full fit</div>`;
+      document.getElementById('photoPill').innerHTML = `<div class="detect-pill low">⚠ No clear edges — full fit</div>`;
       document.getElementById('detectBox').classList.add('show');
       document.getElementById('detectBoxHead').textContent = 'No distinct border found';
       document.getElementById('detectBoxBody').textContent =
-        `No clear print border detected. The video will be fitted to the full photo area. You can adjust manually in Step 2.`;
+        `Couldn't find a confident card edge — background contrast was too low. The video will fit the full photo area; adjust manually in Step 2.`;
     }
     checkReady();
   };
@@ -579,6 +768,46 @@ function detectBorder(url, blob, natW, natH) {
     checkReady();
   };
   img.src = url;
+}
+
+/* Scan inward from each side to find where edge-energy crosses from
+   "background noise floor" to "card content" — this is what actually
+   finds a straight printed-card border instead of just brightness diff. */
+function findBorderFromEnergy(rowEnergy, colEnergy, SW, SH) {
+  const rowMax = Math.max(...rowEnergy), colMax = Math.max(...colEnergy);
+  if (rowMax<1 || colMax<1) return null;
+  // noise floor = median-ish of the outer 10% margin on each side
+  const marginX = Math.max(2,Math.round(SW*0.05)), marginY = Math.max(2,Math.round(SH*0.05));
+  const floorRow = avg(rowEnergy.slice(0,marginY)) + avg(rowEnergy.slice(SH-marginY)) || rowMax*0.05;
+  const floorCol = avg(colEnergy.slice(0,marginX)) + avg(colEnergy.slice(SW-marginX)) || colMax*0.05;
+  const rowThresh = Math.max(floorRow*2.2, rowMax*0.10);
+  const colThresh = Math.max(floorCol*2.2, colMax*0.10);
+
+  let minY=0; while(minY<SH/2 && rowEnergy[minY]<rowThresh) minY++;
+  let maxY=SH-1; while(maxY>SH/2 && rowEnergy[maxY]<rowThresh) maxY--;
+  let minX=0; while(minX<SW/2 && colEnergy[minX]<colThresh) minX++;
+  let maxX=SW-1; while(maxX>SW/2 && colEnergy[maxX]<colThresh) maxX--;
+
+  if (maxX-minX < SW*0.10 || maxY-minY < SH*0.10) return null;
+  const confidence = scoreBoxConfidence(rowEnergy,colEnergy,minX,maxX,minY,maxY,SW,SH);
+  return {minX,maxX,minY,maxY,confidence};
+}
+function avg(arr){ return arr.length? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+/* Confidence = how much stronger the energy AT the found edges is vs the
+   background floor outside them — a clean straight border scores high. */
+function scoreBoxConfidence(rowEnergy,colEnergy,minX,maxX,minY,maxY,SW,SH){
+  const edgeStrength = (
+    (rowEnergy[minY]||0)+(rowEnergy[maxY]||0)+(colEnergy[minX]||0)+(colEnergy[maxX]||0)
+  )/4;
+  const m=Math.max(2,Math.round(SW*0.04));
+  const floor = (avg(Array.from(rowEnergy.slice(0,m)))+avg(Array.from(rowEnergy.slice(SH-m)))+
+                 avg(Array.from(colEnergy.slice(0,m)))+avg(Array.from(colEnergy.slice(SW-m))))/4 || 1;
+  const ratio = edgeStrength/Math.max(floor,1);
+  const areaFrac = ((maxX-minX)*(maxY-minY))/(SW*SH);
+  let score = Math.min(92, 30+ratio*9);
+  if (areaFrac<0.15 || areaFrac>0.97) score *= 0.6; // implausible box size penalty
+  return Math.max(5, Math.round(score));
 }
 
 /* ══ VIDEO LOAD ══ */
@@ -649,6 +878,7 @@ function goStep2() {
   // Load photo into crop stage
   const url = URL.createObjectURL(compressedBlob || photoFile);
   const img = document.getElementById('cropImg');
+  resetZoom();
   img.onload = () => {
     setTimeout(() => { // wait for layout
       initCropEditor();
@@ -674,12 +904,27 @@ function getImgBox() {
   let w, h, offX, offY;
   if (nR > wR) { w=wr.width; h=w/nR; offX=0; offY=(wr.height-h)/2; }
   else          { h=wr.height; w=h*nR; offY=0; offX=(wr.width-w)/2; }
+  // account for CSS transform:scale() zoom — img scales from its own center,
+  // which sits at the center of its unscaled box (offX+w/2, offY+h/2)
+  const z = zoomPct/100;
+  if (z !== 1) {
+    const cx = offX + w/2, cy = offY + h/2;
+    const zw = w*z, zh = h*z;
+    offX = cx - zw/2; offY = cy - zh/2;
+    w = zw; h = zh;
+  }
   return {w,h,offX,offY};
 }
 
 function clampCrop() {
-  cropState.wPct = Math.min(98, Math.max(4, cropState.wPct));
-  cropState.hPct = Math.min(98, Math.max(4, cropState.hPct));
+  // enforce a minimum *pixel* size (not just %) so the box never shrinks
+  // below what 8 touch handles can usably sit on, especially on mobile
+  const ib = getImgBox();
+  const MIN_PX = 90;
+  const minWPct = Math.min(40, (MIN_PX/Math.max(ib.w,1))*100);
+  const minHPct = Math.min(40, (MIN_PX/Math.max(ib.h,1))*100);
+  cropState.wPct = Math.min(98, Math.max(minWPct, cropState.wPct));
+  cropState.hPct = Math.min(98, Math.max(minHPct, cropState.hPct));
   const hw=cropState.wPct/2, hh=cropState.hPct/2;
   cropState.xPct = Math.min(100-hw, Math.max(hw, cropState.xPct));
   cropState.yPct = Math.min(100-hh, Math.max(hh, cropState.yPct));
@@ -723,20 +968,22 @@ function renderBorderGlow() {
 function initCropEditor() {
   renderBorderGlow();
   renderCrop();
+  applyFrameStyleToCropBox();
 
-  const box    = document.getElementById('cropBox');
-  const resize = document.getElementById('cropResize');
-
-  box.onmousedown = e => { if (e.target===resize) return; startDrag(e,'move'); };
-  box.ontouchstart= e => { if (e.target===resize) return; startDrag(e,'move'); };
-  resize.onmousedown = e => startDrag(e,'resize');
-  resize.ontouchstart= e => startDrag(e,'resize');
+  const box = document.getElementById('cropBox');
+  box.querySelectorAll('.crop-handle').forEach(h => {
+    h.onmousedown  = e => { e.stopPropagation(); startDrag(e,'resize',h.dataset.h); };
+    h.ontouchstart = e => { e.stopPropagation(); startDrag(e,'resize',h.dataset.h); };
+  });
+  box.onmousedown  = e => { if (e.target.classList.contains('crop-handle')) return; startDrag(e,'move'); };
+  box.ontouchstart = e => { if (e.target.classList.contains('crop-handle')) return; startDrag(e,'move'); };
   window.onresize = () => { renderBorderGlow(); renderCrop(); };
 }
 
-function startDrag(e, mode) {
+function startDrag(e, mode, handle) {
   e.preventDefault();
   dragMode = mode;
+  dragHandle = handle || null;
   const pt = e.touches?e.touches[0]:e;
   dragStart = { px:pt.clientX, py:pt.clientY, ...cropState };
   document.getElementById('cropBox').classList.add('dragging');
@@ -757,34 +1004,105 @@ function onDragMove(e) {
   if (dragMode==='move') {
     cropState.xPct = dragStart.xPct + dxP;
     cropState.yPct = dragStart.yPct + dyP;
-    // Snap to centre
     if (Math.abs(cropState.xPct-50)<SNAP_THRESH) cropState.xPct=50;
     if (Math.abs(cropState.yPct-50)<SNAP_THRESH) cropState.yPct=50;
   } else {
-    const asp = getLockedAspect();
-    let newWpx = (dragStart.wPct/100)*ib.w + (pt.clientX-dragStart.px);
-    newWpx = Math.max(36, newWpx);
-    cropState.wPct = (newWpx/ib.w)*100;
-    if (asp !== null) {
-      const newHpx = newWpx / asp;
-      cropState.hPct = (newHpx/ib.h)*100;
-    } else {
-      let newHpx = (dragStart.hPct/100)*ib.h + (pt.clientY-dragStart.py);
-      newHpx = Math.max(36, newHpx);
-      cropState.hPct = (newHpx/ib.h)*100;
-    }
+    resizeFromHandle(dragHandle, dxP, dyP, ib);
   }
   clampCrop();
   renderCrop();
 }
 
+/* Resize from any of the 8 handles. Corner handles resize both axes (locked
+   aspect if one is active); edge-midpoint handles resize a single axis.
+   The box's opposite edge stays anchored so dragging feels natural. */
+function resizeFromHandle(handle, dxP, dyP, ib) {
+  const asp = getLockedAspect();
+  const d0 = dragStart;
+  let left   = d0.xPct - d0.wPct/2;
+  let right  = d0.xPct + d0.wPct/2;
+  let top    = d0.yPct - d0.hPct/2;
+  let bottom = d0.yPct + d0.hPct/2;
+
+  const movesLeft   = handle.includes('l');
+  const movesRight  = handle.includes('r');
+  const movesTop    = handle.includes('t');
+  const movesBottom = handle.includes('b');
+
+  if (movesLeft)   left   = Math.min(right-4,  d0.xPct - d0.wPct/2 + dxP);
+  if (movesRight)  right  = Math.max(left+4,   d0.xPct + d0.wPct/2 + dxP);
+  if (movesTop)    top    = Math.min(bottom-4, d0.yPct - d0.hPct/2 + dyP);
+  if (movesBottom) bottom = Math.max(top+4,    d0.yPct + d0.hPct/2 + dyP);
+
+  let wPct = right-left, hPct = bottom-top;
+
+  if (asp !== null) {
+    // lock aspect: recompute the non-anchored dimension from whichever edge moved
+    const wPx = (wPct/100)*ib.w, hPx = (hPct/100)*ib.h;
+    if (handle==='t'||handle==='b') {
+      const newWpx = hPx*asp;
+      const newWpct = (newWpx/ib.w)*100;
+      const cx = d0.xPct;
+      left = cx-newWpct/2; right = cx+newWpct/2; wPct = newWpct;
+    } else if (handle==='l'||handle==='r') {
+      const newHpx = wPx/asp;
+      const newHpct = (newHpx/ib.h)*100;
+      const cy = d0.yPct;
+      top = cy-newHpct/2; bottom = cy+newHpct/2; hPct = newHpct;
+    } else {
+      // corner: derive height from width to keep aspect, anchored at opposite corner
+      const newHpx = wPx/asp;
+      const newHpct = (newHpx/ib.h)*100;
+      if (movesTop) { top = bottom-newHpct; } else { bottom = top+newHpct; }
+      hPct = newHpct;
+    }
+  }
+
+  cropState.xPct = (left+right)/2;
+  cropState.yPct = (top+bottom)/2;
+  cropState.wPct = wPct;
+  cropState.hPct = hPct;
+}
+
 function endDrag() {
-  dragMode = null;
+  dragMode = null; dragHandle = null;
   document.getElementById('cropBox').classList.remove('dragging');
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mouseup', endDrag);
   document.removeEventListener('touchmove', onDragMove);
   document.removeEventListener('touchend', endDrag);
+}
+
+/* ══ ZOOM ══ */
+function onZoomInput(v) {
+  zoomPct = parseInt(v,10);
+  document.getElementById('zoomVal').textContent = zoomPct+'%';
+  document.getElementById('cropImg').style.transform = `scale(${zoomPct/100})`;
+  renderBorderGlow(); renderCrop();
+}
+function resetZoom() {
+  zoomPct = 100;
+  document.getElementById('zoomSlider').value = 100;
+  document.getElementById('zoomVal').textContent = '100%';
+  document.getElementById('cropImg').style.transform = 'scale(1)';
+  renderBorderGlow(); renderCrop();
+}
+
+/* ══ FRAME STYLE ══ */
+const FRAME_STYLES = ['sharp','rounded','feather','polaroid','vignette','film'];
+function setFrameStyle(fs, chip) {
+  frameStyle = fs;
+  document.querySelectorAll('#frameGrid .frame-chip').forEach(c=>c.classList.remove('on'));
+  if (chip) chip.classList.add('on');
+  applyFrameStyleToCropBox();
+  const lbl = document.getElementById('prevFrameLabel');
+  if (lbl) lbl.textContent = chip ? chip.querySelector('.frame-chip-name').textContent : fs;
+}
+function applyFrameStyleToCropBox() {
+  const box = document.getElementById('cropBox');
+  if (!box) return;
+  FRAME_STYLES.forEach(fs => box.classList.remove('frame-fs-'+fs));
+  box.classList.add('frame-fs-'+frameStyle);
 }
 
 const RATIOS = {'9:16':9/16,'1:1':1,'4:5':4/5,'16:9':16/9,'3:4':3/4};
@@ -862,7 +1180,8 @@ function buildPreview() {
     vid.style.top    = topPx+'px';
     vid.style.width  = wPx+'px';
     vid.style.height = hPx+'px';
-    vid.style.borderRadius = '10px'; // smooth corners
+    FRAME_STYLES.forEach(fs => vid.classList.remove('frame-fs-'+fs));
+    vid.classList.add('frame-fs-'+frameStyle);
 
     vid.src = vidUrl;
     vid.muted = true;
@@ -880,6 +1199,8 @@ function doUpload() {
     y:      parseFloat(cropState.yPct.toFixed(4)),
     width:  parseFloat(cropState.wPct.toFixed(4)),
     height: parseFloat(cropState.hPct.toFixed(4)),
+    frameStyle: frameStyle,
+    detectConfidence: detectConfidence,
   };
   startUpload(rect);
 }
