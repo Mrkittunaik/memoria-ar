@@ -361,6 +361,42 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 .prog-fill{height:100%;border-radius:10px;background:var(--gold);width:0%;transition:width .25s ease;}
 .prog-stats{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-faint);margin-top:5px;}
 
+/* ── UPLOAD PIPELINE STEPS ── */
+.pipeline-steps{margin-top:14px;display:none;}
+.pipeline-steps.on{display:block;}
+.pipe-step{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px;color:var(--ink-muted);}
+.pipe-step+.pipe-step{border-top:.5px solid var(--border);}
+.pipe-icon{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;}
+.pipe-icon.idle{background:var(--surface-warm);border:.5px solid var(--border);}
+.pipe-icon.active{background:var(--gold-bg);border:.5px solid var(--gold);}
+.pipe-icon.done{background:var(--green-bg);border:.5px solid var(--green-light);}
+.pipe-icon.fail{background:var(--red-bg);border:.5px solid #f5b8b8;}
+.pipe-spin{width:12px;height:12px;border:1.5px solid rgba(201,147,58,.3);border-top-color:var(--gold);border-radius:50%;animation:spin .75s linear infinite;}
+.pipe-label{flex:1;}
+.pipe-label.active{color:var(--ink);font-weight:500;}
+.pipe-label.done{color:var(--green);}
+.pipe-label.fail{color:var(--red);}
+
+/* ── QUALITY REPORT ── */
+.quality-report{margin-top:16px;border:.5px solid var(--border);border-radius:var(--radius);background:var(--surface-card);overflow:hidden;display:none;}
+.quality-report.show{display:block;}
+.qr-header{padding:12px 16px;border-bottom:.5px solid var(--border);display:flex;align-items:center;gap:10px;}
+.qr-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+.qr-badge.excellent{background:var(--green-bg);color:var(--green);border:.5px solid var(--green-light);}
+.qr-badge.good{background:var(--green-bg);color:var(--green);border:.5px solid var(--green-light);}
+.qr-badge.fair{background:var(--gold-bg);color:var(--gold);border:.5px solid var(--gold-light);}
+.qr-badge.poor{background:var(--red-bg);color:var(--red);border:.5px solid #f5b8b8;}
+.qr-stars{font-size:13px;letter-spacing:1px;}
+.qr-body{padding:12px 16px;}
+.qr-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;}
+.qr-row+.qr-row{border-top:.5px solid var(--border);}
+.qr-key{color:var(--ink-muted);}
+.qr-val{font-weight:500;color:var(--ink);}
+.qr-reasons{margin-top:10px;}
+.qr-reason{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--red);background:var(--red-bg);border:.5px solid #f5b8b8;border-radius:8px;padding:8px 11px;margin-top:6px;line-height:1.5;}
+.qr-warning{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--gold);background:var(--gold-bg);border:.5px solid var(--gold-light);border-radius:8px;padding:8px 11px;margin-top:6px;line-height:1.5;}
+.qr-success{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--green);background:var(--green-bg);border:.5px solid var(--green-light);border-radius:8px;padding:10px 13px;margin-top:8px;font-weight:500;}
+
 /* ── STATUS BOXES (side panel) ── */
 .side-section{margin-bottom:18px;}
 .side-label{font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
@@ -664,6 +700,43 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
       <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
       <div class="prog-stats"><span id="progLoaded"></span><span id="progSpeed"></span></div>
     </div>
+
+    <!-- Upload pipeline status steps -->
+    <div class="pipeline-steps" id="pipelineSteps">
+      <div class="pipe-step" id="pipeUpload">
+        <div class="pipe-icon idle" id="pipeUploadIcon"></div>
+        <span class="pipe-label" id="pipeUploadLabel">Uploading files…</span>
+      </div>
+      <div class="pipe-step" id="pipeAnalyze">
+        <div class="pipe-icon idle" id="pipeAnalyzeIcon"></div>
+        <span class="pipe-label" id="pipeAnalyzeLabel">Analyzing image quality</span>
+      </div>
+      <div class="pipe-step" id="pipeSave">
+        <div class="pipe-icon idle" id="pipeSaveIcon"></div>
+        <span class="pipe-label" id="pipeSaveLabel">Saving memory</span>
+      </div>
+    </div>
+
+    <!-- Quality report shown after upload -->
+    <div class="quality-report" id="qualityReport">
+      <div class="qr-header">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink);margin-bottom:4px;">Image Quality Report</div>
+          <div id="qrBadgeRow" style="display:flex;align-items:center;gap:8px;">
+            <span class="qr-badge" id="qrBadge">–</span>
+            <span class="qr-stars" id="qrStars"></span>
+          </div>
+        </div>
+      </div>
+      <div class="qr-body">
+        <div class="qr-row"><span class="qr-key">Sharpness</span><span class="qr-val" id="qrSharpness">–</span></div>
+        <div class="qr-row"><span class="qr-key">Brightness</span><span class="qr-val" id="qrBrightness">–</span></div>
+        <div class="qr-row"><span class="qr-key">Contrast</span><span class="qr-val" id="qrContrast">–</span></div>
+        <div class="qr-row"><span class="qr-key">Resolution</span><span class="qr-val" id="qrResolution">–</span></div>
+        <div class="qr-reasons" id="qrReasons"></div>
+      </div>
+    </div>
+
     <div class="err-txt" id="err3"></div>
   </div>
 
@@ -1859,17 +1932,23 @@ function startUpload(rect) {
   const desc  = document.getElementById('memDesc').value.trim();
   const errEl = document.getElementById('err3');
   errEl.style.display = 'none';
+  document.getElementById('qualityReport').classList.remove('show');
 
-  const btn     = document.getElementById('uploadBtn');
-  const prog    = document.getElementById('progWrap');
-  const fill    = document.getElementById('progFill');
-  const loaded  = document.getElementById('progLoaded');
-  const speed   = document.getElementById('progSpeed');
+  const btn      = document.getElementById('uploadBtn');
+  const prog     = document.getElementById('progWrap');
+  const fill     = document.getElementById('progFill');
+  const loaded   = document.getElementById('progLoaded');
+  const speed    = document.getElementById('progSpeed');
+  const pipeline = document.getElementById('pipelineSteps');
 
-  btn.textContent = _retries>0 ? 'Reconnecting…' : 'Uploading…';
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin .75s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> ${_retries>0?'Reconnecting…':'Uploading…'}`;
   btn.disabled = true;
   prog.classList.add('on');
+  pipeline.classList.add('on');
   fill.style.transition = 'width .2s ease';
+  setPipeStep('Upload', 'active', 'Uploading files…');
+  setPipeStep('Analyze', 'idle', 'Analyzing image quality');
+  setPipeStep('Save', 'idle', 'Saving memory');
 
   const totalBytes = (compressedBlob||photoFile).size + videoFile.size;
   let lastLoaded=0, lastTime=performance.now();
@@ -1889,9 +1968,9 @@ function startUpload(rect) {
 
   xhr.upload.onprogress = e => {
     if (!e.lengthComputable) return;
-    const pct = Math.round((e.loaded/e.total)*70);
+    const pct = Math.round((e.loaded/e.total)*60);
     fill.style.width = pct+'%';
-    btn.textContent = `Uploading… ${pct}%`;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin .75s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Uploading… ${pct}%`;
     const now=performance.now(), dt=(now-lastTime)/1000;
     if (dt>.4) {
       const bps=(e.loaded-lastLoaded)/dt;
@@ -1902,9 +1981,11 @@ function startUpload(rect) {
   };
 
   xhr.upload.onload = () => {
-    fill.style.transition='width 1.4s ease';
-    fill.style.width='95%';
-    btn.textContent='Processing…';
+    fill.style.transition='width 1.8s ease';
+    fill.style.width='85%';
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin .75s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Analyzing…`;
+    setPipeStep('Upload', 'done', 'Files uploaded');
+    setPipeStep('Analyze', 'active', 'Analyzing image quality…');
     speed.textContent='';
   };
 
@@ -1914,15 +1995,35 @@ function startUpload(rect) {
     let json={};
     try{json=JSON.parse(xhr.responseText);}catch(_){}
     if (xhr.status<200||xhr.status>=300) {
-      let msg = json.message||'Upload failed — please try again.';
-      if (json.errors && json.errors.length) {
-        msg += ' (' + json.errors.map(e=>e.msg||e.message).join('; ') + ')';
+      setPipeStep('Upload', 'fail', 'Upload failed');
+      setPipeStep('Analyze', 'fail', 'Could not analyze');
+      setPipeStep('Save',   'fail', 'Not saved');
+      // Quality rejection (422) — display reasons from backend
+      if (xhr.status===422 && json.errors && json.errors.length) {
+        showQualityRejection(json.errors);
+        errEl.textContent = json.message || 'Photo quality is too low for reliable AR tracking.';
+      } else {
+        let msg = json.message||'Upload failed — please try again.';
+        if (json.errors && json.errors.length) {
+          msg += ' ' + json.errors.map(e=>e.msg||e.message||String(e)).join(' ');
+        }
+        errEl.textContent=msg;
       }
-      errEl.textContent=msg; errEl.style.display='block';
-      btn.textContent='Upload & Create AR Memory'; btn.disabled=false;
+      errEl.style.display='block';
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg> Upload &amp; Create AR Memory`;
+      btn.disabled=false;
       return;
     }
-    setTimeout(()=>{ window.location.href='dashboard.html?success=1'; },300);
+    // Success — show quality report then redirect
+    setPipeStep('Analyze','done','Image quality verified');
+    setPipeStep('Save','active','Saving memory…');
+    const mem = json.data || {};
+    if (mem.quality) showQualityReport(mem.quality, mem.photoWidth, mem.photoHeight);
+    setTimeout(()=>{
+      setPipeStep('Save','done','Memory saved!');
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Upload Successful — Redirecting…`;
+    }, 300);
+    setTimeout(()=>{ window.location.href='dashboard.html?success=1'; }, 1800);
   };
 
   xhr.onerror   = ()=>{ _xhr=null; retry(rect,btn,speed,'Network error.'); };
@@ -1933,8 +2034,89 @@ function startUpload(rect) {
   xhr.send(fd);
 }
 
+/* ══ PIPELINE STEP HELPERS ══ */
+function setPipeStep(key, state, label) {
+  const icon  = document.getElementById('pipe'+key+'Icon');
+  const lbl   = document.getElementById('pipe'+key+'Label');
+  if (!icon || !lbl) return;
+  icon.className = 'pipe-icon ' + state;
+  lbl.className  = 'pipe-label ' + state;
+  lbl.textContent = label;
+  if (state==='active') {
+    icon.innerHTML = '<div class="pipe-spin"></div>';
+  } else if (state==='done') {
+    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  } else if (state==='fail') {
+    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  } else {
+    icon.innerHTML = '';
+  }
+}
+
+function qualityScoreLabel(v, lo, hi) {
+  if (v >= hi) return 'Good';
+  if (v >= lo) return 'Fair';
+  return 'Low';
+}
+
+function showQualityReport(q, photoW, photoH) {
+  const el = document.getElementById('qualityReport');
+  el.classList.add('show');
+  // Badge
+  const badge = document.getElementById('qrBadge');
+  const label = (q.label||'').toLowerCase();
+  badge.textContent = q.label || '–';
+  badge.className   = 'qr-badge ' + (label||'fair');
+  // Stars
+  const stars = document.getElementById('qrStars');
+  const r = q.rating || 0;
+  stars.textContent = '★'.repeat(r) + '☆'.repeat(Math.max(0,5-r));
+  stars.style.color = r>=4?'var(--green)':r>=3?'var(--gold)':'var(--red)';
+  // Metrics
+  const sharp = q.sharpness != null ? q.sharpness.toFixed(1) : '–';
+  const bright = q.brightness != null ? q.brightness.toFixed(1) : '–';
+  const contrast = q.contrast != null ? q.contrast.toFixed(1) : '–';
+  document.getElementById('qrSharpness').textContent = sharp !== '–' ? sharp + (q.sharpness>=25?' · Good':q.sharpness>=8?' · Fair':' · Low') : '–';
+  document.getElementById('qrBrightness').textContent = bright !== '–' ? bright + (q.brightness>=90&&q.brightness<=235?' · Good':' · Fair') : '–';
+  document.getElementById('qrContrast').textContent = contrast !== '–' ? contrast + (q.contrast>=22?' · Good':q.contrast>=16?' · Fair':' · Low') : '–';
+  document.getElementById('qrResolution').textContent = (photoW && photoH) ? `${photoW} × ${photoH}` : '–';
+  // Reasons/warnings
+  const rEl = document.getElementById('qrReasons');
+  rEl.innerHTML = '';
+  (q.reasons||[]).forEach(r=>{
+    rEl.innerHTML += `<div class="qr-reason"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${r}</div>`;
+  });
+  (q.warnings||[]).forEach(w=>{
+    rEl.innerHTML += `<div class="qr-warning"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${w}</div>`;
+  });
+  if (!q.reasons?.length && !q.warnings?.length) {
+    rEl.innerHTML = `<div class="qr-success"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Image passed all quality checks — AR tracking will work well.</div>`;
+  }
+}
+
+function showQualityRejection(errors) {
+  const el = document.getElementById('qualityReport');
+  el.classList.add('show');
+  const badge = document.getElementById('qrBadge');
+  badge.textContent = 'Poor'; badge.className = 'qr-badge poor';
+  document.getElementById('qrStars').textContent = '★☆☆☆☆';
+  document.getElementById('qrStars').style.color = 'var(--red)';
+  document.getElementById('qrSharpness').textContent = '–';
+  document.getElementById('qrBrightness').textContent = '–';
+  document.getElementById('qrContrast').textContent = '–';
+  document.getElementById('qrResolution').textContent = '–';
+  const rEl = document.getElementById('qrReasons');
+  rEl.innerHTML = '';
+  const msgs = Array.isArray(errors) ? errors : [errors];
+  msgs.forEach(e=>{
+    const msg = typeof e==='string'?e:(e.msg||e.message||String(e));
+    rEl.innerHTML += `<div class="qr-reason"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${msg}</div>`;
+  });
+}
+
+
 function retry(rect,btn,speed,label) {
-  if (_cancelled) { btn.textContent='Upload & Create AR Memory'; btn.disabled=false; return; }
+  if (_cancelled) { resetUploadBtn(btn); return; }
   if (_retries<MAX_RETRIES) {
     _retries++;
     const ms = Math.min(8000, 800*Math.pow(2,_retries-1));
@@ -1943,8 +2125,14 @@ function retry(rect,btn,speed,label) {
   } else {
     document.getElementById('err3').textContent = label+' Could not reconnect after several tries.';
     document.getElementById('err3').style.display='block';
-    btn.textContent='Upload & Create AR Memory'; btn.disabled=false;
+    resetUploadBtn(btn);
   }
+}
+
+function resetUploadBtn(btn) {
+  btn = btn || document.getElementById('uploadBtn');
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg> Upload &amp; Create AR Memory`;
+  btn.disabled=false;
 }
 
 /* ══ ZONE HELPERS ══ */
