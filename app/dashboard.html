@@ -65,6 +65,12 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 .memory-meta{display:flex;align-items:center;justify-content:space-between}
 .scan-badge{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-muted);}
 .status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;}
+.quality-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin-top:6px;}
+.quality-chip.ready{background:var(--green-bg);color:var(--green);border:.5px solid var(--green-light);}
+.quality-chip.processing{background:var(--gold-bg);color:var(--gold);border:.5px solid var(--gold-light);}
+.quality-chip.rejected{background:var(--red-bg);color:var(--red);border:.5px solid #f5b8b8;}
+.quality-chip.failed{background:var(--surface-warm);color:var(--ink-faint);border:.5px solid var(--border);}
+.quality-stars{color:var(--gold);font-size:10px;letter-spacing:.5px;}
 .memory-actions{display:flex;gap:6px}
 .icon-btn{width:28px;height:28px;border-radius:6px;border:0.5px solid var(--border);background:var(--surface-warm);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;color:var(--ink-muted);}
 .icon-btn:hover{border-color:var(--ink-muted);color:var(--ink)}
@@ -421,14 +427,30 @@ function renderMemories() {
          <div class="memory-thumb-overlay"><div class="play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`
       : `<div style="color:var(--ink-faint);font-size:12px">${m.title}</div>
          <div class="memory-thumb-overlay"><div class="play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`;
+    const ps = m.processingStatus || 'ready';
+    const qLabel = m.quality && m.quality.label ? m.quality.label : '';
+    const qRating = m.quality && m.quality.rating ? m.quality.rating : 0;
+    const stars = qRating ? '★'.repeat(qRating) + '☆'.repeat(5-qRating) : '';
+    const dotColor = ps==='ready' ? 'var(--green)' : ps==='processing' ? 'var(--gold)' : 'var(--red)';
+    let chipHtml = '';
+    if (ps === 'ready') {
+      chipHtml = `<span class="quality-chip ready">✓ Ready${qLabel ? ' · '+qLabel : ''}${stars ? ' <span class="quality-stars">'+stars+'</span>' : ''}</span>`;
+    } else if (ps === 'processing') {
+      chipHtml = `<span class="quality-chip processing">⏳ Processing…</span>`;
+    } else if (ps === 'rejected') {
+      chipHtml = `<span class="quality-chip rejected">✕ Rejected — image quality too low</span>`;
+    } else {
+      chipHtml = `<span class="quality-chip failed">⚠ Upload failed</span>`;
+    }
     return `
       <div class="memory-card">
         <div class="memory-thumb-placeholder" style="position:relative">${thumb}</div>
         <div class="memory-info">
           <div class="memory-title">${m.title}</div>
           <div class="memory-date">Added ${date}</div>
-          <div class="memory-meta">
-            <div class="scan-badge"><span class="status-dot"></span>${m.scanCount || 0} scans</div>
+          ${chipHtml}
+          <div class="memory-meta" style="margin-top:8px">
+            <div class="scan-badge"><span class="status-dot" style="background:${dotColor}"></span>${m.scanCount || 0} scans</div>
             <div class="memory-actions">
               <div class="icon-btn" title="Edit video position" onclick="openPositionEditModal('${m._id}')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2"/></svg>
