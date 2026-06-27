@@ -693,6 +693,17 @@ html,body{
 <!-- FULLSCREEN VIDEO PLAYER -->
 <div id="fullscreen-player">
   <video id="fs-video" playsinline preload="auto"></video>
+  <!-- Buffering indicator — shown during waiting/stalled events on fsVideo.
+       Sits above the video but below the controls overlay. Small gold spinner
+       matches the Memoria brand; auto-hides the moment playback resumes. -->
+  <div id="fs-buffer-spinner" style="
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:48px;height:48px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.15);
+    border-top-color:var(--gold);
+    animation:spin 1s linear infinite;
+    pointer-events:none;display:none;z-index:3;
+  "></div>
 
   <div class="fs-scrim-top" id="fsScrimTop"></div>
   <div class="fs-scrim-bottom" id="fsScrimBottom"></div>
@@ -792,6 +803,46 @@ let videoTrack=null;    // current camera MediaStreamTrack (for torch control)
    sized/rotated to exactly match that poster's own on-screen rectangle —
    driven by MindAR's real per-frame tracking matrix, not a guess. */
 const arTargets=new Map();
+
+/* ============================================================
+   VIDEO CACHE — per-target HTMLVideoElement pool
+   Each target gets ONE video element created at compile time and held for
+   the entire page session. The same element is reused for the AR overlay
+   AND handed to the fullscreen player (which syncs position and takes over
+   audio), avoiding any re-fetch or re-decode on open/close.
+
+   Lifecycle per entry:
+     'idle'      — created, src set, preloading in background
+     'buffering' — canplay not yet fired, play() pending
+     'ready'     — readyState >= HAVE_FUTURE_DATA, instant play guaranteed
+     'playing'   — play() resolved, audio/video running
+     'stalled'   — waiting/stalled event fired, recovery in progress
+
+   This is also the authority on posterUrl per target — used by both the
+   AR overlay (as video.poster) and the fullscreen player.
+============================================================ */
+const _videoCache = new Map(); // targetId → { video, posterUrl, state, stallRetries }
+
+/* ============================================================
+   CONNECTION QUALITY DETECTOR
+   Samples navigator.connection (Network Information API — available on
+   Android Chrome, some Samsung browsers; undefined everywhere else) to
+   decide how aggressively to preload. On detected slow connections we
+   defer preloading non-visible targets to avoid starving the tracker's
+   own network activity. On fast/unknown connections we preload everything
+   upfront as before.
+   This is read-only — never mutates anything, just returns a string.
+============================================================ */
+function _connectionTier() {
+  const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (!c) return 'fast'; // API unavailable — assume good (desktop, iOS)
+  if (c.saveData) return 'slow';
+  const slow = ['slow-2g', '2g'];
+  const mid  = ['3g'];
+  if (slow.includes(c.effectiveType)) return 'slow';
+  if (mid.includes(c.effectiveType))  return 'mid';
+  return 'fast';
+}
 
 /* ============================================================
    PERMISSION-AWARE STARTUP
@@ -1094,7 +1145,109 @@ async function retryStartScanner() {
 let _targets = [];        // fetched once on init, cached (id, title, videoUrl, videoRect, photoWidth/Height)
 let _lastMindUrl = null;  // compiled .mind blob URL, cached so visibility-triggered rebuilds skip re-compiling
 
-/* DATA PREP ONLY — no camera involved at all here, so this can run fully in
+/* ============================================================
+   VIDEO CACHE — prime one entry per target
+   Called once per target, immediately after the targets API response.
+   Creates a single long-lived HTMLVideoElement, wires stall recovery,
+   sets the poster thumbnail, and starts buffering according to connection
+   tier and target priority (index 0 = highest priority).
+============================================================ */
+function _primeVideoCache(id, target, priority, tier) {
+  if (_videoCache.has(id)) return; // already primed (e.g. visibility rebuild)
+
+  const video = document.createElement('video');
+  video.playsInline = true;
+  video.loop        = true;
+  video.muted       = true;   // start muted — unmuted by onTargetFound
+  video.volume      = 1;
+  video.className   = 'ar-video';
+
+  // ── POSTER THUMBNAIL ────────────────────────────────────────────────────
+  // Shown while the video decodes its first frame, eliminating black flash.
+  // posterUrl comes from the backend (Cloudinary eager transform at 1s mark).
+  // Null-safe — legacy memories without posterUrl just show no poster.
+  if (target.posterUrl) {
+    video.poster = target.posterUrl;
+  }
+
+  // ── PRELOAD STRATEGY BY CONNECTION TIER ─────────────────────────────────
+  // fast: preload=auto immediately for all targets — buffer everything upfront.
+  // mid:  preload=auto for first 2 targets (most likely to be found first),
+  //       preload=metadata for the rest (gets duration/dimensions, skips bulk).
+  // slow: preload=metadata for all — user is on a constrained connection;
+  //       defer full buffering until the target is actually found.
+  if (tier === 'fast' || (tier === 'mid' && priority < 2)) {
+    video.preload = 'auto';
+  } else {
+    video.preload = 'metadata';
+  }
+
+  video.src = target.videoUrl;
+
+  // ── STALL RECOVERY ──────────────────────────────────────────────────────
+  // 'waiting' fires when playback can't continue due to insufficient buffer.
+  // 'stalled' fires when the browser has stopped trying to fetch data.
+  // Both should trigger a reload of just the video source — not the whole
+  // page — and retry play() once enough data is available.
+  // Capped at 3 retries per lost-tracking cycle to avoid infinite spin on
+  // a truly dead URL.
+  const cacheEntry = { video, posterUrl: target.posterUrl || null, state: 'idle', stallRetries: 0 };
+  _videoCache.set(id, cacheEntry);
+
+  let _stallTimer = null;
+  const onStall = () => {
+    if (cacheEntry.stallRetries >= 3) return; // give up after 3 attempts
+    clearTimeout(_stallTimer);
+    _stallTimer = setTimeout(() => {
+      if (video.paused || video.readyState >= 3) return; // recovered on its own
+      cacheEntry.stallRetries++;
+      cacheEntry.state = 'stalled';
+      // Save position, reload, seek back, retry play
+      const t = video.currentTime;
+      video.load();
+      video.addEventListener('canplay', () => {
+        video.currentTime = t;
+        video.play().catch(() => {});
+      }, { once: true });
+    }, 2500); // wait 2.5s before intervening — browser often self-recovers
+  };
+  video.addEventListener('waiting', onStall);
+  video.addEventListener('stalled', onStall);
+
+  // Reset stall counter on successful play — so a new detection cycle gets
+  // a fresh 3 retries rather than inheriting exhausted count from before.
+  video.addEventListener('playing', () => {
+    cacheEntry.stallRetries = 0;
+    cacheEntry.state = 'playing';
+    clearTimeout(_stallTimer);
+  });
+  video.addEventListener('canplay',     () => { if (cacheEntry.state === 'idle' || cacheEntry.state === 'buffering') cacheEntry.state = 'ready'; });
+  video.addEventListener('loadeddata',  () => { if (cacheEntry.state === 'idle') cacheEntry.state = 'ready'; });
+
+  video.addEventListener('error', () => {
+    const e = video.error;
+    console.error('[Memoria] video load error', id, { code: e?.code, message: e?.message });
+  });
+
+  // ── FIRST-FRAME DECODE KICK ──────────────────────────────────────────────
+  // On slow-preload targets, kick a partial buffer load once compilation
+  // finishes — we have the CPU then (compilation is done), and it's better
+  // to decode the first frame now while idle than on the hot-path of first
+  // target detection. On fast/mid we're already buffering via preload=auto.
+  if (tier === 'slow' || (tier === 'mid' && priority >= 2)) {
+    // Stagger by priority index to avoid simultaneous requests flooding a
+    // slow connection — each target gets 1s breathing room after the previous.
+    setTimeout(() => {
+      video.preload = 'auto';
+      video.load();
+    }, priority * 1200);
+  }
+
+  video.load();
+}
+
+/* ============================================================
+   DATA PREP ONLY — no camera involved at all here, so this can run fully in
    parallel with the user just looking at their instant preview. Fetches
    target metadata + photos from the backend and compiles them into one
    .mind dataset, exactly as before, just no longer entangled with camera
@@ -1127,21 +1280,14 @@ async function fetchAndCompileTargets() {
   const mindBuffer = compiler.exportData();
   const mindBlob = new Blob([mindBuffer]);
 
-  // Preload all videos — start buffering BEFORE compilation finishes so videos
-  // are ready the instant the first target is found. Using <link rel=preload>
-  // in the document head lets the browser's preload scanner fetch these in
-  // parallel with JS execution, unlike a JS-only video element approach.
-  // Falls back to the existing in-memory video element approach on older browsers.
-  _targets.forEach(t => {
-    // link preload hint — browser may fetch this in parallel with compilation
-    try {
-      const link = document.createElement('link');
-      link.rel = 'preload'; link.as = 'video'; link.href = t.videoUrl;
-      document.head.appendChild(link);
-    } catch (_) {}
-    // in-memory video element as fallback / secondary buffer
-    const v = document.createElement('video');
-    v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
+  // ── PRIME THE VIDEO CACHE ──────────────────────────────────────────────
+  // Create one HTMLVideoElement per target NOW (while compilation runs or
+  // immediately after), wire all playback-quality listeners, and start
+  // buffering based on connection quality. The AR overlay and fullscreen
+  // player will both REUSE these elements rather than ever creating new ones.
+  const tier = _connectionTier();
+  _targets.forEach((t, idx) => {
+    _primeVideoCache(String(t.id), t, idx, tier);
   });
 
   // Cached so a later visibility-triggered rebuild (see handleVisibilityChange
@@ -1754,39 +1900,29 @@ function spawnArTarget(id, targetIndex, target, anchor){
   const inner=document.createElement('div');
   inner.className='ar-video-inner';
 
-  const video=document.createElement('video');
-  video.className='ar-video';
-  video.loop=true; video.playsInline=true;
-  // ── ALWAYS-ON SOUND POLICY ───────────────────────────────────────────
-  // Requirement: every AR poster video must play WITH sound, every time,
-  // with no "stays silent until some unrelated tap" fallback state. Some
-  // browsers still legally block the very first autoplay-with-sound call
-  // before any user gesture exists on the page at all (this is a real OS/
-  // browser policy, not something any web page can bypass outright). So:
-  // this starts muted=true ONLY as the technical bootstrap value for that
-  // exact first frame, but onTargetFound() below immediately tries to play
-  // UNMUTED first — not muted — and if that single attempt is blocked, it
-  // keeps retrying unmuted on every subsequent user interaction (tap/scroll/
-  // touch anywhere) until it succeeds, rather than ever treating "muted"
-  // as an acceptable resting state. In practice: once the user has tapped
-  // anything on the page even once this session (extremely common — they
-  // just opened the camera permission prompt), sound plays immediately on
-  // first detection with no silent gap at all.
-  video.muted = true;
-  video.volume = 1;
-  video.preload = 'auto';
-  video.src = target.videoUrl;
-  // DIAGNOSTIC — if a video genuinely never plays (vs. just delayed by
-  // buffering), this is what tells you why: wrong videoUrl, dead backend
-  // link, CORS block, or an unsupported codec/container on this device.
-  // Without this, "video not playing" gave zero signal to debug from.
-  video.addEventListener('error', () => {
-    const mediaErr = video.error;
-    console.error('[Memoria] AR video failed to load', id, target.videoUrl, {
-      code: mediaErr && mediaErr.code, message: mediaErr && mediaErr.message,
+  // ── REUSE CACHED VIDEO ELEMENT ───────────────────────────────────────────
+  // Pull the pre-buffered element from _videoCache rather than creating a
+  // new one. This element has been loading since fetchAndCompileTargets ran,
+  // so by the time a poster is first detected it typically already has
+  // readyState >= HAVE_FUTURE_DATA and can start playing on the first frame.
+  const cacheEntry = _videoCache.get(id);
+  const video = cacheEntry ? cacheEntry.video : (() => {
+    // Fallback: cache miss (shouldn't happen in normal flow, but safe)
+    const v = document.createElement('video');
+    v.className='ar-video'; v.loop=true; v.playsInline=true;
+    v.muted=true; v.volume=1; v.preload='auto';
+    if (target.posterUrl) v.poster = target.posterUrl;
+    v.src=target.videoUrl;
+    v.addEventListener('error', () => {
+      const e = v.error;
+      console.error('[Memoria] AR video failed to load', id, { code: e?.code, message: e?.message });
     });
-  });
-  video.load();
+    v.load();
+    return v;
+  })();
+
+  // Ensure the video element has the correct class for AR overlay sizing
+  video.className = 'ar-video';
   inner.appendChild(video);
   wrapper.appendChild(inner);
 
@@ -1983,26 +2119,27 @@ function onTargetFound(id){
   // sizing diagnostics removed — debug only
 
   // ── ALWAYS-ON SOUND: try UNMUTED first, every single time ───────────
-  // This is the actual fix for "sound must always play" — previously the
-  // poster video only ever attempted a muted play() and waited for an
-  // unrelated tap elsewhere to unmute it, which meant the first few
-  // seconds (or the whole clip, if no stray tap ever happened) played
-  // silently. Now: the moment a poster is found, we attempt play() with
-  // sound ON. Browsers that already consider this page "activated" by a
-  // prior user gesture (camera permission prompt, any earlier tap — the
-  // overwhelmingly common case on a phone) allow this immediately, so
-  // sound starts on frame one with zero silent gap.
-  // Only if THAT exact attempt is rejected (NotAllowedError — the
-  // browser's autoplay-with-sound policy hasn't seen a gesture yet this
-  // session) do we fall back to a muted play so the video itself still
-  // starts on time, and arm a persistent retry that keeps trying to
-  // switch it to unmuted sound on every subsequent tap/touch — not just
-  // once — until it actually succeeds. "Muted" is never treated as a
-  // final state, only ever a one-frame bridge.
+  // Attempt play() unmuted immediately. Browsers that have seen a prior
+  // user gesture (the camera permission tap — overwhelmingly common) allow
+  // this immediately with zero silent gap. If blocked (NotAllowedError),
+  // fall back to muted play and arm persistent retry on every subsequent tap.
+  // "Muted" is never a resting state — only a one-frame bridge.
+
+  // ── UPGRADE PRELOAD ON DETECTION ────────────────────────────────────────
+  // If this target was given preload=metadata on a slow connection, the
+  // moment it's actually found we bump it to 'auto' so full buffering starts
+  // immediately. This means the video has full buffer within a few seconds
+  // of the poster being in frame — the expected dwell time for a scanned photo.
+  if (entry.video.preload !== 'auto') {
+    entry.video.preload = 'auto';
+    // Force the browser to act on the new preload value
+    if (entry.video.readyState < 2) entry.video.load();
+  }
+
   const tryPlay = () => {
     entry.video.muted = false;
     entry.video.play().then(() => {
-      // Unmuted play succeeded — sound is on, nothing further to do.
+      // Unmuted play succeeded — done.
     }).catch((err) => {
       console.warn('[Memoria] unmuted play() blocked, falling back to muted-then-retry', id, err && err.name);
       entry.video.muted = true;
@@ -2012,14 +2149,30 @@ function onTargetFound(id){
       armUnmuteOnNextTap();
     });
   };
-  if (entry.video.readyState >= 2) {
+
+  // readyState >= 3 (HAVE_FUTURE_DATA) means the browser has enough data
+  // ahead of current position to play without immediately stalling — a
+  // meaningfully stronger guarantee than >= 2 (HAVE_CURRENT_DATA) which
+  // only means the current frame is available. Using >= 3 prevents the
+  // one-frame-then-stall pattern on first play of a large 1080p clip.
+  if (entry.video.readyState >= 3) {
     tryPlay();
   } else {
-    entry.video.addEventListener('canplay', tryPlay, { once: true });
-    // Safety net: if 'canplay' never fires (e.g. truly broken/dead URL —
-    // the 'error' listener in spawnArTarget will log why), don't leave a
-    // dangling listener forever once the poster is no longer being tracked.
-    setTimeout(() => entry.video.removeEventListener('canplay', tryPlay), 8000);
+    // Wait for canplaythrough (enough to play to end without buffering)
+    // or canplay (enough to start) — whichever fires first. canplaythrough
+    // is the gold standard but may take longer on slow connections; canplay
+    // is acceptable for starting, and the stall recovery in _primeVideoCache
+    // handles any mid-play stall that follows.
+    const onReady = () => {
+      entry.video.removeEventListener('canplaythrough', onReady);
+      entry.video.removeEventListener('canplay', onReady);
+      tryPlay();
+    };
+    entry.video.addEventListener('canplaythrough', onReady, { once: true });
+    entry.video.addEventListener('canplay', onReady, { once: true });
+    // No arbitrary timeout here — if the video never fires canplay,
+    // the error listener in _primeVideoCache already logged why, and
+    // leaving a dangling listener is preferable to retrying blindly.
   }
   logScan(id);
   refreshStatusPill();
@@ -2083,9 +2236,21 @@ function onTargetLost(id){
     if(!entry.visible){
       entry.inner.classList.remove('visible','losing');
       entry.inner.style.opacity = '';
+      // Pause but DO NOT clear src or call load() — the buffer stays warm
+      // so re-detection (very common: user glances away briefly) can resume
+      // from the same position without any re-buffer delay.
+      // Mute while hidden to save battery; onTargetFound will unmute again.
       entry.video.pause();
+      entry.video.muted = true;
+      // Reset to start of clip so re-detection always begins from the
+      // beginning rather than mid-clip (looped videos reset to 0 anyway,
+      // but non-looped ones would resume mid-clip, which looks odd on
+      // short ceremony clips). Only reset if the clip has actually played
+      // for more than 1s — avoids resetting a video that stalled before
+      // it could even start.
+      if (entry.video.currentTime > 1) entry.video.currentTime = 0;
     }
-  }, 180); // matches the new fast LOST_HOLD_MAX_MS (130ms) + a small safety margin — was 4250ms, which is now far too slow and would leave audio playing for seconds after the video has already visually vanished
+  }, 180);
   refreshStatusPill();
 }
 
@@ -2141,6 +2306,41 @@ window.switchCamera = switchCamera;
    FULLSCREEN PLAYER — Netflix / Hotstar style
 ============================================================ */
 const fsVideo = document.getElementById('fs-video');
+const _fsBufSpinner = document.getElementById('fs-buffer-spinner');
+
+// ── FULLSCREEN BUFFERING INDICATOR ────────────────────────────────────────
+// Show spinner when fsVideo stalls/waits, hide when playback resumes.
+// This eliminates the silent "frozen frame" that used to appear during
+// any mid-video buffer stall — the user now sees Memoria's gold spinner
+// rather than a black/frozen image with no feedback.
+function _showFsBuf()  { if (_fsBufSpinner) _fsBufSpinner.style.display = 'block'; }
+function _hideFsBuf()  { if (_fsBufSpinner) _fsBufSpinner.style.display = 'none';  }
+fsVideo.addEventListener('waiting',    _showFsBuf);
+fsVideo.addEventListener('stalled',    _showFsBuf);
+fsVideo.addEventListener('playing',    _hideFsBuf);
+fsVideo.addEventListener('canplay',    _hideFsBuf);
+fsVideo.addEventListener('seeked',     _hideFsBuf);
+
+// ── FULLSCREEN STALL RECOVERY ─────────────────────────────────────────────
+// If fsVideo stalls for more than 3s (network issue, not just normal
+// buffering), save position + reload source from current time. This mirrors
+// the AR-layer stall recovery in _primeVideoCache but is specific to the
+// fullscreen context where the user is actively watching.
+let _fsStalledTimer = null;
+fsVideo.addEventListener('waiting', () => {
+  clearTimeout(_fsStalledTimer);
+  _fsStalledTimer = setTimeout(() => {
+    if (fsVideo.paused || fsVideo.readyState >= 3) return;
+    const t = fsVideo.currentTime;
+    fsVideo.load();
+    fsVideo.addEventListener('canplay', () => {
+      fsVideo.currentTime = t;
+      fsVideo.play().catch(()=>{});
+    }, { once: true });
+  }, 3000);
+});
+fsVideo.addEventListener('playing', () => clearTimeout(_fsStalledTimer));
+fsVideo.addEventListener('seeked',  () => clearTimeout(_fsStalledTimer));
 let fsControlsTimer=null;
 let fsWasMuted=false;
 let fsScrubbing=false;
@@ -2215,27 +2415,46 @@ function openFullscreen(targetId){
     fsPlayer.style.setProperty('--fs-origin-scale', '0.3');
   }
 
-  // ── INSTANT-OPEN FIX (no re-buffer lag) ────────────────────────────────
-  // Previously this always set fsVideo.src = entry.video.currentSrc, which
-  // looks harmless but actually forces the browser to start a BRAND NEW
-  // network fetch + decode pipeline for fs-video — even though entry.video
-  // (the AR-layer clip) had already been playing and fully buffering that
-  // exact same file for the last several seconds. On a real connection that
-  // shows up as exactly "click full view → stuck/spinner/black frame for a
-  // moment" because fs-video starts from zero buffered bytes every time.
-  // Fix: only assign a new .src if fs-video doesn't already have this exact
-  // source loaded (covers first-ever open, or opening a different target
-  // than was last shown fullscreen) — if it's the SAME url already loaded
-  // from a previous open, skip the reassignment entirely and just seek,
-  // which is instant since the decode pipeline + buffer are already warm.
-  const targetSrc = entry.video.currentSrc || entry.video.src || '';
+  // ── INSTANT-OPEN: no re-fetch, no re-decode ──────────────────────────────
+  // The AR-layer video (entry.video) has been buffering since targets loaded.
+  // The fullscreen player (fsVideo) is a SEPARATE element that shares the same
+  // source URL. We want to hand off the playback position without triggering
+  // a new network fetch.
+  //
+  // Strategy: if fsVideo already has the same src loaded from a previous open
+  // of this same target, skip the src reassignment entirely — just seek, which
+  // is instant since the buffer is warm. If it's a different target or first
+  // open, set src once and call load(). Either way, the AR video's current
+  // playback position is synced across so the fullscreen open feels like a
+  // continuous zoom in, not a restart.
+  //
+  // Poster: set fsVideo.poster to the target's posterUrl BEFORE play() so the
+  // first visible frame of the fullscreen open is the thumbnail rather than a
+  // black screen. This covers the 50–200ms between open animation start and
+  // first decoded video frame, which previously showed solid black.
+  const cacheEntry = _videoCache.get(targetId);
+  const targetSrc  = entry.video.currentSrc || entry.video.src || '';
+
+  // Set poster immediately — visible during the grow-open animation before
+  // the video element has painted its first decoded frame.
+  if (cacheEntry?.posterUrl) {
+    fsVideo.poster = cacheEntry.posterUrl;
+  } else {
+    fsVideo.poster = '';
+  }
+
   if (fsVideo.src !== targetSrc) {
     fsVideo.src = targetSrc;
     fsVideo.load();
   }
   fsVideo.muted = false;
-  fsVideo.currentTime = entry.video.currentTime || 0;
+  // Sync position from AR video — user sees continuity, not a restart.
+  // Guard isFinite: if currentTime is NaN (video hasn't decoded yet), 0 is
+  // the correct fallback and avoids a DOMException on seek.
+  const syncTime = entry.video.currentTime;
+  if (isFinite(syncTime)) fsVideo.currentTime = syncTime;
   entry.video.pause();
+  entry.video.muted = true; // silence AR layer — fsVideo has audio now
 
   // Remove any in-flight closing state from a previous open/close cycle,
   // then add 'open' on the NEXT frame so the browser registers the starting
@@ -2258,14 +2477,23 @@ function closeFullscreen(e){
   fsVideo.pause();
   const entry=fsOpenTargetId && arTargets.get(fsOpenTargetId);
   if(entry){
-    // Carry the fullscreen playback position back to the AR-layer video —
-    // without this, scrubbing or just watching further in fullscreen would
-    // make the AR video visibly jump BACKWARD on close (it resumes from
-    // wherever it paused before fullscreen opened, not from where playback
-    // actually left off), which reads as "stuck"/broken sync on return.
+    // Carry the fullscreen playback position back to the AR-layer video.
+    // Without this, the AR video would resume from where it paused before
+    // fullscreen opened (could be seconds or minutes behind where the user
+    // watched to), which looks like a broken sync on return.
     if (isFinite(fsVideo.currentTime)) entry.video.currentTime = fsVideo.currentTime;
+    // Unmute: AR video handles its own sound; it was muted when fullscreen
+    // opened (see openFullscreen), restore that now for the tracking loop.
+    entry.video.muted = false;
     entry.video.play().catch(()=>{});
+    // Re-prime the buffer: if the user scrubbed forward in fullscreen,
+    // the AR video's pre-load buffer may not cover the new position.
+    // Setting preload=auto and calling load() restarts buffering from the
+    // current position, so the buffer is warm again before the next detection.
+    if (entry.video.preload !== 'auto') entry.video.preload = 'auto';
   }
+  // Clear poster so next open shows fresh poster for whatever target opens next
+  fsVideo.poster = '';
   fsOpenTargetId=null;
   startScanLoop(); // resume detection
 
