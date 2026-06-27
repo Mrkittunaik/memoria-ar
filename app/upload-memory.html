@@ -1246,6 +1246,16 @@ function attachVideoToBorder() {
   const A=toScreen(borderCorners.A), B=toScreen(borderCorners.B),
         C=toScreen(borderCorners.C), D=toScreen(borderCorners.D);
 
+  if (cropMode === 'free') {
+    // Free mode renders straight from videoCorners (a true independent
+    // quad), not cropState — so attach there directly, corner-for-corner,
+    // or the button would silently do nothing visible.
+    videoCorners = { A, B, C, D };
+    showToast('Video attached to all 4 corners ✓');
+    renderCrop();
+    return;
+  }
+
   const cx = (A.x+B.x+C.x+D.x)/4, cy = (A.y+B.y+C.y+D.y)/4;
   const wTop = Math.hypot(B.x-A.x, B.y-A.y);
   const wBot = Math.hypot(C.x-D.x, C.y-D.y);
