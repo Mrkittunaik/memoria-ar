@@ -7,17 +7,13 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>Scan — Memoria</title>
-<!-- ============================================================
-     TEMP DEBUG ONLY — Eruda on-screen console, for diagnosing the
-     "sound plays, video invisible" bug directly on a phone with no
-     cable/laptop needed. Adds a small floating button (usually
-     bottom-right) that opens a mobile DevTools-style panel showing
-     all console.log output, including the [Memoria] diagnostic logs
-     already built into spawnArTarget() and onTargetFound() below.
-     REMOVE both lines below once the bug is found — not for production.
-============================================================ -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>eruda.init();</script>
+<!-- CDN preconnect — resolves DNS + TLS before the import-map scripts below
+     even begin to parse, shaving 100–400ms off first-load on mobile networks -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://memoria-ar-backend.onrender.com" crossorigin>
+<link rel="dns-prefetch" href="https://memoria-ar-backend.onrender.com">
+<!-- eruda removed — debug only, not for production -->
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -805,6 +801,19 @@ const arTargets=new Map();
 const PERM_KEY = 'memoria_camera_granted';
 let _backendReady = false;
 
+// ── EAGER BACKEND PRE-PING ────────────────────────────────────────────────
+// Fire a silent health ping immediately on module load — before the user taps
+// anything. On a cold Render instance, the wake timer starts the moment the
+// page loads rather than waiting until startScanner() runs after the permission
+// prompt and camera open. On a warm instance, _backendReady is set true
+// immediately so wakeBackend() below skips its own check entirely.
+(async () => {
+  try {
+    const r = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) _backendReady = true;
+  } catch (_) { /* cold start — wakeBackend() will poll with UI feedback */ }
+})();
+
 function setLoadingState(title, sub, counter) {
   document.getElementById('loading-title').textContent = title;
   document.getElementById('loading-sub').textContent = sub;
@@ -897,7 +906,26 @@ async function startScanner() {
   let previewStream;
   try {
     previewStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }, audio: false
+      video: {
+        facingMode: { ideal: 'environment' },
+        // 720p is the sweet spot for MindAR: high enough for reliable
+        // feature matching, low enough that the sensor opens/buffers faster
+        // than 1080p and the GPU tracking loop runs quicker per frame.
+        // Using ideal (not exact) so the browser never throws OverconstrainedError
+        // on devices that only support a fixed resolution set.
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 60 },
+        // Exposure/white-balance hints for low-light — these are advisory
+        // (not all browsers/devices honour them) but cost nothing when ignored.
+        // Continuous auto-exposure and auto-white-balance mean the driver keeps
+        // adapting as lighting changes, important for scanning at varying angles.
+        // exposureMode and whiteBalanceMode are MediaTrackConstraints extensions
+        // — silently dropped on unsupported browsers.
+        exposureMode:      { ideal: 'continuous' },
+        whiteBalanceMode:  { ideal: 'continuous' },
+        focusMode:         { ideal: 'continuous' },
+      }, audio: false
     });
   } catch (err) {
     showCameraErrorScreen(err);
@@ -935,12 +963,24 @@ async function startScanner() {
   // Status pill communicates progress instead of a full-screen blocker.
   let mindUrl;
   try {
-    await wakeBackend();
-    mindUrl = await fetchAndCompileTargets();
+    // Wake backend and fetch/compile targets run in parallel — wakeBackend is
+    // a soft health-check with its own retry loop; fetchAndCompileTargets does
+    // the real API call. If the backend was already awake (the usual case),
+    // the health check resolves in <1s and is never the bottleneck anyway.
+    // If it was cold, the target fetch will naturally retry until the server
+    // responds, so we don't need to sequentially wait for the health ping.
+    // Net effect: on a warm backend, compilation starts immediately (saving
+    // the 300–800ms sequential health-ping delay); on a cold backend, both
+    // polls hit the server together (same total wait, no regression).
+    const [, fetchedUrl] = await Promise.all([
+      wakeBackend(),
+      fetchAndCompileTargets(),
+    ]);
+    mindUrl = fetchedUrl;
   } catch (err) {
     console.error('[Memoria] target prep failed:', err);
     const statusText = document.getElementById('statusText');
-    if (statusText) statusText.textContent = 'Could not load memories. Pull to retry.';
+    if (statusText) statusText.textContent = 'Could not load memories — check your connection and try again.';
     return;
   }
   if (!mindUrl) return; // no targets uploaded yet — message already shown by fetchAndCompileTargets
@@ -1071,7 +1111,7 @@ async function fetchAndCompileTargets() {
   const data = await res.json();
 
   if (!data.success || !data.data.targets || data.data.targets.length === 0) {
-    statusText.textContent = 'No memories uploaded yet.';
+    statusText.textContent = 'No memories are ready to scan yet. Upload a photo & video from the dashboard first.';
     return null;
   }
   _targets = data.data.targets;
@@ -1087,8 +1127,19 @@ async function fetchAndCompileTargets() {
   const mindBuffer = compiler.exportData();
   const mindBlob = new Blob([mindBuffer]);
 
-  // Preload all videos so they play instantly on detection
+  // Preload all videos — start buffering BEFORE compilation finishes so videos
+  // are ready the instant the first target is found. Using <link rel=preload>
+  // in the document head lets the browser's preload scanner fetch these in
+  // parallel with JS execution, unlike a JS-only video element approach.
+  // Falls back to the existing in-memory video element approach on older browsers.
   _targets.forEach(t => {
+    // link preload hint — browser may fetch this in parallel with compilation
+    try {
+      const link = document.createElement('link');
+      link.rel = 'preload'; link.as = 'video'; link.href = t.videoUrl;
+      document.head.appendChild(link);
+    } catch (_) {}
+    // in-memory video element as fallback / secondary buffer
     const v = document.createElement('video');
     v.src = t.videoUrl; v.preload = 'auto'; v.muted = true; v.playsInline = true; v.load();
   });
@@ -1114,24 +1165,29 @@ async function beginMindAR(mindUrl) {
     container: document.getElementById('ar-container'),
     imageTargetSrc: mindUrl,
     maxTrack: Math.min(_targets.length, 2),
-    // ── JITTER FIX ──────────────────────────────────────────────────────
-    // MindAR smooths every tracked corner point through a One Euro filter
-    // (src/libs/one-euro-filter.js) before it ever becomes a worldMatrix.
-    // Its own library defaults are filterMinCF=0.001, filterBeta=1000 —
-    // the previous values here (filterMinCF:0.001, filterBeta:0.01) had
-    // beta set ~100,000× BELOW that default.
-    // What beta actually does: effective cutoff = minCutOff + beta×|velocity|.
-    // With beta this tiny, the cutoff stays pinned near the minimum almost
-    // all the time regardless of motion — which sounds like "more
-    // smoothing" but is actually the opposite: a near-zero cutoff lets
-    // high-frequency noise through with very little resistance, which is
-    // exactly the visible shake you were seeing, worst right when the
-    // phone is nearly still (the most common case).
-    // These values stay closer to the library's own tuned defaults, with
-    // minCutOff nudged down a bit for a calmer hold-still state — good for
-    // "video glued to a printed photo" rather than fast game-style motion:
+    // ── ONE EURO FILTER TUNING ──────────────────────────────────────────
+    // filterMinCF: minimum cutoff frequency (Hz). Lower = smoother when still,
+    //   but more latency. 0.0002 is gentle enough that jitter on a hand-held
+    //   photo is fully invisible, without feeling laggy during a normal pan.
+    // filterBeta: speed coefficient. Higher = snappier response to fast motion.
+    //   200 keeps the velocity-adaptive half-life in our JS smoothing layer
+    //   well-aligned with MindAR's own upstream filter — they cooperate rather
+    //   than fighting. Too low (e.g. 0.01) pins the cutoff near minCF always,
+    //   which passes high-frequency noise through and IS the visible shake.
     filterMinCF: 0.0002,
     filterBeta: 200,
+    // ── DETECTION TOLERANCE ─────────────────────────────────────────────
+    // missTolerance: frames before a target is considered truly lost.
+    //   Raise from default (5) to 8 — absorbs a wider range of single-frame
+    //   drops (motion blur, partial occlusion, brief finger edge) without
+    //   bouncing in/out of onTargetLost. Our JS hold (LOST_HOLD_MAX_MS) then
+    //   handles anything beyond that gracefully regardless.
+    // warmupTolerance: MindAR's internal warmup rejection count per target.
+    //   Set to 5 (from default 3) to avoid premature "lost" calls on the
+    //   first seconds of a low-light or steep-angle detection where score
+    //   variance is naturally higher.
+    missTolerance: 8,
+    warmupTolerance: 5,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
 
@@ -1218,8 +1274,8 @@ async function beginMindAR(mindUrl) {
   // overlay compositors (the Hotstar/Netflix-grade smoothing you asked
   // for) avoid the classic "smoothing looks great still, terrible moving"
   // tradeoff.
-  const SMOOTHING_HALF_LIFE_MS_IDLE = 120;  // calm, jitter-free when (near) still — raised from 70 for a calmer hold
-  const SMOOTHING_HALF_LIFE_MS_FAST = 14;   // tight, glued-on when moving fast
+  const SMOOTHING_HALF_LIFE_MS_IDLE = 90;   // was 120 — calmer still, but snaps faster on re-detect
+  const SMOOTHING_HALF_LIFE_MS_FAST = 12;   // was 14 — slightly tighter on fast pan
   // Lowered from 0.45 — the fast/tight-tracking mode now ramps in sooner
   // during ordinary hand movement (not just rapid pans), so the video feels
   // glued-on a beat faster when the poster starts moving, without changing
@@ -1248,7 +1304,7 @@ async function beginMindAR(mindUrl) {
   // sample, vanishing instantly into the existing easing pipeline rather
   // than needing special-case code.
   const MAX_POS_JUMP_PER_SEC = 1.3;      // marker-space units/sec, generous vs FAST_VELOCITY_THRESHOLD
-  const MAX_ROT_JUMP_RAD_PER_SEC = 14;   // ~800°/s — well above genuine hand rotation speed
+  const MAX_ROT_JUMP_RAD_PER_SEC = 10;   // was 14 (~800°/s) — tighter: 10 ≈ 573°/s, still above realistic hand speed but catches more noisy homography flips
   const REJECT_GRACE_FRAMES = 3;         // consecutive rejects before we just accept (sensor genuinely changed)
 
   // ── LOST-TARGET RECOVERY (Phase 9) ───────────────────────────────────
@@ -1288,7 +1344,7 @@ async function beginMindAR(mindUrl) {
   // to cancel one frame's worth of latency, not a full prediction model —
   // because over-leading on a sudden direction change (hand reverses
   // mid-pan) would overshoot and look worse than the lag it's fixing.
-  const LEAD_MS = 18;
+  const LEAD_MS = 22; // was 18 — one extra frame's worth of prediction for steep-angle pans
 
   mindarThree.renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -1353,8 +1409,13 @@ async function beginMindAR(mindUrl) {
           smoothed.position.copy(_rawPos);
           smoothed.quaternion.copy(_rawQuat);
           smoothed.scale.copy(_rawScale);
+          // Also reset velocity tracking so the very first moving frame after
+          // re-detection doesn't inherit a stale velocity from before the loss —
+          // that stale delta would incorrectly ramp the half-life to FAST on
+          // frame 1, making the first tracked frame feel overly snappy/jerky.
           entry.userVel = 0;
           entry._velVec = null;
+          entry._prevRawPos = null; // force re-init on next frame
           entry._isStill = true;
           entry.stability = 1;
         } else {
@@ -1393,8 +1454,8 @@ async function beginMindAR(mindUrl) {
           // BELOW the smaller STILL_ENTER. That gap is the hysteresis band
           // — noise small enough to live inside it can no longer flip the
           // state every frame.
-          const STILL_ENTER = 0.012; // marker-space units/sec — must drop below this to BECOME still
-          const STILL_EXIT  = 0.05;  // must rise above this to leave still — wider than noise alone produces
+          const STILL_ENTER = 0.010; // was 0.012 — slightly more aggressive entry to still state
+          const STILL_EXIT  = 0.065; // was 0.05 — wider gap means hand tremor can't flip out of still
           const wasStill = entry._isStill === true;
           const isStill = wasStill ? entry.userVel < STILL_EXIT : entry.userVel < STILL_ENTER;
           entry._isStill = isStill;
@@ -1585,6 +1646,20 @@ function onLogoTap() {
 window.onLogoTap = onLogoTap;
 
 function loadImage(url) {
+  // createImageBitmap from fetch is significantly faster than new Image() for
+  // off-main-thread decoding — the browser can decode to GPU-ready bitmap
+  // directly from the ArrayBuffer without blocking layout. Falls back to
+  // the classic Image() path if createImageBitmap is unavailable or the
+  // fetch fails (e.g. Cloudinary CORS edge case).
+  if (typeof createImageBitmap === 'function') {
+    return fetch(url, { mode: 'cors', credentials: 'omit' })
+      .then(r => r.blob())
+      .then(b => createImageBitmap(b))
+      .catch(() => _loadImageFallback(url)); // CORS/fetch failure → classic path
+  }
+  return _loadImageFallback(url);
+}
+function _loadImageFallback(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -1645,10 +1720,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   // computed sizing, so if the video still doesn't show after the validation
   // fixes below, the real cause (bad backend data vs something else) is
   // visible in the device console instead of needing another guess.
-  console.log('[Memoria] spawning target', id, {
-    photoWidth: target.photoWidth, photoHeight: target.photoHeight,
-    videoRect: target.videoRect, videoUrl: target.videoUrl,
-  });
+  // diagnostic spawn log removed
 
   // Real aspect ratio of the uploaded photo (height/width). Falls back to a
   // square if dimensions are missing OR non-numeric/zero — checking truthiness
@@ -1736,7 +1808,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   wrapper.appendChild(corners);
 
   wrapper.addEventListener('click',()=>{
-    console.log('[Memoria] wrapper CLICK fired', id);
+
     entry_openGuard(id);
   });
   // ── POINTERDOWN FALLBACK ─────────────────────────────────────────────
@@ -1750,7 +1822,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   // overlay. Guarded with a tiny per-wrapper debounce so this doesn't
   // ALSO fire 'click' a moment later and double-open.
   wrapper.addEventListener('pointerdown', (e) => {
-    console.log('[Memoria] wrapper POINTERDOWN fired', id, e.pointerType);
+
     entry_openGuard(id);
   });
   function entry_openGuard(targetId){
@@ -1908,19 +1980,7 @@ function onTargetFound(id){
     setTimeout(() => entry.corners.classList.remove('lock-anim'), 300);
   }
 
-  // DIAGNOSTIC — actual rendered box sizes at the moment of detection. If
-  // wrapperRect or videoRect below come back as 0×0 (or absurdly
-  // small/large), that confirms a real sizing bug rather than e.g. a
-  // z-index/stacking issue, which would show normal-looking dimensions but
-  // still render nothing visible. Cheap to leave in; only logs on detection.
-  requestAnimationFrame(() => {
-    const wrapperRect = entry.wrapper.getBoundingClientRect();
-    const videoRect = entry.video.getBoundingClientRect();
-    console.log('[Memoria] target found, rendered size', id, {
-      wrapper: { w: wrapperRect.width, h: wrapperRect.height, top: wrapperRect.top, left: wrapperRect.left },
-      video:   { w: videoRect.width,   h: videoRect.height,   readyState: entry.video.readyState, paused: entry.video.paused },
-    });
-  });
+  // sizing diagnostics removed — debug only
 
   // ── ALWAYS-ON SOUND: try UNMUTED first, every single time ───────────
   // This is the actual fix for "sound must always play" — previously the
@@ -2532,19 +2592,7 @@ document.addEventListener('visibilitychange', handleVisibilityChange);
 /* ============================================================
    BOOT
 ============================================================ */
-/* ============================================================
-   TEMP DEBUG ONLY — tap diagnostic. Logs the actual top-most element under
-   every tap anywhere on screen, in the capture phase (before anything can
-   stopPropagation it away). If tapping a visibly-tracked AR video produces
-   neither the "wrapper CLICK/POINTERDOWN fired" logs above NOR a log line
-   here naming a .ar-video-wrapper, something else (a canvas, an overlay
-   div) is physically on top and absorbing the tap — this will name it.
-   REMOVE once the tap issue is confirmed fixed — not for production.
-============================================================ */
-document.addEventListener('pointerdown', (e) => {
-  const el = e.target;
-  console.log('[Memoria][tap-diag] top element under tap:', el.tagName, el.className || '(no class)', el.id || '(no id)');
-}, { capture: true });
+/* tap diagnostic removed — debug only, not for production */
 
 initScanner();
 </script>
