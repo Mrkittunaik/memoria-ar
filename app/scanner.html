@@ -617,7 +617,8 @@ html,body{
 }
 </script>
 <!-- Two MindAR bundles are needed:
-     - mindar-image.prod.js       → exposes window.MINDAR.IMAGE.Compiler (used to compile .mind data on the fly)
+     - mindar-image.prod.js       → exposes window.MINDAR.IMAGE.Compiler (used for Compiler.mergeTargets() to
+                                    combine pre-built .mind files; no on-device image compile runs anymore)
      - mindar-image-three.prod.js → exposes window.MINDAR.IMAGE.MindARThree (the camera+tracking+render wrapper)
      Loading only the -three bundle (as an earlier version of this file did) leaves Compiler
      undefined, which throws immediately inside beginMindAR() — that was the actual bug
@@ -1171,12 +1172,18 @@ function _primeVideoCache(id, target, priority, tier) {
   }
 
   // ── PRELOAD STRATEGY BY CONNECTION TIER ─────────────────────────────────
-  // fast: preload=auto immediately for all targets — buffer everything upfront.
-  // mid:  preload=auto for first 2 targets (most likely to be found first),
-  //       preload=metadata for the rest (gets duration/dimensions, skips bulk).
-  // slow: preload=metadata for all — user is on a constrained connection;
-  //       defer full buffering until the target is actually found.
-  if (tier === 'fast' || (tier === 'mid' && priority < 2)) {
+  // lazy: preload=none for ALL targets regardless of connection speed.
+  //   No video connections open on scanner start. Buffering begins only in
+  //   onTargetFound when the poster is actually in frame. The poster thumbnail
+  //   (CDN JPEG set above) covers the gap before the first frame decodes.
+  //   This is the default tier — avoids opening 10/50/100 simultaneous video
+  //   connections on scanner open which would saturate a mobile connection.
+  // fast: preload=auto for all — only used if explicitly passed (legacy path).
+  // mid:  preload=auto for first 2 targets, metadata for the rest.
+  // slow: preload=metadata for all.
+  if (tier === 'lazy') {
+    video.preload = 'none';
+  } else if (tier === 'fast' || (tier === 'mid' && priority < 2)) {
     video.preload = 'auto';
   } else {
     video.preload = 'metadata';
@@ -1230,20 +1237,18 @@ function _primeVideoCache(id, target, priority, tier) {
   });
 
   // ── FIRST-FRAME DECODE KICK ──────────────────────────────────────────────
-  // On slow-preload targets, kick a partial buffer load once compilation
-  // finishes — we have the CPU then (compilation is done), and it's better
-  // to decode the first frame now while idle than on the hot-path of first
-  // target detection. On fast/mid we're already buffering via preload=auto.
-  if (tier === 'slow' || (tier === 'mid' && priority >= 2)) {
-    // Stagger by priority index to avoid simultaneous requests flooding a
-    // slow connection — each target gets 1s breathing room after the previous.
-    setTimeout(() => {
-      video.preload = 'auto';
-      video.load();
-    }, priority * 1200);
+  // For lazy tier: do nothing here — onTargetFound handles buffering start.
+  // For slow/mid tiers (legacy): stagger a partial buffer load by priority
+  // so we don't flood a slow connection with simultaneous requests.
+  if (tier !== 'lazy') {
+    if (tier === 'slow' || (tier === 'mid' && priority >= 2)) {
+      setTimeout(() => {
+        video.preload = 'auto';
+        video.load();
+      }, priority * 1200);
+    }
+    video.load();
   }
-
-  video.load();
 }
 
 /* ============================================================
@@ -1263,38 +1268,38 @@ async function fetchAndCompileTargets() {
   if (!res.ok) throw new Error(`Backend ${res.status}`);
   const data = await res.json();
 
-  if (!data.success || !data.data.targets || data.data.targets.length === 0) {
+  if (!data.success || !data.data.targets || data.data.targets.length === 0 || !data.data.mergedMindUrl) {
     statusText.textContent = 'No memories are ready to scan yet. Upload a photo & video from the dashboard first.';
     return null;
   }
+
   _targets = data.data.targets;
+  const mergedMindUrl = data.data.mergedMindUrl;
 
-  statusText.textContent = `Preparing AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+  // ── SINGLE MERGED .mind FETCH ──────────────────────────────────────────────
+  // The backend pre-merged all targets into one .mind file at upload time
+  // and stored it on Cloudinary CDN. One HTTP request regardless of how many
+  // memories exist. No on-device compile, no per-photo download, no CPU work.
+  statusText.textContent = `Loading AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
 
-  const { Compiler } = window.MINDAR.IMAGE;
-  const compiler = new Compiler();
-  const images = await Promise.all(_targets.map(t => loadImage(t.photoUrl)));
-  await compiler.compileImageTargets(images, (progress) => {
-    statusText.textContent = `Preparing AR tracking… ${Math.round(progress)}%`;
-  });
-  const mindBuffer = compiler.exportData();
-  const mindBlob = new Blob([mindBuffer]);
+  const mindRes = await fetch(mergedMindUrl);
+  if (!mindRes.ok) throw new Error(`Failed to fetch merged .mind: ${mindRes.status}`);
+  await mindRes.arrayBuffer(); // consume — MindARThree will re-fetch via imageTargetSrc URL
 
-  // ── PRIME THE VIDEO CACHE ──────────────────────────────────────────────
-  // Create one HTMLVideoElement per target NOW (while compilation runs or
-  // immediately after), wire all playback-quality listeners, and start
-  // buffering based on connection quality. The AR overlay and fullscreen
-  // player will both REUSE these elements rather than ever creating new ones.
-  const tier = _connectionTier();
+  statusText.textContent = 'AR ready';
+
+  // ── LAZY VIDEO CACHE ────────────────────────────────────────────────────────────
+  // All videos start with preload='none'. No video connections open on
+  // scanner start. Buffering only begins when a target is actually detected
+  // (onTargetFound upgrades preload to 'auto'). The poster thumbnail shows
+  // immediately from CDN so there is no black frame gap.
   _targets.forEach((t, idx) => {
-    _primeVideoCache(String(t.id), t, idx, tier);
+    _primeVideoCache(String(t.id), t, idx, 'lazy');
   });
 
-  // Cached so a later visibility-triggered rebuild (see handleVisibilityChange
-  // below) can reconstruct mindarThree without re-fetching/re-compiling —
-  // that work only needs to happen once per page load, not every time the
-  // user locks their phone and comes back.
-  _lastMindUrl = URL.createObjectURL(mindBlob);
+  // Cache the merged CDN URL so a visibility-triggered rebuild (phone lock/
+  // unlock) can hand the same URL to a fresh MindARThree without re-fetching.
+  _lastMindUrl = mergedMindUrl;
   return _lastMindUrl;
 }
 
