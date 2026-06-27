@@ -466,7 +466,7 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
       <button class="mode-tab" data-m="ratio" onclick="setMode('ratio',this)">By ratio</button>
       <button class="mode-tab" data-m="free" onclick="setMode('free',this)">Free crop</button>
     </div>
-    <button class="btn" style="width:100%;margin-bottom:12px;font-size:12px;padding:8px 0;" onclick="attachVideoToBorder()">
+    <button class="btn" id="attachBtn" style="width:100%;margin-bottom:12px;font-size:12px;padding:8px 0;" onclick="attachVideoToBorder()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
       Attach video to all 4 corners of border
     </button>
@@ -506,7 +506,12 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
         <div class="border-toggle-label">Fix photo border</div>
         <div class="border-toggle-sub">Drag the green corners to match the print exactly</div>
       </div>
-      <div class="toggle-switch" id="borderToggle" onclick="toggleBorderEdit()"></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="rotate-btn" id="rescanBtn" onclick="rescanBorder()" title="Re-run auto detection">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <div class="toggle-switch" id="borderToggle" onclick="toggleBorderEdit()"></div>
+      </div>
     </div>
 
     <div class="crop-wrap" id="cropWrap" style="height:460px;">
@@ -801,7 +806,10 @@ function detectBorder(url, blob, natW, natH) {
 
     if (result) {
       // result.corners are in 0..SW / 0..SH pixel space, in our own local
-      // frame centered on the region — convert to % of the full image
+      // frame centered on the region — convert to % of the full image.
+      // This is the photo's own (pre-rotation) frame — correct home for
+      // borderCorners, since they render inside #rotateLayer and get
+      // auto-rotated by CSS along with the photo.
       const cnv = k => ({ x:(result.center.x+result.corners[k].x)/SW*100, y:(result.center.y+result.corners[k].y)/SH*100 });
       borderCorners = { A:cnv('A'), B:cnv('B'), C:cnv('C'), D:cnv('D') };
 
@@ -812,10 +820,25 @@ function detectBorder(url, blob, natW, natH) {
       detectedBorder = { xPct:minXpct, yPct:minYpct, wPct:maxXpct-minXpct, hPct:maxYpct-minYpct };
       detectConfidence = result.confidence;
 
+      // The video crop box renders in SCREEN space (outside #rotateLayer),
+      // so its position/rotation must be derived from where the border
+      // corners actually APPEAR on screen right now — rotate them around
+      // the image center by photoRotation first, same fix as
+      // attachVideoToBorder(). On first-ever detection photoRotation is 0,
+      // so this is a no-op for the common case.
+      const rad = photoRotation*Math.PI/180, rcos=Math.cos(rad), rsin=Math.sin(rad);
+      const toScreen = c => { const dx=c.x-50, dy=c.y-50; return { x:50+dx*rcos-dy*rsin, y:50+dx*rsin+dy*rcos }; };
+      const sA=toScreen(borderCorners.A), sB=toScreen(borderCorners.B),
+            sC=toScreen(borderCorners.C), sD=toScreen(borderCorners.D);
+      const scx=(sA.x+sB.x+sC.x+sD.x)/4, scy=(sA.y+sB.y+sC.y+sD.y)/4;
+      const swTop=Math.hypot(sB.x-sA.x,sB.y-sA.y), swBot=Math.hypot(sC.x-sD.x,sC.y-sD.y);
+      const shLeft=Math.hypot(sD.x-sA.x,sD.y-sA.y), shRight=Math.hypot(sC.x-sB.x,sC.y-sB.y);
+      const sAngle=Math.atan2(sB.y-sA.y, sB.x-sA.x)*(180/Math.PI);
+
       cropState = {
-        xPct:(minXpct+maxXpct)/2, yPct:(minYpct+maxYpct)/2,
-        wPct:maxXpct-minXpct, hPct:maxYpct-minYpct,
-        ratioKey:'auto', rotation: result.angleSigned,
+        xPct:scx, yPct:scy,
+        wPct:(swTop+swBot)/2, hPct:(shLeft+shRight)/2,
+        ratioKey:'auto', rotation: parseFloat(sAngle.toFixed(2)),
       };
 
       const tier = detectConfidence>=75?'high':detectConfidence>=45?'mid':'low';
@@ -1095,7 +1118,20 @@ function clampCrop() {
    corners. Works for a tilted border too — rotation is inferred from the
    A→B edge angle, size/center from the resulting rectangle. */
 function attachVideoToBorder() {
-  const A=borderCorners.A, B=borderCorners.B, C=borderCorners.C, D=borderCorners.D;
+  // borderCorners live in the photo's own (pre-rotation) % coordinate frame.
+  // The video box renders in screen space (outside the rotated photo layer),
+  // so first rotate each corner around the image center (50,50) by
+  // photoRotation to get where they actually appear on screen right now —
+  // otherwise both the position and angle would be wrong whenever the photo
+  // has been rotated before attaching.
+  const rad = photoRotation*Math.PI/180, cos=Math.cos(rad), sin=Math.sin(rad);
+  const toScreen = c => {
+    const dx=c.x-50, dy=c.y-50;
+    return { x: 50+dx*cos-dy*sin, y: 50+dx*sin+dy*cos };
+  };
+  const A=toScreen(borderCorners.A), B=toScreen(borderCorners.B),
+        C=toScreen(borderCorners.C), D=toScreen(borderCorners.D);
+
   const cx = (A.x+B.x+C.x+D.x)/4, cy = (A.y+B.y+C.y+D.y)/4;
   const wTop = Math.hypot(B.x-A.x, B.y-A.y);
   const wBot = Math.hypot(C.x-D.x, C.y-D.y);
@@ -1248,12 +1284,53 @@ function renderBorderQuad() {
   });
 }
 
+function rescanBorder() {
+  if (editBorderMode) return; // don't rescan mid-manual-edit, would discard their drag
+  const img = document.getElementById('cropImg');
+  const natW = img.naturalWidth, natH = img.naturalHeight;
+  if (!natW || !natH) return;
+  const btn = document.getElementById('rescanBtn');
+  btn.disabled = true; btn.style.opacity = '0.5';
+  const url = URL.createObjectURL(compressedBlob || photoFile);
+  detectBorder(url, compressedBlob || photoFile, natW, natH);
+  // detectBorder runs async (img.onload) — give it a moment, then re-render
+  // everything and re-enable the button. checkReady() inside detectBorder
+  // already re-renders the pill/info text; we just need the visual refresh.
+  const poll = setInterval(() => {
+    if (!document.getElementById('photoOverlay').classList.contains('on')) {
+      clearInterval(poll);
+      renderBorderGlow(); renderBorderQuad();
+      applyImgTransform(); renderCrop();
+      btn.disabled = false; btn.style.opacity = '1';
+      showToast('Border re-scanned ✓');
+    }
+  }, 150);
+}
+
 function toggleBorderEdit() {
   editBorderMode = !editBorderMode;
   document.getElementById('borderToggle').classList.toggle('on', editBorderMode);
   document.getElementById('cropHint').textContent = editBorderMode
     ? 'Drag the green A/B/C/D corners to match the printed card exactly'
     : (cropMode==='auto' ? (detectedBorder?'Auto-fitted to detected border · drag to fine-tune':'No border detected — full photo fit · drag to adjust') : document.getElementById('cropHint').textContent);
+
+  // Only one editor is interactive at a time — fixes the confusing case
+  // where the video box and the border corners could both be dragged at
+  // once. Editing the border dims/locks the video box (and vice versa);
+  // you can't drag both at the same moment.
+  const videoBox = document.getElementById(surfaceIds().box);
+  if (videoBox) {
+    videoBox.style.pointerEvents = editBorderMode ? 'none' : 'auto';
+    videoBox.style.opacity = editBorderMode ? '0.35' : '1';
+  }
+  // disable the mode tabs / attach button while fixing the border, since
+  // those all act on the video box and would be confusing mid-border-edit
+  document.querySelectorAll('#modeTabs .mode-tab, #attachBtn').forEach(el => {
+    el.disabled = editBorderMode;
+    el.style.opacity = editBorderMode ? '0.45' : '1';
+    el.style.pointerEvents = editBorderMode ? 'none' : 'auto';
+  });
+
   renderBorderQuad();
 }
 
