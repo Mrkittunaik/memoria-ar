@@ -56,7 +56,7 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 }
 .drop-zone:hover{border-color:var(--gold);background:var(--gold-bg)}
 .drop-zone.drag{border-color:var(--gold);background:var(--gold-bg)}
-.drop-zone.has-file{border-color:var(--green);background:var(--green-bg);border-style:solid}
+.drop-zone.has-file{border-color:var(--green);background:var(--green-bg);border-style:solid;overflow:visible;}
 .drop-zone.errored{border-color:var(--red);background:var(--red-bg)}
 .zone-icon{width:46px;height:46px;border-radius:11px;border:.5px solid var(--gold-light);background:var(--gold-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
 .drop-zone.has-file .zone-icon{background:var(--green-bg);border-color:var(--green-light);}
@@ -64,6 +64,40 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 .zone-name{font-size:13px;font-weight:500;color:var(--ink);}
 .zone-sub{font-size:12px;color:var(--ink-muted);}
 .zone-hint{font-size:11px;color:var(--ink-faint);}
+
+/* ── VIDEO RESOLUTION BADGE (click-to-reveal) ── */
+.res-badge{
+  position:absolute;top:8px;right:8px;z-index:4;
+  display:flex;align-items:center;gap:4px;
+  background:rgba(20,18,16,.78);color:#f3ead9;
+  border:none;border-radius:7px;padding:4px 8px 4px 6px;
+  font-size:10.5px;font-weight:600;letter-spacing:.01em;
+  cursor:pointer;backdrop-filter:blur(3px);
+  transition:background .15s, transform .15s;
+}
+.res-badge:hover{background:rgba(20,18,16,.92);transform:scale(1.03);}
+.res-badge svg{flex-shrink:0;opacity:.85;}
+.res-badge.open{background:var(--gold);color:#2a1d0e;}
+
+.res-popover{
+  position:absolute;top:34px;right:8px;z-index:5;
+  background:var(--surface-card);border:1px solid var(--border);
+  border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);
+  padding:10px 12px;min-width:168px;
+  font-size:11.5px;color:var(--ink);
+  opacity:0;transform:translateY(-4px) scale(.97);pointer-events:none;
+  transition:opacity .15s, transform .15s;
+}
+.res-popover.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;}
+.res-popover-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;}
+.res-popover-row + .res-popover-row{border-top:.5px solid var(--border);}
+.res-popover-label{color:var(--ink-faint);font-weight:500;}
+.res-popover-val{font-weight:700;color:var(--ink);}
+.res-popover-aspect{
+  margin-top:6px;padding-top:6px;border-top:.5px solid var(--border);
+  font-size:10px;color:var(--ink-faint);text-align:center;
+}
+.res-popover-aspect b{color:var(--gold);font-weight:700;}
 
 /* ── SCAN ANIM ── */
 .scan-overlay{
@@ -437,6 +471,16 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
         <div class="zone-sub" id="videoSub">Click or drag &amp; drop</div>
         <div class="zone-hint" id="videoHint">MP4, MOV, WebM · max 500MB</div>
         <div id="videoPill"></div>
+        <button type="button" class="res-badge" id="videoResBadge" style="display:none;" onclick="toggleResBadge(event)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <span id="videoResBadgeText">—</span>
+        </button>
+        <div class="res-popover" id="videoResPopover" onclick="event.stopPropagation()">
+          <div class="res-popover-row"><span class="res-popover-label">Resolution</span><span class="res-popover-val" id="resPopRes">—</span></div>
+          <div class="res-popover-row"><span class="res-popover-label">Duration</span><span class="res-popover-val" id="resPopDur">—</span></div>
+          <div class="res-popover-row"><span class="res-popover-label">File size</span><span class="res-popover-val" id="resPopSize">—</span></div>
+          <div class="res-popover-aspect" id="resPopAspect"></div>
+        </div>
       </div>
       <input type="file" id="videoIn" accept="video/*" style="display:none" onchange="onVideoFile(this)"/>
     </div>
@@ -666,6 +710,7 @@ const API = 'https://memoria-ar-backend.onrender.com';
 let photoFile = null, compressedBlob = null;
 let videoFile = null;
 let photoW = 0, photoH = 0, videoW = 0, videoH = 0;
+let videoDurationSec = null;
 let detectedBorder = null; // {xPct,yPct,wPct,hPct} - axis-aligned bounding box from auto-detect
 let detectConfidence = 0;  // 0-100
 
@@ -972,6 +1017,73 @@ function detectQuadBorder(px, SW, SH) {
 }
 
 /* ══ VIDEO LOAD ══ */
+/* ══ VIDEO RESOLUTION BADGE ══ */
+function populateResBadge(w, h, durationSec, fileSizeBytes) {
+  const badge = document.getElementById('videoResBadge');
+  const badgeText = document.getElementById('videoResBadgeText');
+  if (!w || !h) { badge.style.display='none'; return; }
+  badge.style.display = 'flex';
+  badgeText.textContent = `${w}×${h}`;
+
+  document.getElementById('resPopRes').textContent = `${w}×${h}px`;
+  document.getElementById('resPopDur').textContent = durationSec!=null ? formatDuration(durationSec) : '—';
+  document.getElementById('resPopSize').textContent = fmt(fileSizeBytes);
+
+  const tier = qualityTier(w, h);
+  const ratioLabel = niceAspectRatio(w, h);
+  document.getElementById('resPopAspect').innerHTML =
+    `<b>${tier}</b> · ${ratioLabel} aspect ratio`;
+}
+
+function formatDuration(sec) {
+  const m = Math.floor(sec/60), s = Math.round(sec%60);
+  return m>0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function qualityTier(w, h) {
+  const longEdge = Math.max(w,h);
+  if (longEdge >= 3840) return '4K';
+  if (longEdge >= 2560) return 'QHD';
+  if (longEdge >= 1920) return 'Full HD';
+  if (longEdge >= 1280) return 'HD';
+  return 'SD';
+}
+
+/* Matches the video's true ratio to the nearest common name (16:9, 9:16,
+   1:1, 4:3, 3:4, 4:5, 21:9) within a small tolerance, otherwise shows the
+   exact simplified ratio. */
+function niceAspectRatio(w, h) {
+  const r = w/h;
+  const KNOWN = [
+    {label:'16:9', v:16/9}, {label:'9:16', v:9/16}, {label:'1:1', v:1},
+    {label:'4:3', v:4/3}, {label:'3:4', v:3/4}, {label:'4:5', v:4/5},
+    {label:'21:9', v:21/9}, {label:'3:2', v:3/2}, {label:'2:3', v:2/3},
+  ];
+  for (const k of KNOWN) { if (Math.abs(r-k.v)/k.v < 0.03) return k.label; }
+  const g = gcd(w,h);
+  return `${w/g}:${h/g}`;
+}
+function gcd(a,b){ return b===0 ? a : gcd(b, a%b); }
+
+function toggleResBadge(e) {
+  e.stopPropagation(); // never let this bubble up to the drop-zone's file-picker click
+  const pop = document.getElementById('videoResPopover');
+  const badge = document.getElementById('videoResBadge');
+  const willShow = !pop.classList.contains('show');
+  pop.classList.toggle('show', willShow);
+  badge.classList.toggle('open', willShow);
+}
+
+// click anywhere else on the page closes the popover
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('videoResPopover');
+  if (!pop) return;
+  if (!pop.classList.contains('show')) return;
+  if (e.target.closest('#videoResBadge') || e.target.closest('#videoResPopover')) return;
+  pop.classList.remove('show');
+  document.getElementById('videoResBadge').classList.remove('open');
+});
+
 function loadVideo(file) {
   if (!file.type.startsWith('video/')) { showZoneError('video','Not a video file'); return; }
   if (file.size > 500*1024*1024) { showZoneError('video','Video must be under 500MB'); return; }
@@ -998,7 +1110,8 @@ function loadVideo(file) {
     if (settled) return;
     settled = true; clearTimeout(safetyTimer);
     videoW = tmp.videoWidth; videoH = tmp.videoHeight;
-    const dur = isNaN(tmp.duration)?'':` · ${Math.round(tmp.duration)}s`;
+    videoDurationSec = isNaN(tmp.duration) ? null : tmp.duration;
+    const dur = videoDurationSec!=null ? ` · ${Math.round(videoDurationSec)}s` : '';
     URL.revokeObjectURL(url);
     document.getElementById('videoOverlay').classList.remove('on');
     setZoneDone('video', file.name, fmt(file.size));
@@ -1006,6 +1119,7 @@ function loadVideo(file) {
     document.getElementById('videoPill').innerHTML = `<div class="detect-pill ok">✓ ${videoW}×${videoH}${dur}</div>`;
     document.getElementById('videoMeta').innerHTML =
       `<strong>${file.name}</strong><br>${videoW}×${videoH}px${dur} · ${fmt(file.size)}`;
+    populateResBadge(videoW, videoH, videoDurationSec, file.size);
     checkReady();
   };
   tmp.onerror = () => {
