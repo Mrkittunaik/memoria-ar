@@ -1269,7 +1269,13 @@ async function fetchAndCompileTargets() {
   const data = await res.json();
 
   if (!data.success || !data.data.targets || data.data.targets.length === 0 || !data.data.mergedMindUrl) {
-    statusText.textContent = 'No memories are ready to scan yet. Upload a photo & video from the dashboard first.';
+    // Distinguish: nothing uploaded vs tracking still compiling
+    const totalTargets = data.data?.totalTargets ?? 0;
+    if (totalTargets === 0) {
+      statusText.textContent = 'No memories uploaded yet. Add a photo & video from the dashboard to get started.';
+    } else {
+      statusText.textContent = 'AR tracking is still compiling — check back in a minute, then refresh the scanner.';
+    }
     return null;
   }
 
