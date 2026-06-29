@@ -358,6 +358,15 @@ let deleteTargetId = null;
 
 loadAll();
 
+// Show success toast if redirected from upload
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('success') === '1') {
+    history.replaceState({}, '', 'dashboard.html');
+    setTimeout(() => showToast('🎉 Memory uploaded! AR tracking is compiling in the background.'), 600);
+  }
+})();
+
 async function loadAll() {
   await Promise.all([loadMemories(), loadStats()]);
 }
@@ -369,6 +378,14 @@ async function loadMemories() {
     memories = json.data || [];
     renderMemories();
     updateStatCards();
+    // Auto-refresh while any memory is still compiling AR tracking
+    const stillCompiling = memories.some(m =>
+      m.tracking && (m.tracking.status === 'generating' || m.tracking.status === 'not_generated') && m.processingStatus === 'ready'
+    );
+    if (stillCompiling) {
+      clearTimeout(window._trackPollTimer);
+      window._trackPollTimer = setTimeout(() => loadMemories(), 8000);
+    }
   } catch(e) {
     document.getElementById('memoriesGrid').innerHTML =
       '<div style="color:var(--red);font-size:13px;padding:20px 0">Failed to load memories. Is the backend running?</div>';
@@ -429,8 +446,8 @@ function renderMemories() {
          <div class="memory-thumb-overlay"><div class="play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`;
     const ps = m.processingStatus || 'ready';
     const qLabel = m.quality && m.quality.label ? m.quality.label : '';
-    const qRating = m.quality && m.quality.rating ? m.quality.rating : 0;
-    const stars = qRating ? '★'.repeat(qRating) + '☆'.repeat(5-qRating) : '';
+    const qRating = (m.quality && typeof m.quality.rating === 'number') ? m.quality.rating : 0;
+    const stars = qRating > 0 ? '★'.repeat(qRating) + '☆'.repeat(Math.max(0, 5-qRating)) : '';
     const dotColor = ps==='ready' ? 'var(--green)' : ps==='processing' ? 'var(--gold)' : 'var(--red)';
     let chipHtml = '';
     if (ps === 'ready') {
@@ -442,6 +459,18 @@ function renderMemories() {
     } else {
       chipHtml = `<span class="quality-chip failed">⚠ Upload failed</span>`;
     }
+
+    // AR tracking sub-badge — only shown when quality passed but AR compile is still running
+    const ts = m.tracking && m.tracking.status ? m.tracking.status : 'not_generated';
+    let trackHtml = '';
+    if (ps === 'ready') {
+      if (ts === 'not_generated' || ts === 'generating') {
+        trackHtml = `<span class="quality-chip processing" style="margin-top:4px;font-size:10px">⚙ AR tracking compiling…</span>`;
+      } else if (ts === 'failed') {
+        trackHtml = `<span class="quality-chip failed" style="margin-top:4px;font-size:10px">⚠ AR compile failed</span>`;
+      }
+      // 'ready' tracking → no badge needed, card is fully ready
+    }
     return `
       <div class="memory-card">
         <div class="memory-thumb-placeholder" style="position:relative">${thumb}</div>
@@ -449,6 +478,7 @@ function renderMemories() {
           <div class="memory-title">${m.title}</div>
           <div class="memory-date">Added ${date}</div>
           ${chipHtml}
+          ${trackHtml}
           <div class="memory-meta" style="margin-top:8px">
             <div class="scan-badge"><span class="status-dot" style="background:${dotColor}"></span>${m.scanCount || 0} scans</div>
             <div class="memory-actions">
