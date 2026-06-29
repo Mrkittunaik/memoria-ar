@@ -691,7 +691,7 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 
     <div class="btn-row">
       <button class="btn" onclick="goStep2()">← Back to crop tools</button>
-      <button class="btn btn-dark" id="uploadBtn" onclick="doUpload()">
+      <button class="btn btn-dark" id="uploadBtn" onclick="doUpload().catch(e=>{console.error(e);})">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
         Upload &amp; Create AR Memory
       </button>
@@ -703,6 +703,10 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
 
     <!-- Upload pipeline status steps -->
     <div class="pipeline-steps" id="pipelineSteps">
+      <div class="pipe-step" id="pipeTrack">
+        <div class="pipe-icon idle" id="pipeTrackIcon"></div>
+        <span class="pipe-label" id="pipeTrackLabel">Compiling AR tracking data</span>
+      </div>
       <div class="pipe-step" id="pipeUpload">
         <div class="pipe-icon idle" id="pipeUploadIcon"></div>
         <span class="pipe-label" id="pipeUploadLabel">Uploading files…</span>
@@ -714,10 +718,6 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
       <div class="pipe-step" id="pipeSave">
         <div class="pipe-icon idle" id="pipeSaveIcon"></div>
         <span class="pipe-label" id="pipeSaveLabel">Saving memory</span>
-      </div>
-      <div class="pipe-step" id="pipeTrack">
-        <div class="pipe-icon idle" id="pipeTrackIcon"></div>
-        <span class="pipe-label" id="pipeTrackLabel">Compiling AR tracking data</span>
       </div>
     </div>
 
@@ -1885,10 +1885,8 @@ function onPhotoRotateInput2(v) {
 }
 
 /* ══ UPLOAD ══ */
-function doUpload() {
+async function doUpload() {
   _cancelled=false; _retries=0;
-  // Video box's own 4 corners, computed from its center/size/rotation —
-  // these are what actually get matched to the photo border's A/B/C/D corners
   const videoCorners = computeRotatedBoxCorners(cropState);
   const rect = {
     ratio:  cropState.ratioKey,
@@ -1899,13 +1897,82 @@ function doUpload() {
     rotation: parseFloat((cropState.rotation||0).toFixed(2)),
     frameStyle: frameStyle,
     detectConfidence: detectConfidence,
-    // exact corner-to-corner attachment, % of original (unrotated) photo —
-    // A=top-left, B=top-right, C=bottom-right, D=bottom-left, both clockwise
     photoBorderCorners: roundCorners(borderCorners),
     videoCorners: roundCorners(videoCorners),
     photoRotation: parseFloat(photoRotation.toFixed(2)),
   };
-  startUpload(rect);
+
+  // ── STEP: Compile .mind file in browser before upload ──────────────────
+  const btn      = document.getElementById('uploadBtn');
+  const prog     = document.getElementById('progWrap');
+  const fill     = document.getElementById('progFill');
+  const pipeline = document.getElementById('pipelineSteps');
+  const errEl    = document.getElementById('err3');
+
+  errEl.style.display = 'none';
+  document.getElementById('qualityReport').classList.remove('show');
+  btn.disabled = true;
+  prog.classList.add('on');
+  pipeline.classList.add('on');
+  fill.style.transition = 'width .2s ease';
+
+  // Show compile step first
+  setPipeStep('Upload',  'idle', 'Uploading files…');
+  setPipeStep('Analyze', 'idle', 'Analyzing image quality');
+  setPipeStep('Save',    'idle', 'Saving memory');
+  setPipeStep('Track',   'active', 'Compiling AR tracking data…');
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin .75s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Compiling AR tracking…`;
+  fill.style.width = '10%';
+
+  let mindBlob = null;
+  try {
+    mindBlob = await compileMindFile(compressedBlob || photoFile, fill);
+    setPipeStep('Track', 'done', 'AR tracking compiled');
+    fill.style.width = '25%';
+  } catch (compileErr) {
+    console.warn('[Upload] Client .mind compile failed:', compileErr.message, '— uploading without .mind');
+    setPipeStep('Track', 'fail', 'AR tracking compile failed — will retry later');
+    // Don't block the upload — proceed without the .mind file
+    // The dashboard will show "AR compile failed" badge
+  }
+
+  startUpload(rect, mindBlob);
+}
+
+// ── Compile a photo file into a .mind binary using MindAR's browser Compiler ──
+// Loads MindAR dynamically (it's already in the scanner, but not on this page).
+// Returns a Blob containing the .mind binary.
+async function compileMindFile(photoFile, fillEl) {
+  // Dynamically load MindAR compiler script if not already loaded
+  if (!window.MINDAR?.IMAGE?.Compiler) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load MindAR compiler'));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Load the photo into an HTMLImageElement
+  const imgUrl = URL.createObjectURL(photoFile);
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('Failed to load photo for AR compile'));
+    el.src = imgUrl;
+  });
+
+  // Compile using MindAR
+  const compiler = new window.MINDAR.IMAGE.Compiler();
+  await compiler.compileImageTargets([img], (progress) => {
+    // progress is 0-1 — map to fill 10% → 25%
+    if (fillEl) fillEl.style.width = (10 + progress * 15) + '%';
+  });
+
+  URL.revokeObjectURL(imgUrl);
+  const buffer = compiler.exportData();
+  return new Blob([buffer], { type: 'application/octet-stream' });
 }
 
 function roundCorners(c) {
@@ -1931,7 +1998,7 @@ function computeRotatedBoxCorners(box) {
   };
 }
 
-function startUpload(rect) {
+function startUpload(rect, mindBlob) {
   const title = document.getElementById('memTitle').value.trim();
   const desc  = document.getElementById('memDesc').value.trim();
   const errEl = document.getElementById('err3');
@@ -1954,7 +2021,7 @@ function startUpload(rect) {
   setPipeStep('Analyze', 'idle', 'Analyzing image quality');
   setPipeStep('Save', 'idle', 'Saving memory');
 
-  const totalBytes = (compressedBlob||photoFile).size + videoFile.size;
+  const totalBytes = (compressedBlob||photoFile).size + videoFile.size + (mindBlob ? mindBlob.size : 0);
   let lastLoaded=0, lastTime=performance.now();
 
   const fd = new FormData();
@@ -1966,6 +2033,7 @@ function startUpload(rect) {
   if (detectedBorder) fd.append('detectedBorder', JSON.stringify(detectedBorder));
   if (videoW) fd.append('videoWidth',  String(videoW));
   if (videoH) fd.append('videoHeight', String(videoH));
+  if (mindBlob) fd.append('mindFile', mindBlob, 'target.mind');
 
   const xhr = new XMLHttpRequest();
   _xhr = xhr;
@@ -2037,8 +2105,8 @@ function startUpload(rect) {
     setTimeout(()=>{ window.location.href='dashboard.html?success=1'; }, 2200);
   };
 
-  xhr.onerror   = ()=>{ _xhr=null; retry(rect,btn,speed,'Network error.'); };
-  xhr.ontimeout = ()=>{ _xhr=null; retry(rect,btn,speed,'Upload timed out.'); };
+  xhr.onerror   = ()=>{ _xhr=null; retry(rect,mindBlob,btn,speed,'Network error.'); };
+  xhr.ontimeout = ()=>{ _xhr=null; retry(rect,mindBlob,btn,speed,'Upload timed out.'); };
   xhr.onabort   = ()=>{ _xhr=null; };
   xhr.timeout = 360_000;
   xhr.open('POST', API+'/api/memories/upload');
@@ -2126,13 +2194,13 @@ function showQualityRejection(errors) {
 }
 
 
-function retry(rect,btn,speed,label) {
+function retry(rect,mindBlob,btn,speed,label) {
   if (_cancelled) { resetUploadBtn(btn); return; }
   if (_retries<MAX_RETRIES) {
     _retries++;
     const ms = Math.min(8000, 800*Math.pow(2,_retries-1));
     btn.textContent=`Connection lost — retrying in ${Math.round(ms/1000)}s…`;
-    setTimeout(()=>{ if(!_cancelled) startUpload(rect); }, ms);
+    setTimeout(()=>{ if(!_cancelled) startUpload(rect, mindBlob); }, ms);
   } else {
     document.getElementById('err3').textContent = label+' Could not reconnect after several tries.';
     document.getElementById('err3').style.display='block';
