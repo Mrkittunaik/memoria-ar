@@ -715,6 +715,10 @@ body{background:var(--surface);color:var(--ink);font-family:'DM Sans',system-ui,
         <div class="pipe-icon idle" id="pipeSaveIcon"></div>
         <span class="pipe-label" id="pipeSaveLabel">Saving memory</span>
       </div>
+      <div class="pipe-step" id="pipeTrack">
+        <div class="pipe-icon idle" id="pipeTrackIcon"></div>
+        <span class="pipe-label" id="pipeTrackLabel">Compiling AR tracking data</span>
+      </div>
     </div>
 
     <!-- Quality report shown after upload -->
@@ -2002,6 +2006,12 @@ function startUpload(rect) {
       if (xhr.status===422 && json.errors && json.errors.length) {
         showQualityRejection(json.errors);
         errEl.textContent = json.message || 'Photo quality is too low for reliable AR tracking.';
+      } else if (xhr.status===429) {
+        errEl.textContent = 'Too many uploads — please wait a minute and try again.';
+      } else if (xhr.status===400 && json.errors && json.errors.length) {
+        // Validation error — show field-level messages clearly
+        const msgs = json.errors.map(e => e.msg || e.message || String(e)).join(' ');
+        errEl.textContent = msgs;
       } else {
         let msg = json.message||'Upload failed — please try again.';
         if (json.errors && json.errors.length) {
@@ -2020,10 +2030,11 @@ function startUpload(rect) {
     const mem = json.data || {};
     if (mem.quality) showQualityReport(mem.quality, mem.photoWidth, mem.photoHeight);
     setTimeout(()=>{
-      setPipeStep('Save','done','Memory saved!');
+      setPipeStep('Save','done','Memory saved');
+      setPipeStep('Track','active','Compiling AR tracking data — this runs in the background');
       btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Upload Successful — Redirecting…`;
-    }, 300);
-    setTimeout(()=>{ window.location.href='dashboard.html?success=1'; }, 1800);
+    }, 400);
+    setTimeout(()=>{ window.location.href='dashboard.html?success=1'; }, 2200);
   };
 
   xhr.onerror   = ()=>{ _xhr=null; retry(rect,btn,speed,'Network error.'); };
