@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- TEMP DEBUG — remove before production -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>eruda.init();</script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -1035,7 +1032,7 @@ async function startScanner() {
   } catch (err) {
     console.error('[Memoria] target prep failed:', err);
     const statusText = document.getElementById('statusText');
-    if (statusText) statusText.textContent = `Could not load memories — ${err.message || 'check your connection and try again.'}`;
+    if (statusText) statusText.textContent = 'Could not load memories — check your connection and try again.';
     return;
   }
   if (!mindUrl) return; // no targets uploaded yet — message already shown by fetchAndCompileTargets
@@ -1175,17 +1172,18 @@ function _primeVideoCache(id, target, priority, tier) {
   }
 
   // ── PRELOAD STRATEGY BY CONNECTION TIER ─────────────────────────────────
-  // lazy: preload=none for ALL targets regardless of connection speed.
-  //   No video connections open on scanner start. Buffering begins only in
-  //   onTargetFound when the poster is actually in frame. The poster thumbnail
-  //   (CDN JPEG set above) covers the gap before the first frame decodes.
-  //   This is the default tier — avoids opening 10/50/100 simultaneous video
-  //   connections on scanner open which would saturate a mobile connection.
+  // lazy: preload='auto' for the first 2 highest-priority targets (the ones
+  //   most likely to be scanned first), preload='none' for the rest. This
+  //   trades a small, bounded amount of upfront bandwidth (max 2 videos)
+  //   for near-instant play on the most common case — only opening 10/50/100
+  //   simultaneous connections is what we're still avoiding, not all
+  //   prebuffering. Buffering for the remaining (priority >= 2) targets
+  //   still begins only in onTargetFound when actually detected.
   // fast: preload=auto for all — only used if explicitly passed (legacy path).
   // mid:  preload=auto for first 2 targets, metadata for the rest.
   // slow: preload=metadata for all.
   if (tier === 'lazy') {
-    video.preload = 'none';
+    video.preload = priority < 2 ? 'auto' : 'none';
   } else if (tier === 'fast' || (tier === 'mid' && priority < 2)) {
     video.preload = 'auto';
   } else {
@@ -1240,10 +1238,16 @@ function _primeVideoCache(id, target, priority, tier) {
   });
 
   // ── FIRST-FRAME DECODE KICK ──────────────────────────────────────────────
-  // For lazy tier: do nothing here — onTargetFound handles buffering start.
-  // For slow/mid tiers (legacy): stagger a partial buffer load by priority
-  // so we don't flood a slow connection with simultaneous requests.
-  if (tier !== 'lazy') {
+  // lazy tier, priority < 2: we just set preload='auto' above for these, so
+  //   kick off the actual fetch now — setting .src alone doesn't always start
+  //   buffering without an explicit load() across browsers.
+  // lazy tier, priority >= 2: do nothing here — onTargetFound handles
+  //   buffering start when that target is actually detected.
+  // slow/mid tiers (legacy): stagger a partial buffer load by priority so we
+  //   don't flood a slow connection with simultaneous requests.
+  if (tier === 'lazy' && priority < 2) {
+    video.load();
+  } else if (tier !== 'lazy') {
     if (tier === 'slow' || (tier === 'mid' && priority >= 2)) {
       setTimeout(() => {
         video.preload = 'auto';
@@ -1342,12 +1346,15 @@ async function beginMindAR(mindUrl) {
     //   drops (motion blur, partial occlusion, brief finger edge) without
     //   bouncing in/out of onTargetLost. Our JS hold (LOST_HOLD_MAX_MS) then
     //   handles anything beyond that gracefully regardless.
-    // warmupTolerance: MindAR's internal warmup rejection count per target.
-    //   Set to 5 (from default 3) to avoid premature "lost" calls on the
-    //   first seconds of a low-light or steep-angle detection where score
-    //   variance is naturally higher.
+    // warmupTolerance: MindAR's internal warmup rejection count per target —
+    //   this is the number of consecutive good frames required before the
+    //   FIRST onTargetFound fires, i.e. it directly gates "how fast does
+    //   detection feel". Lowered from 5 to 2 (default is 3) so lock-on reads
+    //   as near-instant once the photo is framed; missTolerance below still
+    //   absorbs the occasional bad frame, so this only speeds up the very
+    //   first acquisition without making ongoing tracking flickery.
     missTolerance: 8,
-    warmupTolerance: 5,
+    warmupTolerance: 2,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
 
@@ -1492,6 +1499,8 @@ async function beginMindAR(mindUrl) {
   const _rawScale = new THREE.Vector3();
   const _identityQuat = new THREE.Quaternion();
   const _leadPos = new THREE.Vector3();
+  const _frameDeltaQuat = new THREE.Quaternion();
+  const _leadQuat = new THREE.Quaternion();
   // ── PREDICTIVE MICRO-LEAD ────────────────────────────────────────────
   // Even with velocity-adaptive smoothing, the smoothed pose is always
   // easing TOWARD a sample that's already one frame old by the time it's
@@ -1576,6 +1585,9 @@ async function beginMindAR(mindUrl) {
           entry.userVel = 0;
           entry._velVec = null;
           entry._prevRawPos = null; // force re-init on next frame
+          entry.angVel = 0;
+          entry._prevRawQuat = null;       // force re-init on next frame
+          entry._frameDeltaAxisQuat = null;
           entry._isStill = true;
           entry.stability = 1;
         } else {
@@ -1600,6 +1612,35 @@ async function beginMindAR(mindUrl) {
               : instVelVec;
           }
           entry._prevRawPos.copy(_rawPos);
+
+          // ── ANGULAR VELOCITY (rotation lead) ───────────────────────────
+          // Mirrors the linear lead above but for rotation. A fast pan is
+          // very rarely pure translation — the hand naturally arcs, so the
+          // poster rotates in-frame at the same time it translates. Without
+          // this, the positional corner leads correctly but the quaternion
+          // still slerps toward last frame's raw sample with zero lead,
+          // so on a combined translate+rotate move the rotation visibly
+          // trails the position — i.e. the corner-accurate-follow breaks
+          // exactly during the hardest real case, not the easy straight-
+          // line pan. axisAngle of (prevRawQuat^-1 * rawQuat) gives the
+          // rotation that happened THIS frame; dividing by dt gives rad/s,
+          // which the existing single-frame Quaternion.slerp below can
+          // then extrapolate forward by LEAD_MS exactly like position does.
+          const prevRawQuat = entry._prevRawQuat || (entry._prevRawQuat = _rawQuat.clone());
+          if (dtSec > 0) {
+            _frameDeltaQuat.copy(prevRawQuat).invert().multiply(_rawQuat);
+            // Same hemisphere fix as the main slerp below — a frame-delta
+            // quaternion taking the long way round would register as a
+            // huge spurious angular velocity and blow up the lead.
+            if (_frameDeltaQuat.w < 0) {
+              _frameDeltaQuat.set(-_frameDeltaQuat.x, -_frameDeltaQuat.y, -_frameDeltaQuat.z, -_frameDeltaQuat.w);
+            }
+            const instAngVel = 2 * Math.acos(Math.min(1, Math.abs(_frameDeltaQuat.w))) / dtSec; // rad/s
+            entry.angVel = entry.angVel === undefined ? instAngVel : entry.angVel * 0.7 + instAngVel * 0.3;
+            entry._frameDeltaAxisQuat = entry._frameDeltaAxisQuat || new THREE.Quaternion();
+            entry._frameDeltaAxisQuat.copy(_frameDeltaQuat);
+          }
+          prevRawQuat.copy(_rawQuat);
 
           // STILL DETECTION — HYSTERESIS, not a single threshold. A single
           // cutoff (the old STILL_VELOCITY_THRESHOLD=0.012 alone) flickers:
@@ -1664,8 +1705,34 @@ async function beginMindAR(mindUrl) {
               _leadPos.add(lead);
             }
 
+            // ── ROTATIONAL LEAD ───────────────────────────────────────────
+            // Same idea as the positional lead, applied to orientation:
+            // extrapolate the per-frame rotation delta forward by LEAD_MS
+            // so the slerp target is "where the corner will be rotated to
+            // by render time", not "where it was last frame". This is what
+            // keeps all 4 corners locked through a combined pan+tilt move,
+            // not just the center point — without it, position tracks
+            // ahead correctly but rotation trails, which reads as the far
+            // corners of the video swimming relative to the photo's far
+            // corners even while the near corner looks perfectly glued.
+            _leadQuat.copy(_rawQuat);
+            if (entry._frameDeltaAxisQuat && entry.angVel !== undefined) {
+              const angLeadScale = (LEAD_MS / 1000) * fastT;
+              // Slerp from identity toward the measured per-frame delta,
+              // scaled down to just the lead window's worth of rotation —
+              // angLeadScale is tiny (single-digit ms / dt), so this stays
+              // a small nudge, never a runaway extrapolation.
+              const MAX_LEAD_ANGLE_RAD = THREE.MathUtils.degToRad(4); // small, sub-visible at idle, same spirit as MAX_LEAD_DIST
+              const t = dtSec > 0 ? Math.min(1, angLeadScale / dtSec) : 0;
+              _leadQuat.slerp(_rawQuat.clone().multiply(entry._frameDeltaAxisQuat), t);
+              const leadAngle = _leadQuat.angleTo(_rawQuat);
+              if (leadAngle > MAX_LEAD_ANGLE_RAD) {
+                _leadQuat.slerp(_rawQuat, 1 - MAX_LEAD_ANGLE_RAD / leadAngle);
+              }
+            }
+
             smoothed.position.lerp(_leadPos, alpha);
-            smoothed.quaternion.slerp(_rawQuat, alpha);
+            smoothed.quaternion.slerp(_leadQuat, alpha);
             smoothed.scale.lerp(_rawScale, alpha);
 
             // Stability score (0-1) for the debug HUD: high jitter/velocity
