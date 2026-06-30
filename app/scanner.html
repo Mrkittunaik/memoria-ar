@@ -1344,8 +1344,9 @@ async function beginMindAR(mindUrl) {
     // missTolerance: frames before a target is considered truly lost.
     //   Raise from default (5) to 8 — absorbs a wider range of single-frame
     //   drops (motion blur, partial occlusion, brief finger edge) without
-    //   bouncing in/out of onTargetLost. Our JS hold (LOST_HOLD_MAX_MS) then
-    //   handles anything beyond that gracefully regardless.
+    //   bouncing in/out of onTargetLost. Note: loss now hides instantly
+    //   with no JS-side hold window, so this is the only remaining buffer
+    //   against single-frame tracking blips.
     // warmupTolerance: MindAR's internal warmup rejection count per target —
     //   this is the number of consecutive good frames required before the
     //   FIRST onTargetFound fires, i.e. it directly gates "how fast does
@@ -1394,8 +1395,9 @@ async function beginMindAR(mindUrl) {
   let _lastOrient = null; // {alpha,beta,gamma} in degrees, most recent reading
   const _orientEuler = new THREE.Euler();
   const _orientQuat = new THREE.Quaternion();
-  const _prevOrientQuat = new THREE.Quaternion();
-  const _orientDeltaQuat = new THREE.Quaternion();
+  // (_prevOrientQuat / _orientDeltaQuat removed — were only used by the
+  // gyro-assisted hold-on-loss recovery, which no longer exists now that
+  // loss hides instantly with no hold window.)
   function onDeviceOrientation(e) {
     if (e.alpha == null) return; // null on some desktop browsers/no sensor
     _orientAvailable = true;
@@ -1484,9 +1486,8 @@ async function beginMindAR(mindUrl) {
   // blips (a hand flicker, one bad homography frame) via the brief grace
   // period below — so it reads as "instant live tracking" rather than a
   // lingering ghost overlay.
-  const LOST_FADE_START_MS = 40;    // near-zero grace — only absorbs a true single dropped frame
-  const LOST_FADE_DURATION_MS = 90; // fast fade to fully gone
-  const LOST_HOLD_MAX_MS = 130;     // hard cutoff — fully hidden well under ~0.13s after loss
+  // (LOST_HOLD_MAX_MS / LOST_FADE_* removed — loss now hides instantly,
+  // with no hold or fade window at all; see the rAF loop's else-branch.)
 
   let _lastFrameTime = performance.now();
   let _frameCount = 0, _fpsAccum = 0, _fps = 0, _lastFpsUpdate = performance.now();
@@ -1559,8 +1560,6 @@ async function beginMindAR(mindUrl) {
 
         entry._lastGoodRawPos = (entry._lastGoodRawPos || new THREE.Vector3()).copy(_rawPos);
         entry._lastGoodRawQuat = (entry._lastGoodRawQuat || new THREE.Quaternion()).copy(_rawQuat);
-        entry._lostSince = null;
-        entry._holdOrientQuat = null;
 
         entry.cssObject.element.style.visibility = 'visible';
         entry.cssObject.element.style.pointerEvents = 'all'; // undo any fade-triggered disable from a previous loss
@@ -1587,7 +1586,6 @@ async function beginMindAR(mindUrl) {
           entry._stillStreak = 0;
           entry._isStill = true;
           entry.stability = 1;
-          entry._teardownDone = false; // re-armed — this target may be lost again later and needs the pause/mute/reset to run that next time too
         } else {
           // Estimate current motion speed from raw-position delta since last
           // frame (marker-space units/sec). entry.userVel itself is smoothed
@@ -1808,106 +1806,30 @@ async function beginMindAR(mindUrl) {
         entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability === undefined ? 1 : entry.stability))));
 
       } else {
-        // ── TARGET NOT VISIBLE THIS FRAME ──
+        // ── TARGET NOT VISIBLE THIS FRAME — INSTANT HIDE, NO HOLD ───────
+        // Previous versions of this branch held the video visible for up
+        // to LOST_HOLD_MAX_MS (130ms) after loss, gyro-correcting and
+        // fading it out, meant to make brief occlusion blips "feel
+        // invisible". In practice that hold window is exactly what kept
+        // producing a visible artifact at the old location on a genuinely
+        // sudden removal (the card pulled away fast) — gone is gone, no
+        // grace period wanted. This now does the simplest possible thing,
+        // unconditionally, the very first frame tracking is lost: hide the
+        // wrapper, pause/mute/reset the video, and stop. No timers, no
+        // hold state, no fade, nothing that can leave anything painted at
+        // the last tracked position even for one frame.
         if (wasVisible) {
-          // Just lost it this frame — start the hold/fade clock and
-          // capture the current device orientation as our reference for
-          // counter-rotation while we hold.
-          entry._lostSince = now;
-          entry._holdOrientQuat = curOrientQuat ? curOrientQuat.clone() : null;
+          entry.video.pause();
+          entry.video.muted = true;
+          if (entry.video.currentTime > 1) entry.video.currentTime = 0;
+          entry.inner.classList.remove('visible', 'losing', 'tracking');
+          entry.inner.style.opacity = '';
+          entry.wrapper.style.pointerEvents = 'none';
+          entry.stability = 0;
+          entry.corners.style.setProperty('--stab', '0');
         }
-
-        const lostSince = entry._lostSince;
-        if (lostSince == null) {
-          // Never been visible at all yet this session — nothing to hold.
-          entry.cssObject.element.style.visibility = 'hidden';
-          smoothed.userData.wasVisible = false;
-          return;
-        }
-
-        const lostMs = now - lostSince;
-
-        if (lostMs > LOST_HOLD_MAX_MS) {
-          // Held long enough without recovery — give up cleanly rather than
-          // leaving a stale video glued in the wrong place indefinitely.
-          // ── INSTANT HIDE FIX ──────────────────────────────────────────
-          // Pause/mute/reset the actual <video> element in this SAME frame,
-          // synchronously with hiding the wrapper. Previously this was done
-          // by a separate setTimeout(…, 180) in onTargetLost, racing this
-          // loop's own LOST_HOLD_MAX_MS (130ms) cutoff — two independent
-          // timers for the same job, off by 50ms. In that gap the wrapper
-          // could be hidden() while the <video> element was still playing
-          // (or vice-versa, briefly visible() again on re-detect flicker
-          // before the old timer caught up), and a <video> element that's
-          // composited but not receiving fresh tracked geometry paints as
-          // a plain black rectangle — that's the black box sitting at the
-          // old location on sudden removal. Doing it here, gated on
-          // exactly the same condition that hides the wrapper, removes the
-          // race entirely: hide and pause always happen on the identical
-          // frame, every time.
-          if (!entry._teardownDone) {
-            entry._teardownDone = true;
-            entry.video.pause();
-            entry.video.muted = true;
-            if (entry.video.currentTime > 1) entry.video.currentTime = 0;
-            // Same cleanup the old timer used to do — clear the fade/
-            // tracking classes and any inline opacity left over from the
-            // fade-out, so a later re-detect starts from a clean state
-            // instead of inheriting stale opacity/classes.
-            entry.inner.classList.remove('visible', 'losing');
-            entry.inner.style.opacity = '';
-          }
-          entry.cssObject.element.style.visibility = 'hidden';
-          smoothed.userData.wasVisible = false;
-          return;
-        }
-
-        // Still within the hold window: keep the video visible at its last
-        // known pose (optionally gyro-corrected), fading gradually rather
-        // than vanishing — this is what makes brief occlusion/edge-of-frame
-        // loss "feel invisible" instead of flickering the video off.
-        entry.cssObject.element.style.visibility = 'visible';
-        smoothed.userData.wasVisible = true; // keep counting as "tracked" through the hold so reacquire snaps cleanly via the rawVisible branch above only changing entry._lastGoodRaw*, not this flag's meaning here
-
-        if (curOrientQuat && entry._holdOrientQuat) {
-          // Counter-rotate the held pose by how much the PHONE has rotated
-          // since the moment we lost the target — an approximate gyro-
-          // assisted hold, not a precise one: DeviceOrientationEvent's
-          // alpha/beta/gamma axes don't map exactly onto the camera's own
-          // rotation axes, so this corrects the right general direction at
-          // the right rough magnitude, not a pixel-perfect inverse. That's
-          // genuinely the ceiling for browser sensor fusion without native
-          // AR APIs — still meaningfully better than a flat frozen overlay
-          // for the brief (sub-second) holds this is actually used for.
-          _prevOrientQuat.copy(entry._holdOrientQuat).invert();
-          _orientDeltaQuat.copy(curOrientQuat).multiply(_prevOrientQuat);
-          // Clamp the correction itself — if the phone has rotated a LOT
-          // since loss (the approximation gets less reliable the larger the
-          // delta), cap how far we let it swing the held pose so a rough
-          // axis-mapping error can't visibly overshoot worse than just
-          // holding the last good pose flat would have.
-          const correctionAngle = _orientDeltaQuat.angleTo(_identityQuat);
-          const MAX_CORRECTION_RAD = THREE.MathUtils.degToRad(35);
-          if (correctionAngle > MAX_CORRECTION_RAD) {
-            _orientDeltaQuat.slerp(_identityQuat, 1 - MAX_CORRECTION_RAD / correctionAngle);
-          }
-          smoothed.quaternion.copy(_orientDeltaQuat).invert().multiply(entry._lastGoodRawQuat || smoothed.quaternion);
-        }
-
-        const fadeT = lostMs <= LOST_FADE_START_MS ? 0
-          : Math.min(1, (lostMs - LOST_FADE_START_MS) / LOST_FADE_DURATION_MS);
-        // Fades all the way to 0 now (previously floored at 15% opacity and
-        // never fully vanished) — once the poster is actually gone, the
-        // video should actually disappear, not linger faintly forever.
-        entry.inner.style.opacity = String(1 - fadeT);
-        // Once any fade has begun, this is no longer a confidently-tracked
-        // poster — stop it from being tappable into fullscreen while it's
-        // disappearing (re-enabled instantly the next time it's genuinely
-        // re-detected, since the rawVisible branch above doesn't touch
-        // pointer-events at all).
-        entry.wrapper.style.pointerEvents = fadeT > 0 ? 'none' : 'all';
-        entry.stability = entry.stability === undefined ? 0.5 : entry.stability * 0.9; // diagnostic only
-        entry.corners.style.setProperty('--stab', String(Math.max(0, Math.min(1, entry.stability))));
+        entry.cssObject.element.style.visibility = 'hidden';
+        smoothed.userData.wasVisible = false;
       }
     });
 
@@ -1934,9 +1856,9 @@ function updateDebugHud(fps, frameMs, sensorFusionActive) {
 
   arTargets.forEach((entry, id) => {
     const tracking = entry.anchor.visible;
-    const holding = !tracking && entry._lostSince != null;
-    const state = tracking ? 'TRACKING' : holding ? 'HOLD/RECOVER' : 'LOST';
-    const stateClass = tracking ? 'hud-good' : holding ? 'hud-warn' : 'hud-bad';
+    // No more HOLD/RECOVER state — loss now hides instantly, no hold window.
+    const state = tracking ? 'TRACKING' : 'LOST';
+    const stateClass = tracking ? 'hud-good' : 'hud-bad';
     const stability = entry.stability !== undefined ? entry.stability : 0;
     html += `<div class="hud-target">`
       + `<div class="hud-row"><span class="hud-label">#${id}</span><span class="${stateClass}">${state}</span></div>`
@@ -2386,28 +2308,15 @@ function onTargetLost(id){
   entry.visible=false;
   entry.corners.classList.remove('tracking','lock-anim');
 
-  // ── DON'T INSTANTLY PAUSE ─────────────────────────────────────────────
-  // Phase 9 (smart lost-target recovery): the smoothing loop above now
-  // holds the video visible at its last good pose for up to LOST_HOLD_MAX_MS,
-  // gyro-correcting and fading it gradually rather than yanking it off
-  // screen the instant MindAR drops tracking for one frame (motion blur,
-  // a hand crossing the poster, brief edge-of-frame clipping — all common
-  // and all meant to "feel invisible" per the brief). Pausing playback
-  // immediately would defeat that: the hold would show a frozen frame with
-  // dead audio, which reads as broken rather than stable. So: keep playing
-  // through the hold window.
-  //
-  // The actual pause()/mute/reset-to-0 now happens directly inside the rAF
-  // loop above, synchronously on the exact frame LOST_HOLD_MAX_MS expires —
-  // NOT here via a separate setTimeout. A prior version used a standalone
-  // setTimeout(…, 180) here, racing the loop's own 130ms cutoff; the ~50ms
-  // gap between two independent timers for the same job is what let a
-  // <video> element keep compositing (as a plain black rectangle, since it
-  // had no fresh tracked geometry) after the wrapper had already been
-  // hidden — i.e. the reported "black spot stays after sudden removal" bug.
-  // Single source of truth now: same frame, same condition, no race.
-  entry.inner.classList.remove('tracking');
-  entry.inner.classList.add('losing');
+  // ── INSTANT HIDE, NO HOLD WINDOW ────────────────────────────────────────
+  // All actual teardown — hiding the wrapper, pausing/muting the video,
+  // resetting playback position, clearing classes/opacity — happens
+  // synchronously inside the rAF loop above, on the exact same frame that
+  // `entry.anchor.visible` first reads false. This function just flips the
+  // logical `visible` flag and clears the corner-bracket lock-on styling;
+  // it does not own any of the actual hide/pause logic and sets no timers,
+  // so there's nothing here that can race the rAF loop or leave anything
+  // painted at the old position after a sudden removal.
   refreshStatusPill();
 }
 
