@@ -2160,14 +2160,13 @@ function startUpload(rect, mindBlob) {
     const mem = json.data || {};
     if (mem.quality) showQualityReport(mem.quality, mem.photoWidth, mem.photoHeight);
 
-    // Kick off the merged-targets rebuild in the background, in-browser.
-    // Doesn't block the redirect — if it fails, the dashboard's existing
-    // "AR compile failed" badge logic still applies on next view.
-    if (mindBlob) {
-      rebuildMergedMindInBrowser().catch(err =>
-        console.warn('[Upload] Background merge rebuild failed:', err.message)
-      );
-    }
+    // NOTE: merged-targets rebuild no longer triggers from here. This page
+    // redirects to the dashboard in ~2 seconds — not enough time for a full
+    // recompile to finish, and racing it was pointless. dashboard.html now
+    // owns merge timing properly (time-gated + lock-protected), checked
+    // right after this redirect lands. The individual .mind file uploaded
+    // moments ago already makes THIS memory instantly scannable on its own
+    // in the meantime.
 
     setTimeout(()=>{
       setPipeStep('Save','done','Memory saved');
