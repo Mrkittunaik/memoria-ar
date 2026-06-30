@@ -1959,6 +1959,52 @@ function getSessionId() {
 ============================================================ */
 const PLANE_SIZE = 1; // MindAR's anchor group is sized to the poster's own width=1 unit (see postMatrix in MindARThree)
 
+// ── GLOBAL TAP HANDLER (rect-based, not element-hit-test-based) ─────────
+// See the long comment at the call site (ensureArTapListener() inside
+// spawnArTarget) for why this exists. Single listener, attached once,
+// shared by every target — NOT one per wrapper.
+let _arTapListenerInit = false;
+function ensureArTapListener(){
+  if (_arTapListenerInit) return;
+  _arTapListenerInit = true;
+
+  // Capture phase: fires before the event has a chance to be affected by
+  // anything else in the bubble path, and before the browser's own
+  // hit-test result on whatever element is "under" the matrix3d()-shifted
+  // wrapper at this instant — we don't use that hit-test result at all,
+  // we only use e.clientX/clientY, which are real screen coordinates
+  // independent of which DOM element the browser thinks they landed on.
+  document.addEventListener('pointerdown', (e) => {
+    if (fsOpenTargetId !== null) return; // fullscreen player is open — its own tap-zone handles this instead
+    const x = e.clientX, y = e.clientY;
+    // Check every currently-tracked target's LIVE rect, read fresh right
+    // now — not the stale rect from whenever this listener was attached,
+    // and not dependent on the browser's own moving-element hit-test.
+    // Iterate in reverse spawn order so a poster drawn on top (later in
+    // DOM order, if multiple overlap) wins the tap, matching normal
+    // top-most-element click semantics.
+    const entries = [...arTargets.values()].reverse();
+    for (const entry of entries) {
+      if (!entry.anchor.visible) continue; // only tappable while genuinely tracked right now
+      const rect = entry.wrapper.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue; // not laid out / hidden
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        entry_openGuard(entry.id);
+        return; // only the top-most hit target opens
+      }
+    }
+  }, { capture: true });
+}
+
+function entry_openGuard(targetId){
+  const e = arTargets.get(targetId);
+  if (!e) return;
+  const now = performance.now();
+  if (e._lastOpenTriggerAt && now - e._lastOpenTriggerAt < 600) return; // debounce vs any duplicate dispatch
+  e._lastOpenTriggerAt = now;
+  triggerOpenWithConfirm(targetId);
+}
+
 function spawnArTarget(id, targetIndex, target, anchor){
   // DIAGNOSTIC — logs exactly what the backend sent for this target plus the
   // computed sizing, so if the video still doesn't show after the validation
@@ -2041,32 +2087,28 @@ function spawnArTarget(id, targetIndex, target, anchor){
   });
   wrapper.appendChild(corners);
 
-  wrapper.addEventListener('click',()=>{
-
-    entry_openGuard(id);
-  });
-  // ── POINTERDOWN FALLBACK ─────────────────────────────────────────────
-  // Some mobile WebViews/browsers delay or swallow synthetic 'click' on
-  // elements that are repositioned every frame via transform (which this
-  // wrapper is, via CSS3DRenderer's matrix3d() writes) — the browser's
-  // click-after-tap heuristic can lose track of the element between
-  // touchstart and touchend if its transform changed mid-tap. 'pointerdown'
-  // fires immediately on touch/mouse contact, before any of that
-  // ambiguity, so it's a more reliable trigger for a fast-moving AR
-  // overlay. Guarded with a tiny per-wrapper debounce so this doesn't
-  // ALSO fire 'click' a moment later and double-open.
-  wrapper.addEventListener('pointerdown', (e) => {
-
-    entry_openGuard(id);
-  });
-  function entry_openGuard(targetId){
-    const e = arTargets.get(targetId);
-    if (!e) return;
-    const now = performance.now();
-    if (e._lastOpenTriggerAt && now - e._lastOpenTriggerAt < 600) return; // debounce vs click firing right after
-    e._lastOpenTriggerAt = now;
-    triggerOpenWithConfirm(targetId);
-  }
+  // ── TAP HANDLING — MOVED TO A SINGLE GLOBAL RECT-BASED LISTENER ────────
+  // Per-wrapper click/pointerdown listeners (the old approach) hit-test
+  // against the wrapper's CURRENT painted position at the moment the
+  // browser processes the event — but CSS3DRenderer rewrites this
+  // wrapper's matrix3d() transform on literally every animation frame,
+  // including while "stable" (the transform is still re-applied each
+  // frame even when the computed value barely changes). That creates a
+  // real race: between touchstart and the event actually being
+  // dispatched, the element can have moved (or been mid-update) such
+  // that the browser's own hit-test sees the tap as landing just outside
+  // the element's current box, and silently drops it — no error, tap
+  // just does nothing. This was happening unpredictably regardless of
+  // whether the card was steady or moving, which matches a hit-testing
+  // race rather than a tracking-state bug.
+  // FIX: don't rely on the browser's hit-test against a moving element at
+  // all. A single capture-phase 'pointerdown' listener on the whole AR
+  // container (set up once, see _arTapListenerInit below) reads each
+  // tracked target's getBoundingClientRect() FRESH, at the instant of the
+  // actual tap, and checks the tap coordinates against that — bypassing
+  // the moving-element hit-test race entirely. This also naturally
+  // widens tolerance: rect is read live, not stale from layout.
+  ensureArTapListener();
 
   // Position the video within the poster using the saved videoRect (percentages
   // of the photo's own size, center-anchored) — same numbers set in your
@@ -2186,7 +2228,7 @@ function spawnArTarget(id, targetIndex, target, anchor){
   smoothed.quaternion.setFromRotationMatrix(anchor.group.matrix);
   smoothed.scale.setFromMatrixScale(anchor.group.matrix);
 
-  const entry={wrapper,inner,corners,video,cssObject,smoothed,anchor,lastSeen:0,visible:false};
+  const entry={id,wrapper,inner,corners,video,cssObject,smoothed,anchor,lastSeen:0,visible:false};
   arTargets.set(id,entry);
 }
 
