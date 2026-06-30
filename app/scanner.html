@@ -1509,9 +1509,23 @@ async function beginMindAR(mindUrl) {
   // frames are dropped entirely — smoothed continues toward the last good
   // sample, vanishing instantly into the existing easing pipeline rather
   // than needing special-case code.
-  const MAX_POS_JUMP_PER_SEC = 1.3;      // marker-space units/sec, generous vs FAST_VELOCITY_THRESHOLD
-  const MAX_ROT_JUMP_RAD_PER_SEC = 10;   // was 14 (~800°/s) — tighter: 10 ≈ 573°/s, still above realistic hand speed but catches more noisy homography flips
-  const REJECT_GRACE_FRAMES = 3;         // consecutive rejects before we just accept (sensor genuinely changed)
+  // ── WHY "STUCK" ──────────────────────────────────────────────────────
+  // A rejected frame doesn't just damp the jump, it skips touching `smoothed`
+  // at all for that frame — that IS a freeze. With the half-lives above this
+  // tight, the catch-up once a streak finally gets accepted is now near-
+  // instant, so what used to read as "a bit of extra lag" now reads as
+  // "frozen, then snaps" — a stutter. Real fix isn't to slow the catch-up
+  // back down (brings the lag complaint right back), it's to stop
+  // legitimate fast motion from tripping this in the first place: the old
+  // 1.3 ceiling was only ~5x FAST_VELOCITY_THRESHOLD (0.24), which a real
+  // fast pan can realistically spike past for a frame or two. Raised well
+  // clear of that so normal fast tracking stops false-tripping it; grace
+  // window shortened too so on the rare genuine bad frame, max freeze time
+  // is roughly half what it was.
+  const MAX_POS_JUMP_PER_SEC = 3.5;      // was 1.3 — well clear of normal fast-pan speeds now, still catches real spikes
+  const MAX_ROT_JUMP_RAD_PER_SEC = 16;   // was 10 — ~917°/s, same reasoning as above for rotation
+  const REJECT_GRACE_FRAMES = 2;         // was 3 — shorter max freeze on the rarer genuine outlier
+
 
   // ── LOST-TARGET BEHAVIOR ──────────────────────────────────────────────
   // No JS-side hold, fade, or freeze of any kind — the moment MindAR's own
@@ -1705,12 +1719,19 @@ async function beginMindAR(mindUrl) {
           // pose every few frames) AND the "stuck on screen after sudden
           // removal" ghost (the freeze grabs a stale pose right as tracking
           // quality collapses, and that frozen pose is what then survives
-          // into the lost-hold window). Requiring 3 consecutive
-          // under-threshold frames before actually locking still confirms
-          // genuine physical stillness rather than a one-frame fluke —
-          // ~50ms at 60fps, imperceptible as added latency, but enough to
-          // reject the false-positive case above.
-          const STILL_CONFIRM_FRAMES = 3;
+          // into the lost-hold window).
+          // 3 frames (~50ms) turned out to still be short enough that an
+          // ordinary mid-pan micro-pause — hand naturally decelerating to
+          // change direction while reframing, not actually stopping — could
+          // dip under STILL_ENTER for 3 frames and false-trigger a full
+          // freeze in the middle of otherwise-continuous following. That's
+          // the "following smooth and fast but then stuckign" symptom: real
+          // motion, briefly misread as a stop. Raised to 7 (~115ms@60fps,
+          // ~210ms@30fps) — still well under what a genuine "I'm holding
+          // this still now" pause feels like, but long enough that normal
+          // panning's natural micro-pauses can't qualify.
+
+          const STILL_CONFIRM_FRAMES = 7;
           const underThreshold = wasStill ? entry.userVel < STILL_EXIT : entry.userVel < STILL_ENTER;
           if (underThreshold) {
             entry._stillStreak = (entry._stillStreak || 0) + 1;
