@@ -12,6 +12,7 @@
     <link rel="preconnect" href="https://memoria-ar-backend.onrender.com" crossorigin />
     <link rel="dns-prefetch" href="https://memoria-ar-backend.onrender.com" />
     <style>
+        /* ... (all styles unchanged from previous) ... */
         *,
         *::before,
         *::after {
@@ -883,13 +884,13 @@
             }
         }
     </script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js">
-    </script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js">
-    </script>
+    <!-- Load MindAR as regular scripts (not modules) to expose window.MINDAR -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
 
+    <!-- ... (HTML unchanged) ... -->
     <div id="loading">
         <div style="font-family:Georgia,serif;font-size:24px;color:#fff;letter-spacing:-0.02em">Memo<span style="color:var(--gold)">ria</span></div>
         <div class="loading-spinner"></div>
@@ -1039,8 +1040,8 @@
             _perfLastFpsUpdate = performance.now();
 
         /* ============================================================
-           DEVICE CAPABILITY DETECTOR — full adaptive quality system
-           ============================================================ */
+           DEVICE CAPABILITY DETECTOR
+        ============================================================ */
         class DeviceCapability {
             constructor() {
                 this.tier = 2;
@@ -1146,8 +1147,8 @@
             deviceCap.resolution.width + 'x' + deviceCap.resolution.height);
 
         /* ============================================================
-           KALMAN FILTER — position, rotation, scale with prediction
-           ============================================================ */
+           KALMAN FILTER
+        ============================================================ */
         class KalmanFilter3D {
             constructor(dt = 1 / 60) {
                 this.dt = dt;
@@ -1254,8 +1255,8 @@
         }
 
         /* ============================================================
-           OBJECT POOL — reduce GC pressure
-           ============================================================ */
+           OBJECT POOL
+        ============================================================ */
         class ObjectPool {
             constructor(factory, max = 16) {
                 this.factory = factory;
@@ -1292,7 +1293,7 @@
 
         /* ============================================================
            CONNECTION QUALITY
-           ============================================================ */
+        ============================================================ */
         function _connectionTier() {
             const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
             if (!c) return 'fast';
@@ -1306,7 +1307,7 @@
 
         /* ============================================================
            PERMISSION + STARTUP
-           ============================================================ */
+        ============================================================ */
         const PERM_KEY = 'memoria_camera_granted';
 
         (async () => {
@@ -1490,7 +1491,7 @@
 
         /* ============================================================
            FETCH + COMPILE TARGETS
-           ============================================================ */
+        ============================================================ */
         async function fetchAndCompileTargets() {
             const statusText = document.getElementById('statusText');
             const pill = document.getElementById('statusPill');
@@ -1597,7 +1598,7 @@
 
         /* ============================================================
            GYRO STATE
-           ============================================================ */
+        ============================================================ */
         function onDeviceOrientation(e) {
             if (e.alpha == null) return;
             _orientAvailable = true;
@@ -1619,9 +1620,14 @@
 
         /* ============================================================
            BEGIN MINDAR — with Kalman filter + adaptive smoothing
-           ============================================================ */
+        ============================================================ */
         async function beginMindAR(mindUrl) {
             const statusText = document.getElementById('statusText');
+
+            // Check that MindAR loaded correctly
+            if (typeof window.MINDAR === 'undefined' || typeof window.MINDAR.IMAGE === 'undefined') {
+                throw new Error('MindAR library failed to load. Check network or refresh.');
+            }
 
             const maxTrack = deviceCap.maxTargets;
             mindarThree = new window.MINDAR.IMAGE.MindARThree({
@@ -1887,7 +1893,7 @@
 
         /* ============================================================
            DEBUG HUD
-           ============================================================ */
+        ============================================================ */
         function scoreClass(v) { return v > 0.75 ? 'hud-good' : v > 0.45 ? 'hud-warn' : 'hud-bad'; }
 
         function updateDebugHud(fps, frameMs, sensorFusionActive) {
@@ -1937,7 +1943,7 @@
 
         /* ============================================================
            SPAWN AR TARGET
-           ============================================================ */
+        ============================================================ */
         const PLANE_SIZE = 1;
         const PLANE_PX = 1000;
 
@@ -2048,7 +2054,7 @@
 
         /* ============================================================
            TARGET FOUND / LOST
-           ============================================================ */
+        ============================================================ */
         function onTargetFound(id) {
             const entry = arTargets.get(id);
             if (!entry) return;
@@ -2156,7 +2162,7 @@
 
         /* ============================================================
            CAMERA CONTROLS
-           ============================================================ */
+        ============================================================ */
         async function toggleTorch() {
             if (!videoTrack) return;
             if (!videoTrack.getCapabilities || !videoTrack.getCapabilities().torch) return;
@@ -2175,7 +2181,7 @@
 
         /* ============================================================
            FULLSCREEN PLAYER
-           ============================================================ */
+        ============================================================ */
         const fsVideo = document.getElementById('fs-video');
         const _fsBufSpinner = document.getElementById('fs-buffer-spinner');
 
@@ -2491,7 +2497,7 @@
 
         /* ============================================================
            SCAN LOOP CONTROL
-           ============================================================ */
+        ============================================================ */
         function stopScanLoop() {
             if (mindarThree && mindarThree.controller) mindarThree.controller.stopProcessVideo();
         }
@@ -2529,7 +2535,7 @@
 
         /* ============================================================
            WAKE LOCK
-           ============================================================ */
+        ============================================================ */
         async function acquireWakeLock() {
             if (!('wakeLock' in navigator)) return;
             try {
@@ -2547,7 +2553,7 @@
 
         /* ============================================================
            VISIBILITY CHANGE — full teardown/rebuild
-           ============================================================ */
+        ============================================================ */
         function teardownMindAR() {
             if (!mindarThree) return;
             if (_wakeLock) { try { _wakeLock.release(); } catch (_) {} _wakeLock = null; }
@@ -2596,7 +2602,7 @@
 
         /* ============================================================
            EXPOSE TO WINDOW
-           ============================================================ */
+        ============================================================ */
         window.startScanner = startScanner;
         window.toggleTorch = toggleTorch;
         window.switchCamera = switchCamera;
@@ -2611,7 +2617,7 @@
 
         /* ============================================================
            BOOT
-           ============================================================ */
+        ============================================================ */
         initScanner();
     </script>
 </body>
