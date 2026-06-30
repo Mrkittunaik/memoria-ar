@@ -2466,9 +2466,21 @@ let fsOpenTargetId=null;
    thing you just selected), so the action reads as deliberate rather than
    an instant teleport. This fires the corner-bracket brightness pulse +
    a short haptic tick (silently skipped on devices/browsers without
-   Vibration API support — not fatal), then opens fullscreen after the
-   pulse has had time to actually be seen rather than overlapping it. */
+   Vibration API support — not fatal).
+   ── WHY THIS WAS STRUGGLING ON OPEN ──────────────────────────────────
+   This used to wait 90ms (setTimeout) before even calling openFullscreen,
+   and openFullscreen() only stopped MindAR's tracking loop AFTER that wait.
+   So for the entire 90ms, MindAR's per-frame WebGL render + TF.js tracking
+   loop kept running at full intensity — directly competing with the main
+   thread right as the grow-open CSS transition tries to start, which is a
+   textbook cause of dropped frames/visible jank on a real device. Fix:
+   stop tracking the INSTANT the tap registers (before anything else runs),
+   and fire the pulse + the actual open in parallel instead of sequentially
+   — they're separate elements (corner brackets vs the fullscreen player),
+   nothing requires waiting on one before starting the other. */
 function triggerOpenWithConfirm(targetId){
+  stopScanLoop(); // free the main thread from MindAR's render loop FIRST, before anything else touches the DOM
+
   const entry = arTargets.get(targetId);
   if (!entry) { openFullscreen(targetId); return; }
 
@@ -2479,10 +2491,9 @@ function triggerOpenWithConfirm(targetId){
 
   if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
 
-  // Slight delay so the pulse is visible before the screen cuts to
-  // fullscreen — long enough to register as a deliberate confirm, short
-  // enough that the open still feels immediate/responsive overall.
-  setTimeout(() => openFullscreen(targetId), 90);
+  // Opens immediately now, in parallel with the pulse above — no more
+  // artificial wait before the screen actually starts opening.
+  openFullscreen(targetId);
 }
 window.triggerOpenWithConfirm = triggerOpenWithConfirm;
 
