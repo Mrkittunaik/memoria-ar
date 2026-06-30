@@ -1587,6 +1587,7 @@ async function beginMindAR(mindUrl) {
           entry._stillStreak = 0;
           entry._isStill = true;
           entry.stability = 1;
+          entry._teardownDone = false; // re-armed — this target may be lost again later and needs the pause/mute/reset to run that next time too
         } else {
           // Estimate current motion speed from raw-position delta since last
           // frame (marker-space units/sec). entry.userVel itself is smoothed
@@ -1829,6 +1830,33 @@ async function beginMindAR(mindUrl) {
         if (lostMs > LOST_HOLD_MAX_MS) {
           // Held long enough without recovery — give up cleanly rather than
           // leaving a stale video glued in the wrong place indefinitely.
+          // ── INSTANT HIDE FIX ──────────────────────────────────────────
+          // Pause/mute/reset the actual <video> element in this SAME frame,
+          // synchronously with hiding the wrapper. Previously this was done
+          // by a separate setTimeout(…, 180) in onTargetLost, racing this
+          // loop's own LOST_HOLD_MAX_MS (130ms) cutoff — two independent
+          // timers for the same job, off by 50ms. In that gap the wrapper
+          // could be hidden() while the <video> element was still playing
+          // (or vice-versa, briefly visible() again on re-detect flicker
+          // before the old timer caught up), and a <video> element that's
+          // composited but not receiving fresh tracked geometry paints as
+          // a plain black rectangle — that's the black box sitting at the
+          // old location on sudden removal. Doing it here, gated on
+          // exactly the same condition that hides the wrapper, removes the
+          // race entirely: hide and pause always happen on the identical
+          // frame, every time.
+          if (!entry._teardownDone) {
+            entry._teardownDone = true;
+            entry.video.pause();
+            entry.video.muted = true;
+            if (entry.video.currentTime > 1) entry.video.currentTime = 0;
+            // Same cleanup the old timer used to do — clear the fade/
+            // tracking classes and any inline opacity left over from the
+            // fade-out, so a later re-detect starts from a clean state
+            // instead of inheriting stale opacity/classes.
+            entry.inner.classList.remove('visible', 'losing');
+            entry.inner.style.opacity = '';
+          }
           entry.cssObject.element.style.visibility = 'hidden';
           smoothed.userData.wasVisible = false;
           return;
@@ -2241,7 +2269,6 @@ function onTargetFound(id){
   entry.lastSeen=performance.now();
   entry.inner.classList.add('visible','tracking');
   entry.inner.style.opacity = ''; // clear any in-progress hold-fade from a just-recovered loss
-  clearTimeout(entry._lostTeardownTimer);
 
   // Snap corner brackets on — animate the "lock-on" pulse only on the very
   // first found frame (wasTracking false), not on every re-detect after
@@ -2368,31 +2395,19 @@ function onTargetLost(id){
   // and all meant to "feel invisible" per the brief). Pausing playback
   // immediately would defeat that: the hold would show a frozen frame with
   // dead audio, which reads as broken rather than stable. So: keep playing
-  // through the hold window, and only actually pause/reset once the loop's
-  // own LOST_HOLD_MAX_MS timeout gives up and hides the element — checked
-  // here via a matching timeout rather than duplicating that constant.
+  // through the hold window.
+  //
+  // The actual pause()/mute/reset-to-0 now happens directly inside the rAF
+  // loop above, synchronously on the exact frame LOST_HOLD_MAX_MS expires —
+  // NOT here via a separate setTimeout. A prior version used a standalone
+  // setTimeout(…, 180) here, racing the loop's own 130ms cutoff; the ~50ms
+  // gap between two independent timers for the same job is what let a
+  // <video> element keep compositing (as a plain black rectangle, since it
+  // had no fresh tracked geometry) after the wrapper had already been
+  // hidden — i.e. the reported "black spot stays after sudden removal" bug.
+  // Single source of truth now: same frame, same condition, no race.
   entry.inner.classList.remove('tracking');
   entry.inner.classList.add('losing');
-  clearTimeout(entry._lostTeardownTimer);
-  entry._lostTeardownTimer = setTimeout(()=>{
-    if(!entry.visible){
-      entry.inner.classList.remove('visible','losing');
-      entry.inner.style.opacity = '';
-      // Pause but DO NOT clear src or call load() — the buffer stays warm
-      // so re-detection (very common: user glances away briefly) can resume
-      // from the same position without any re-buffer delay.
-      // Mute while hidden to save battery; onTargetFound will unmute again.
-      entry.video.pause();
-      entry.video.muted = true;
-      // Reset to start of clip so re-detection always begins from the
-      // beginning rather than mid-clip (looped videos reset to 0 anyway,
-      // but non-looped ones would resume mid-clip, which looks odd on
-      // short ceremony clips). Only reset if the clip has actually played
-      // for more than 1s — avoids resetting a video that stalled before
-      // it could even start.
-      if (entry.video.currentTime > 1) entry.video.currentTime = 0;
-    }
-  }, 180);
   refreshStatusPill();
 }
 
