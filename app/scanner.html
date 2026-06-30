@@ -2488,10 +2488,56 @@ function triggerOpenWithConfirm(targetId){
 }
 window.triggerOpenWithConfirm = triggerOpenWithConfirm;
 
+// ── LIGHTWEIGHT CAMERA PAUSE FOR FULLSCREEN ─────────────────────────────
+// Stops just the camera MediaStreamTracks (the actual hardware — sensor,
+// LED, battery drain) while fullscreen video plays, WITHOUT the full
+// teardownMindAR() destruction (that disposes the WebGL context + Worker
+// + controller, meant for "really leaving the page", and would make
+// closing fullscreen slow since rebuilding all of that is a real async
+// mindarThree.start() again). This only stops/restarts the camera stream
+// itself — controller, renderer, and WebGL context all stay alive and
+// warm the whole time fullscreen is open, so resuming on close is fast.
+// Mirrors what MindAR's own internal switchCamera() does for the same
+// reason: stop tracks → null srcObject → later getUserMedia() again →
+// reassign srcObject, never touching the controller/renderer at all.
+async function stopCameraForFullscreen(){
+  if (!mindarThree || !mindarThree.video) return;
+  try {
+    if (mindarThree.video.srcObject) {
+      mindarThree.video.srcObject.getTracks().forEach(t => t.stop());
+      mindarThree.video.srcObject = null;
+    }
+  } catch (_) {}
+  videoTrack = null;
+}
+
+async function startCameraAfterFullscreen(){
+  if (!mindarThree || !mindarThree.video) return;
+  // Already has a live stream (e.g. fullscreen never actually stopped it,
+  // or this fires twice) — nothing to do.
+  if (mindarThree.video.srcObject) return;
+  try {
+    // Same constraint shape already used for the instant-preview stream
+    // elsewhere in this file — rear/environment camera, ideal not exact,
+    // so it still works on devices without a rear camera (desktop testing).
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }
+    });
+    mindarThree.video.srcObject = stream;
+    await mindarThree.video.play().catch(()=>{});
+    try { videoTrack = stream.getVideoTracks()[0]; } catch (_) {}
+  } catch (err) {
+    console.error('[Memoria] camera restart after fullscreen close failed:', err);
+    // Non-fatal — scanning just won't resume until the user backs out and
+    // back in, or the page is reloaded; fullscreen video itself is unaffected.
+  }
+}
+
 function openFullscreen(targetId){
   const entry=arTargets.get(targetId);
   if(!entry) return;
   stopScanLoop(); // pause detection while fullscreen is open
+  stopCameraForFullscreen(); // also stop the actual camera HARDWARE, not just processing — see function for why
   fsOpenTargetId=targetId;
   const fsPlayer=document.getElementById('fullscreen-player');
 
@@ -2579,9 +2625,27 @@ function openFullscreen(targetId){
     fsPlayer.classList.add('open');
   });
 
+  // ── AUTO-HIDE RACE FIX ────────────────────────────────────────────────
+  // .play() is async — fsVideo.paused does NOT flip to false the instant
+  // play() is called, only once playback actually begins (can take a few
+  // ms to noticeably longer on a cold buffer). Calling showFsControls(true)
+  // synchronously right here, before that's happened, meant its internal
+  // `if (!fsVideo.paused)` check saw paused===true and skipped arming the
+  // 3.2s auto-hide timer entirely — leaving the center play button and
+  // controls bar stuck visible indefinitely on initial fullscreen open,
+  // even though the video was genuinely playing underneath them. Fix:
+  // call showFsControls(true) on the 'playing' event instead, which only
+  // fires once frames are actually being rendered, so fsVideo.paused is
+  // reliably false by the time the check runs and the auto-hide timer
+  // gets armed correctly every time.
+  const armControlsOnceActuallyPlaying = () => {
+    fsVideo.removeEventListener('playing', armControlsOnceActuallyPlaying);
+    showFsControls(true);
+  };
+  fsVideo.addEventListener('playing', armControlsOnceActuallyPlaying);
   fsVideo.play().catch(()=>{ fsVideo.muted=true; fsVideo.play().catch(()=>{}); });
   updateFsMuteIcon();
-  showFsControls(true);
+  showFsControls(true); // still call immediately too — shows controls right away during the brief startup window, 'playing' above re-triggers once truly active to correctly arm the hide timer
 }
 
 function closeFullscreen(e){
@@ -2609,7 +2673,12 @@ function closeFullscreen(e){
   // Clear poster so next open shows fresh poster for whatever target opens next
   fsVideo.poster = '';
   fsOpenTargetId=null;
-  startScanLoop(); // resume detection
+  // Restart the camera HARDWARE first (async — was fully stopped on open to
+  // save battery/CPU), then resume MindAR's processing loop once a live
+  // stream actually exists for it to process. Awaiting here keeps both
+  // steps in the correct order without blocking the close animation below,
+  // which is already independent of this.
+  startCameraAfterFullscreen().then(() => startScanLoop());
 
   // ── SMOOTH SHRINK-BACK CLOSE ──────────────────────────────────────────
   // Mirrors the open animation: shrink back down toward the same accurate
