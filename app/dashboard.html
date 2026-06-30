@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- TEMP DEBUG — remove before production -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Dashboard — Memoria</title>
@@ -386,10 +389,96 @@ async function loadMemories() {
       clearTimeout(window._trackPollTimer);
       window._trackPollTimer = setTimeout(() => loadMemories(), 8000);
     }
+    // If everything has an individual .mind ready, make sure the merged
+    // .mind file exists too. The upload page kicks this off in-browser,
+    // but redirects to this dashboard before that compile can finish, so
+    // we double-check and (re)run it here as a safety net.
+    const allReady = memories.length > 0 && memories.every(m => m.tracking?.status === 'ready');
+    if (allReady) {
+      ensureMergedMind().catch(err => console.warn('[Dashboard] Merge check failed:', err.message));
+    }
   } catch(e) {
     document.getElementById('memoriesGrid').innerHTML =
       '<div style="color:var(--red);font-size:13px;padding:20px 0">Failed to load memories. Is the backend running?</div>';
   }
+}
+
+// ── Ensure the merged .mind file exists, compiling it in-browser if not ──
+// Checks /api/memories/targets — if mergedMindUrl is missing or 404s, we
+// recompile from /api/memories/photos-for-merge and upload the result via
+// /api/memories/merged-mind. All done in THIS browser tab, no server
+// Chromium involved (that path crashes under Render's free-tier RAM limit).
+let _mergeCheckInFlight = false;
+async function ensureMergedMind() {
+  if (_mergeCheckInFlight) return;
+  _mergeCheckInFlight = true;
+  try {
+    const targetsRes = await fetch(`${API}/api/memories/targets`);
+    const targetsJson = await targetsRes.json();
+    const mergedUrl = targetsJson?.data?.mergedMindUrl;
+
+    let needsRebuild = !mergedUrl;
+    if (mergedUrl) {
+      // Confirm the file actually exists on Cloudinary (not just that the
+      // URL pattern was generated) — HEAD request, cheap.
+      try {
+        const headRes = await fetch(mergedUrl, { method: 'HEAD' });
+        needsRebuild = !headRes.ok;
+      } catch (_) {
+        needsRebuild = true;
+      }
+    }
+
+    if (!needsRebuild) return;
+
+    console.log('[Dashboard] Merged .mind missing or stale — rebuilding in-browser…');
+    await rebuildMergedMindInBrowser();
+    console.log('[Dashboard] Merged .mind rebuild complete');
+  } finally {
+    _mergeCheckInFlight = false;
+  }
+}
+
+// ── Compile all ready targets' photos together in-browser and upload ──
+async function rebuildMergedMindInBrowser() {
+  const listRes = await fetch(`${API}/api/memories/photos-for-merge`);
+  const listJson = await listRes.json();
+  const photos = listJson?.data || [];
+  if (photos.length === 0) return;
+
+  if (!window.MINDAR?.IMAGE?.Compiler) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.type = 'module';
+      s.textContent = `
+        import * as MindARImage from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js/+esm';
+        window.MINDAR = window.MINDAR || {};
+        window.MINDAR.IMAGE = MindARImage.default || MindARImage;
+        window.dispatchEvent(new Event('mindar-loaded'));
+      `;
+      window.addEventListener('mindar-loaded', resolve, { once: true });
+      s.onerror = () => reject(new Error('Failed to load MindAR compiler'));
+      document.head.appendChild(s);
+    });
+  }
+
+  const imgs = await Promise.all(photos.map(p => new Promise((resolve, reject) => {
+    const el = new Image();
+    el.crossOrigin = 'anonymous';
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error(`Failed to load photo ${p.id}`));
+    el.src = p.photoUrl;
+  })));
+
+  const compiler = new window.MINDAR.IMAGE.Compiler();
+  await compiler.compileImageTargets(imgs, () => {});
+  const buffer = compiler.exportData();
+  const mergedBlob = new Blob([buffer], { type: 'application/octet-stream' });
+
+  const fd = new FormData();
+  fd.append('mindFile', mergedBlob, 'merged.mind');
+  const uploadRes = await fetch(`${API}/api/memories/merged-mind`, { method: 'POST', body: fd });
+  if (!uploadRes.ok) throw new Error(`Merged upload failed: ${uploadRes.status}`);
 }
 
 async function loadStats() {
