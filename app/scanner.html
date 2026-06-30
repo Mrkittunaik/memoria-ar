@@ -1334,12 +1334,18 @@ async function beginMindAR(mindUrl) {
     //   but more latency. 0.0002 is gentle enough that jitter on a hand-held
     //   photo is fully invisible, without feeling laggy during a normal pan.
     // filterBeta: speed coefficient. Higher = snappier response to fast motion.
-    //   200 keeps the velocity-adaptive half-life in our JS smoothing layer
-    //   well-aligned with MindAR's own upstream filter — they cooperate rather
-    //   than fighting. Too low (e.g. 0.01) pins the cutoff near minCF always,
-    //   which passes high-frequency noise through and IS the visible shake.
+    //   Raised from 200 to 350 — our downstream JS smoothing (the velocity-
+    //   adaptive half-life above) can only ever be as tight as the raw pose
+    //   it's fed, and that raw pose comes from THIS filter first. A higher
+    //   beta opens the One Euro filter's cutoff faster as tracked velocity
+    //   rises, so during a genuinely fast move the raw input itself already
+    //   has less built-in lag before our own smoothing even runs — tightening
+    //   edge-to-edge accuracy at the source rather than only downstream.
+    //   Still cooperates with (doesn't fight) the JS layer: filterMinCF below
+    //   is unchanged, so idle/still behavior — the actual jitter-killer — is
+    //   untouched; only the fast-motion response speeds up further.
     filterMinCF: 0.0002,
-    filterBeta: 200,
+    filterBeta: 350,
     // ── DETECTION TOLERANCE ─────────────────────────────────────────────
     // missTolerance: frames before a target is considered truly lost.
     //   Raise from default (5) to 8 — absorbs a wider range of single-frame
