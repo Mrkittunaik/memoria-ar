@@ -389,62 +389,47 @@ async function loadMemories() {
       clearTimeout(window._trackPollTimer);
       window._trackPollTimer = setTimeout(() => loadMemories(), 8000);
     }
-    // If everything has an individual .mind ready, make sure the merged
-    // .mind file exists too. The upload page kicks this off in-browser,
-    // but redirects to this dashboard before that compile can finish, so
-    // we double-check and (re)run it here as a safety net.
-    const allReady = memories.length > 0 && memories.every(m => m.tracking?.status === 'ready');
-    if (allReady) {
-      ensureMergedMind().catch(err => console.warn('[Dashboard] Merge check failed:', err.message));
-    }
+    // Ask the backend whether a merge rebuild is actually due (time-gated +
+    // only-if-changed) instead of recompiling everything on every page load.
+    checkAndRebuildMerge().catch(err => console.warn('[Dashboard] Merge check failed:', err.message));
   } catch(e) {
     document.getElementById('memoriesGrid').innerHTML =
       '<div style="color:var(--red);font-size:13px;padding:20px 0">Failed to load memories. Is the backend running?</div>';
   }
 }
 
-// ── Ensure the merged .mind file exists, compiling it in-browser if not ──
-// Checks /api/memories/targets — if mergedMindUrl is missing or 404s, we
-// recompile from /api/memories/photos-for-merge and upload the result via
-// /api/memories/merged-mind. All done in THIS browser tab, no server
-// Chromium involved (that path crashes under Render's free-tier RAM limit).
-let _mergeCheckInFlight = false;
-async function ensureMergedMind() {
-  if (_mergeCheckInFlight) return;
-  _mergeCheckInFlight = true;
-  try {
-    const targetsRes = await fetch(`${API}/api/memories/targets`);
-    const targetsJson = await targetsRes.json();
-    const mergedUrl = targetsJson?.data?.mergedMindUrl;
+// ── Three-tier merge: Final (merged file) / individual .mind (instant,
+// already-working fallback for anything not yet in Final) / this function
+// being the periodic promotion step that folds everything into a new Final.
+//
+// Timing: the backend tracks lastBuiltAt + which memory IDs are already
+// included. It only reports shouldRebuild=true if enough time has passed
+// AND the set of ready memories actually changed — so a burst of uploads
+// doesn't trigger a recompile after every single one. New memories stay
+// instantly scannable via their own individual .mind file in the meantime
+// (already true today); they just wait up to ~2 minutes to be folded into
+// Final, instead of the scanner ever seeing a missing/404 merged file.
+async function checkAndRebuildMerge() {
+  const statusRes = await fetch(`${API}/api/memories/merge-status`);
+  const statusJson = await statusRes.json();
+  const { shouldRebuild, photos } = statusJson?.data || {};
+  if (!shouldRebuild || !photos?.length) return;
 
-    let needsRebuild = !mergedUrl;
-    if (mergedUrl) {
-      // Confirm the file actually exists on Cloudinary (not just that the
-      // URL pattern was generated) — HEAD request, cheap.
-      try {
-        const headRes = await fetch(mergedUrl, { method: 'HEAD' });
-        needsRebuild = !headRes.ok;
-      } catch (_) {
-        needsRebuild = true;
-      }
-    }
-
-    if (!needsRebuild) return;
-
-    console.log('[Dashboard] Merged .mind missing or stale — rebuilding in-browser…');
-    await rebuildMergedMindInBrowser();
-    console.log('[Dashboard] Merged .mind rebuild complete');
-  } finally {
-    _mergeCheckInFlight = false;
+  // Claim the build lock so a second open tab doesn't compile at the same time
+  const claimRes = await fetch(`${API}/api/memories/merge-claim`, { method: 'POST' });
+  const claimJson = await claimRes.json();
+  if (!claimJson?.data?.claimed) {
+    console.log('[Dashboard] Merge already being built by another tab — skipping');
+    return;
   }
+
+  console.log(`[Dashboard] Rebuilding merged .mind for ${photos.length} targets…`);
+  await rebuildMergedMindInBrowser(photos);
+  console.log('[Dashboard] Merged .mind rebuild complete');
 }
 
-// ── Compile all ready targets' photos together in-browser and upload ──
-async function rebuildMergedMindInBrowser() {
-  const listRes = await fetch(`${API}/api/memories/photos-for-merge`);
-  const listJson = await listRes.json();
-  const photos = listJson?.data || [];
-  if (photos.length === 0) return;
+// ── Compile the given photos together in-browser and upload the result ──
+async function rebuildMergedMindInBrowser(photos) {
 
   if (!window.MINDAR?.IMAGE?.Compiler) {
     await new Promise((resolve, reject) => {
@@ -477,7 +462,16 @@ async function rebuildMergedMindInBrowser() {
 
   const fd = new FormData();
   fd.append('mindFile', mergedBlob, 'merged.mind');
-  const uploadRes = await fetch(`${API}/api/memories/merged-mind`, { method: 'POST', body: fd });
+  fd.append('includedIds', JSON.stringify(photos.map(p => p.id)));
+
+  let uploadRes;
+  try {
+    uploadRes = await fetch(`${API}/api/memories/merged-mind`, { method: 'POST', body: fd });
+  } catch (err) {
+    // Network failure mid-upload — nothing we can do client-side to release
+    // the server's lock here beyond letting BUILD_LOCK_TIMEOUT_MS expire it.
+    throw err;
+  }
   if (!uploadRes.ok) throw new Error(`Merged upload failed: ${uploadRes.status}`);
 }
 
