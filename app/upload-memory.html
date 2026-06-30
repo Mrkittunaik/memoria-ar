@@ -1988,6 +1988,55 @@ async function compileMindFile(photoFile, fillEl) {
   return new Blob([buffer], { type: 'application/octet-stream' });
 }
 
+// ── Rebuild the merged .mind file (all ready targets combined) entirely
+// in the browser, then upload the result. Replaces the old server-side
+// Puppeteer/Chromium merge, which was crashing under memory pressure on
+// a small Render instance ("Promise was collected" errors).
+async function rebuildMergedMindInBrowser() {
+  const listRes = await fetch(API + '/api/memories/photos-for-merge');
+  const listJson = await listRes.json();
+  const photos = listJson?.data || [];
+  if (photos.length === 0) return;
+
+  // Ensure MindAR is loaded (it should already be, from the single-photo
+  // compile above, but handle the case this is called standalone)
+  if (!window.MINDAR?.IMAGE?.Compiler) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.type = 'module';
+      s.textContent = `
+        import * as MindARImage from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js/+esm';
+        window.MINDAR = window.MINDAR || {};
+        window.MINDAR.IMAGE = MindARImage.default || MindARImage;
+        window.dispatchEvent(new Event('mindar-loaded'));
+      `;
+      window.addEventListener('mindar-loaded', resolve, { once: true });
+      s.onerror = () => reject(new Error('Failed to load MindAR compiler'));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Load every photo as an Image element
+  const imgs = await Promise.all(photos.map(p => new Promise((resolve, reject) => {
+    const el = new Image();
+    el.crossOrigin = 'anonymous';
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error(`Failed to load photo ${p.id}`));
+    el.src = p.photoUrl;
+  })));
+
+  const compiler = new window.MINDAR.IMAGE.Compiler();
+  await compiler.compileImageTargets(imgs, () => {});
+  const buffer = compiler.exportData();
+  const mergedBlob = new Blob([buffer], { type: 'application/octet-stream' });
+
+  const fd = new FormData();
+  fd.append('mindFile', mergedBlob, 'merged.mind');
+  const uploadRes = await fetch(API + '/api/memories/merged-mind', { method: 'POST', body: fd });
+  if (!uploadRes.ok) throw new Error(`Merged upload failed: ${uploadRes.status}`);
+  console.log('[Upload] Merged .mind rebuilt in-browser and uploaded');
+}
+
 function roundCorners(c) {
   const r = {};
   ['A','B','C','D'].forEach(k => { r[k] = { x: parseFloat(c[k].x.toFixed(3)), y: parseFloat(c[k].y.toFixed(3)) }; });
@@ -2110,6 +2159,16 @@ function startUpload(rect, mindBlob) {
     setPipeStep('Save','active','Saving memory…');
     const mem = json.data || {};
     if (mem.quality) showQualityReport(mem.quality, mem.photoWidth, mem.photoHeight);
+
+    // Kick off the merged-targets rebuild in the background, in-browser.
+    // Doesn't block the redirect — if it fails, the dashboard's existing
+    // "AR compile failed" badge logic still applies on next view.
+    if (mindBlob) {
+      rebuildMergedMindInBrowser().catch(err =>
+        console.warn('[Upload] Background merge rebuild failed:', err.message)
+      );
+    }
+
     setTimeout(()=>{
       setPipeStep('Save','done','Memory saved');
       setPipeStep('Track','active','Compiling AR tracking data — this runs in the background');
