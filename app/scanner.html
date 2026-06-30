@@ -2624,21 +2624,58 @@ function closeFullscreen(e){
   fsVideo.pause();
   const entry=fsOpenTargetId && arTargets.get(fsOpenTargetId);
   if(entry){
-    // Carry the fullscreen playback position back to the AR-layer video.
-    // Without this, the AR video would resume from where it paused before
-    // fullscreen opened (could be seconds or minutes behind where the user
-    // watched to), which looks like a broken sync on return.
+    // Carry the fullscreen playback position back to the AR-layer video, so
+    // IF this same poster gets re-detected shortly, it resumes from where
+    // the user left off in fullscreen rather than seconds/minutes behind.
     if (isFinite(fsVideo.currentTime)) entry.video.currentTime = fsVideo.currentTime;
-    // Unmute: AR video handles its own sound; it was muted when fullscreen
-    // opened (see openFullscreen), restore that now for the tracking loop.
-    entry.video.muted = false;
-    entry.video.play().catch(()=>{});
+
+    // ── FORCE-HIDE INSTEAD OF AUTO-RESUME ────────────────────────────────
+    // While fullscreen was open, stopScanLoop() paused MindAR's detection
+    // entirely — so this target's "found"/visible state from before the
+    // fullscreen open was NEVER cleared by a real onTargetLost. Previously
+    // this branch just called entry.video.play() and unmuted, which resumed
+    // playback immediately and left the old .visible/.tracking CSS classes
+    // in place — so on returning to the scanner, the video stayed glued on
+    // screen (still playing, still "found") even though the camera might
+    // not be pointed at the poster anymore. That's the "stuck video" bug.
+    // Fix: snap this target back to a clean hidden/not-tracking state here,
+    // exactly like the normal onTargetLost teardown does, and DON'T play.
+    // It will only become visible/audible again the moment MindAR fires a
+    // genuine fresh onTargetFound once scanning resumes below — i.e. the
+    // video only ever shows when the scanner has actually re-found the
+    // photo, and is instantly hidden otherwise, never lingering from the
+    // fullscreen view.
+    entry.visible = false;
+    clearTimeout(entry._lostTeardownTimer);
+    entry.corners.classList.remove('tracking', 'lock-anim');
+    entry.inner.classList.remove('visible', 'tracking', 'losing');
+    entry.inner.style.opacity = '';
+    entry.video.pause();
+    entry.video.muted = true;
+
     // Re-prime the buffer: if the user scrubbed forward in fullscreen,
     // the AR video's pre-load buffer may not cover the new position.
     // Setting preload=auto and calling load() restarts buffering from the
     // current position, so the buffer is warm again before the next detection.
     if (entry.video.preload !== 'auto') entry.video.preload = 'auto';
   }
+  // Any OTHER targets that were mid-tracking when fullscreen opened are in
+  // the same boat — their found/lost state was frozen by stopScanLoop too.
+  // Force-hide all of them for the same reason as above, so nothing else
+  // can be left stuck visible either; each will cleanly re-show only on
+  // its own next genuine onTargetFound.
+  arTargets.forEach((other, otherId) => {
+    if (otherId === fsOpenTargetId) return; // already handled above
+    if (!other.visible && !other.inner.classList.contains('visible')) return;
+    other.visible = false;
+    clearTimeout(other._lostTeardownTimer);
+    other.corners.classList.remove('tracking', 'lock-anim');
+    other.inner.classList.remove('visible', 'tracking', 'losing');
+    other.inner.style.opacity = '';
+    other.video.pause();
+    other.video.muted = true;
+  });
+  refreshStatusPill();
   // Clear poster so next open shows fresh poster for whatever target opens next
   fsVideo.poster = '';
   fsOpenTargetId=null;
