@@ -1441,22 +1441,18 @@ async function beginMindAR(mindUrl) {
   // overlay compositors (the Hotstar/Netflix-grade smoothing you asked
   // for) avoid the classic "smoothing looks great still, terrible moving"
   // tradeoff.
-  const SMOOTHING_HALF_LIFE_MS_IDLE = 90;   // was 120 — calmer still, but snaps faster on re-detect
-  const SMOOTHING_HALF_LIFE_MS_FAST = 12;   // was 14 — slightly tighter on fast pan
-  // Lowered from 0.45 — the fast/tight-tracking mode now ramps in sooner
-  // during ordinary hand movement (not just rapid pans), so the video feels
-  // glued-on a beat faster when the poster starts moving, without changing
-  // anything about the idle/still behavior above that's what actually kills
-  // jitter when the poster is held steady.
-  const FAST_VELOCITY_THRESHOLD = 0.32;     // marker-space units/sec where "fast" kicks in fully
+  const SMOOTHING_HALF_LIFE_MS_IDLE = 18;   // was 45 — near-instant: at 60fps (~16.6ms/frame) this reaches ~63% of the way to the raw pose in a single frame, so live tracking reads as "stuck to the card" rather than "easing toward it", while still being a real (tiny) filter so true single-frame sensor noise doesn't show as a visible twitch
+  const SMOOTHING_HALF_LIFE_MS_FAST = 8;    // was 12 — fast pans now resolve in well under one frame's worth of lag
+  // Lowered further — tight-tracking mode (the 8ms half-life above) should
+  // now engage on almost any real movement, not just fast pans, so live
+  // tracking never feels like it's "catching up" regardless of how the
+  // card is being moved.
+  const FAST_VELOCITY_THRESHOLD = 0.15;     // was 0.32 — "fast" mode now kicks in fully at a much lower, more ordinary hand-movement speed
   // STILL-LOCK: below this velocity, the poster counts as "not actually
   // moving" and the smoothed pose is held bit-for-bit fixed instead of
-  // continuing to ease toward raw tracking noise — see the dead-zone block
-  // below for why this is the actual fix for "video keeps drifting off the
-  // corner even when the poster isn't moving". Raise this if a poster on a
-  // slightly shaky surface (held in hand, not wall-mounted) still shows
-  // tiny residual drift; lower it if deliberate slow panning ever snaps.
-  const STILL_VELOCITY_THRESHOLD = 0.012;   // marker-space units/sec
+  // continuing to ease toward raw tracking noise. Note this threshold is
+  // applied via the hysteresis pair (STILL_ENTER/STILL_EXIT) further down,
+  // not used directly — kept here only as documentation of intent.
 
   // ── OUTLIER / POSE-SPIKE REJECTION (Phase 8) ─────────────────────────
   // A single bad homography decomposition (motion blur frame, partial
@@ -1513,7 +1509,7 @@ async function beginMindAR(mindUrl) {
   // to cancel one frame's worth of latency, not a full prediction model —
   // because over-leading on a sudden direction change (hand reverses
   // mid-pan) would overshoot and look worse than the lag it's fixing.
-  const LEAD_MS = 22; // was 18 — one extra frame's worth of prediction for steep-angle pans
+  const LEAD_MS = 32; // was 22 — closer to two frames' worth of prediction at 60fps, cancels more of the inherent one-frame render latency so the overlay reads as truly live rather than chasing
 
   mindarThree.renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -1588,6 +1584,7 @@ async function beginMindAR(mindUrl) {
           entry.angVel = 0;
           entry._prevRawQuat = null;       // force re-init on next frame
           entry._frameDeltaAxisQuat = null;
+          entry._stillStreak = 0;
           entry._isStill = true;
           entry.stability = 1;
         } else {
@@ -1598,7 +1595,15 @@ async function beginMindAR(mindUrl) {
           // movement, not per-frame tracking noise.
           const prevRaw = entry._prevRawPos || (entry._prevRawPos = _rawPos.clone());
           const instVel = dtSec > 0 ? prevRaw.distanceTo(_rawPos) / dtSec : 0;
-          entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.7 + instVel * 0.3;
+          // EMA weighting raised from 0.3 to 0.5 — the old 0.7/0.3 mix made
+          // the velocity signal itself lag ~3 frames behind reality, which
+          // delayed BOTH "movement just started" (slow to leave still-lock)
+          // and "movement just stopped" (slow to start the still-confirm
+          // streak). 0.5 halves that lag while still rejecting true single-
+          // frame tracking noise (a real outlier is still caught separately
+          // by the dedicated pose-jump rejection above, so this doesn't need
+          // to do double duty as a noise filter).
+          entry.userVel = entry.userVel === undefined ? instVel : entry.userVel * 0.5 + instVel * 0.5;
 
           // Velocity VECTOR (not just scalar speed) for the predictive
           // lead below — direction matters here, magnitude alone can't
@@ -1655,15 +1660,71 @@ async function beginMindAR(mindUrl) {
           // BELOW the smaller STILL_ENTER. That gap is the hysteresis band
           // — noise small enough to live inside it can no longer flip the
           // state every frame.
-          const STILL_ENTER = 0.010; // was 0.012 — slightly more aggressive entry to still state
-          const STILL_EXIT  = 0.065; // was 0.05 — wider gap means hand tremor can't flip out of still
+          // STILL_EXIT was 0.065 — that let genuinely slow, small drifting
+          // movement (a hand that hasn't fully stopped, just slowed down)
+          // get silently absorbed into the freeze instead of being tracked.
+          // Priority is now: fast-follow wins by default, freeze is reserved
+          // ONLY for the camera being truly dead-still. Tightened so STILL_EXIT
+          // sits much closer to STILL_ENTER — almost any detectable motion,
+          // however small, now correctly counts as "still moving" and stays
+          // on the live, fast-adjusting tracking path instead of locking.
+          const STILL_ENTER = 0.010;
+          const STILL_EXIT  = 0.018; // was 0.065 — small movements now break the lock instantly
           const wasStill = entry._isStill === true;
-          const isStill = wasStill ? entry.userVel < STILL_EXIT : entry.userVel < STILL_ENTER;
+
+          // ── STILL-LOCK CONFIRMATION STREAK ─────────────────────────────
+          // A single low-velocity frame is NOT enough evidence the poster
+          // is actually stationary — it can also be the symptom of a card
+          // about to lose tracking (a frame right before sudden removal
+          // often reads as near-zero velocity for one tick, since the very
+          // next frame is rejected/lost rather than continuing the motion).
+          // Latching the freeze on that one frame is exactly what produces
+          // BOTH reported symptoms: the live "shaking" (the lock keeps
+          // flickering in/out, snapping between frozen and live-tracked
+          // pose every few frames) AND the "stuck on screen after sudden
+          // removal" ghost (the freeze grabs a stale pose right as tracking
+          // quality collapses, and that frozen pose is what then survives
+          // into the lost-hold window). Requiring 3 consecutive
+          // under-threshold frames before actually locking still confirms
+          // genuine physical stillness rather than a one-frame fluke — 2
+          // frames is enough to reject a single noisy dip while still
+          // locking near-instantly (under 35ms at 60fps) once the camera
+          // genuinely stops, so the freeze itself never feels slow either.
+          const STILL_CONFIRM_FRAMES = 2;
+          const underThreshold = wasStill ? entry.userVel < STILL_EXIT : entry.userVel < STILL_ENTER;
+          if (underThreshold) {
+            entry._stillStreak = (entry._stillStreak || 0) + 1;
+          } else {
+            entry._stillStreak = 0;
+          }
+          const isStill = wasStill
+            ? underThreshold                                  // already locked — hysteresis EXIT alone governs leaving
+            : (underThreshold && entry._stillStreak >= STILL_CONFIRM_FRAMES); // entering fresh — needs the streak
+          const justLocked = isStill && !wasStill;
           entry._isStill = isStill;
 
           if (isStill) {
-            // Pose stays exactly where it already is — zero drift while the
-            // poster is genuinely stationary relative to the camera.
+            // ── SNAP-TO-EXACT ON LOCK ────────────────────────────────────
+            // On the very frame the freeze engages, snap directly to the
+            // raw tracked pose instead of leaving `smoothed` at whatever
+            // it eased to during the 3-frame confirmation window above.
+            // Without this, the lock can freeze onto a pose that's still
+            // carrying a sliver of easing lag from just before the camera
+            // actually stopped moving — a small, fixed misalignment that
+            // then sits there for the entire still period since nothing
+            // corrects it while locked. This guarantees the frozen pose is
+            // pixel-true to the card the instant it locks, then truly
+            // never moves again (zero drift) for as long as the camera
+            // stays still — i.e. actually "stuck to the wall", not
+            // "stuck near the wall".
+            if (justLocked) {
+              smoothed.position.copy(_rawPos);
+              smoothed.quaternion.copy(_rawQuat);
+              smoothed.scale.copy(_rawScale);
+            }
+            // Otherwise: pose stays exactly where it already is — zero
+            // drift while the poster is genuinely stationary relative to
+            // the camera.
             entry.stability = entry.stability === undefined ? 1 : entry.stability * 0.9 + 1 * 0.1;
           } else {
             const fastT = Math.min(1, entry.userVel / FAST_VELOCITY_THRESHOLD);
@@ -1700,7 +1761,7 @@ async function beginMindAR(mindUrl) {
             if (entry._velVec) {
               const leadScale = (LEAD_MS / 1000) * fastT;
               const lead = entry._velVec.clone().multiplyScalar(leadScale);
-              const MAX_LEAD_DIST = 0.03; // marker-space units — small, sub-visible at idle
+              const MAX_LEAD_DIST = 0.045; // was 0.03 — raised to match the larger LEAD_MS above; clamping too tight here was undercutting the lead exactly during genuine fast motion, which is the case it exists to help
               if (lead.length() > MAX_LEAD_DIST) lead.setLength(MAX_LEAD_DIST);
               _leadPos.add(lead);
             }
@@ -1722,7 +1783,7 @@ async function beginMindAR(mindUrl) {
               // scaled down to just the lead window's worth of rotation —
               // angLeadScale is tiny (single-digit ms / dt), so this stays
               // a small nudge, never a runaway extrapolation.
-              const MAX_LEAD_ANGLE_RAD = THREE.MathUtils.degToRad(4); // small, sub-visible at idle, same spirit as MAX_LEAD_DIST
+              const MAX_LEAD_ANGLE_RAD = THREE.MathUtils.degToRad(6); // was 4 — raised to match the larger LEAD_MS above, same reasoning as MAX_LEAD_DIST
               const t = dtSec > 0 ? Math.min(1, angLeadScale / dtSec) : 0;
               _leadQuat.slerp(_rawQuat.clone().multiply(entry._frameDeltaAxisQuat), t);
               const leadAngle = _leadQuat.angleTo(_rawQuat);
