@@ -1471,20 +1471,20 @@ async function beginMindAR(mindUrl) {
   // overlay compositors (the Hotstar/Netflix-grade smoothing you asked
   // for) avoid the classic "smoothing looks great still, terrible moving"
   // tradeoff.
-  // ── SPEED TARGET: 0.1–0.2s full settle ──────────────────────────────
-  // Half-life isn't the number a person actually perceives — "fully caught
-  // up" is closer to ~3 half-lives (≈95% of the way there). So a named
-  // settle-time target translates to half-life = target / 3:
-  //   100ms settle → ~33ms half-life (fast end)
-  //   200ms settle → ~67ms half-life (calm end)
-  // Last round pushed FAST down to 9ms (≈27ms settle) chasing "instant" —
-  // that's tight enough to mostly pass raw MindAR tracker noise straight
-  // through with almost no damping left, which is the likely source of any
-  // shake/twitch on a real device. Landing both ends inside 0.1–0.2s instead
-  // keeps it feeling live without giving up the noise rejection that's the
-  // whole point of having a smoothing layer in the first place.
-  const SMOOTHING_HALF_LIFE_MS_IDLE = 67;   // was 90 — ~200ms settle, calm end of the 0.1–0.2s band
-  const SMOOTHING_HALF_LIFE_MS_FAST = 33;   // was 9 — ~100ms settle, fast end of the 0.1–0.2s band, still real damping
+  // ── SPEED: cut hard, both ends ───────────────────────────────────────
+  // The 0.1–0.2s settle-time band from last round was still too slow in
+  // practice. Bigger issue: FAST_VELOCITY_THRESHOLD only kicks the FAST
+  // half-life in during genuinely rapid motion — almost all ordinary
+  // handheld scanning (slow pan, framing, small adjustments) stays under
+  // that threshold the whole time, so IDLE's half-life is what governs how
+  // "live" the tracker feels for most real usage, not FAST. Cutting IDLE
+  // hard is the actual fix for everyday lag; FAST goes down too so fast
+  // pans stay glued. Outlier rejection + hysteresis still-lock + hemisphere-
+  // correct slerp further down are untouched and still doing the real
+  // jitter/noise rejection, so dropping these isn't "remove the filtering" —
+  // it's removing redundant lag stacked on top of filtering that already exists.
+  const SMOOTHING_HALF_LIFE_MS_IDLE = 18;   // was 67 — ~54ms settle, this is the one that actually governs everyday movement feel
+  const SMOOTHING_HALF_LIFE_MS_FAST = 6;    // was 33 — ~18ms settle, sub-frame at any realistic fps, effectively snap-per-frame
   // Lowered further (0.32→0.24) — the fast/tight-tracking mode now ramps in
   // sooner during ordinary hand movement (not just rapid pans), so the video
   // feels glued-on a beat faster when the poster starts moving, without
