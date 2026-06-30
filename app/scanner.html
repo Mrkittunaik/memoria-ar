@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- TEMP DEBUG — remove before production -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -1032,7 +1035,7 @@ async function startScanner() {
   } catch (err) {
     console.error('[Memoria] target prep failed:', err);
     const statusText = document.getElementById('statusText');
-    if (statusText) statusText.textContent = 'Could not load memories — check your connection and try again.';
+    if (statusText) statusText.textContent = `Could not load memories — ${err.message || 'check your connection and try again.'}`;
     return;
   }
   if (!mindUrl) return; // no targets uploaded yet — message already shown by fetchAndCompileTargets
