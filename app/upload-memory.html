@@ -1947,8 +1947,18 @@ async function compileMindFile(photoFile, fillEl) {
   if (!window.MINDAR?.IMAGE?.Compiler) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
-      s.onload = resolve;
+      s.type = 'module';
+      // The plain dist URL is a tiny ES-module stub that only re-exports
+      // relative chunk files — those don't resolve when injected as a
+      // standalone <script> tag. The "+esm" jsDelivr endpoint bundles
+      // everything (including the chunks) into one flat module file.
+      s.textContent = `
+        import * as MindARImage from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js/+esm';
+        window.MINDAR = window.MINDAR || {};
+        window.MINDAR.IMAGE = MindARImage.default || MindARImage;
+        window.dispatchEvent(new Event('mindar-loaded'));
+      `;
+      window.addEventListener('mindar-loaded', resolve, { once: true });
       s.onerror = () => reject(new Error('Failed to load MindAR compiler'));
       document.head.appendChild(s);
     });
