@@ -967,7 +967,13 @@ async function startScanner() {
         // on devices that only support a fixed resolution set.
         width:  { ideal: 1280 },
         height: { ideal: 720 },
-        frameRate: { ideal: 30, max: 60 },
+        // ideal bumped 30→60: this is a soft preference (never throws
+        // OverconstrainedError like `exact` would), and every rear camera
+        // capable of AR-grade tracking already supports 720p60 — so this
+        // is free, and makes the very first frame the user sees (before
+        // MindAR has even started) already feel live instead of waiting
+        // for the tracking layer to kick in to look smooth.
+        frameRate: { ideal: 60, max: 60 },
         // Exposure/white-balance hints for low-light — these are advisory
         // (not all browsers/devices honour them) but cost nothing when ignored.
         // Continuous auto-exposure and auto-white-balance mean the driver keeps
@@ -1366,26 +1372,29 @@ async function beginMindAR(mindUrl) {
     //   but more latency. 0.0002 is gentle enough that jitter on a hand-held
     //   photo is fully invisible, without feeling laggy during a normal pan.
     // filterBeta: speed coefficient. Higher = snappier response to fast motion.
-    //   200 keeps the velocity-adaptive half-life in our JS smoothing layer
-    //   well-aligned with MindAR's own upstream filter — they cooperate rather
-    //   than fighting. Too low (e.g. 0.01) pins the cutoff near minCF always,
-    //   which passes high-frequency noise through and IS the visible shake.
+    //   260 (was 200) — MindAR's own upstream filter now leans further toward
+    //   "trust fast motion, don't smooth it away" before our JS lead/velocity
+    //   layer even sees the sample, so the two layers compound instead of one
+    //   fighting the other's lag. Too low (e.g. 0.01) pins the cutoff near
+    //   minCF always, which passes high-frequency noise through and IS the
+    //   visible shake.
     filterMinCF: 0.0002,
-    filterBeta: 200,
+    filterBeta: 260,
     // ── DETECTION TOLERANCE ─────────────────────────────────────────────
     // missTolerance: frames before a target is considered truly lost.
-    //   Raise from default (5) to 8 — absorbs a wider range of single-frame
-    //   drops (motion blur, partial occlusion, brief finger edge) without
-    //   bouncing in/out of onTargetLost. Our JS hold (LOST_HOLD_MAX_MS) then
-    //   handles anything beyond that gracefully regardless.
-    // warmupTolerance: MindAR's internal warmup rejection count per target —
-    //   this is the number of consecutive good frames required before the
-    //   FIRST onTargetFound fires, i.e. it directly gates "how fast does
-    //   detection feel". Lowered from 5 to 2 (default is 3) so lock-on reads
-    //   as near-instant once the photo is framed; missTolerance below still
-    //   absorbs the occasional bad frame, so this only speeds up the very
-    //   first acquisition without making ongoing tracking flickery.
-    missTolerance: 8,
+    //   Back down to 5 (MindAR's own tested default; was raised to 8 for an
+    //   older JS layer that held the video on screen for up to 130ms after
+    //   loss). That JS-side hold is gone now — the smoothing loop hides the
+    //   instant anchor.visible flips false, with zero added grace — so this
+    //   value alone is the entire "how long until a sudden removal is
+    //   acknowledged" budget. 8 was adding ~50–100ms of pure lag to every
+    //   removal for no benefit anymore; 5 is the documented, battle-tested
+    //   floor rather than a guess.
+    // warmupTolerance: consecutive good frames required before the FIRST
+    //   onTargetFound — gates acquisition speed, not removal/pan speed, so
+    //   left untouched at 2 (default 3) rather than pushed lower, which
+    //   would start risking false-positive locks on noise.
+    missTolerance: 5,
     warmupTolerance: 2,
     uiLoading: 'no', uiScanning: 'no', uiError: 'no',
   });
@@ -1463,13 +1472,13 @@ async function beginMindAR(mindUrl) {
   // for) avoid the classic "smoothing looks great still, terrible moving"
   // tradeoff.
   const SMOOTHING_HALF_LIFE_MS_IDLE = 90;   // was 120 — calmer still, but snaps faster on re-detect
-  const SMOOTHING_HALF_LIFE_MS_FAST = 12;   // was 14 — slightly tighter on fast pan
-  // Lowered from 0.45 — the fast/tight-tracking mode now ramps in sooner
-  // during ordinary hand movement (not just rapid pans), so the video feels
-  // glued-on a beat faster when the poster starts moving, without changing
-  // anything about the idle/still behavior above that's what actually kills
-  // jitter when the poster is held steady.
-  const FAST_VELOCITY_THRESHOLD = 0.32;     // marker-space units/sec where "fast" kicks in fully
+  const SMOOTHING_HALF_LIFE_MS_FAST = 9;    // was 12 — tighter on fast pan: at 60fps this is ~85% snap per frame, ~95% at 30fps, i.e. corners read as glued rather than eased
+  // Lowered further (0.32→0.24) — the fast/tight-tracking mode now ramps in
+  // sooner during ordinary hand movement (not just rapid pans), so the video
+  // feels glued-on a beat faster when the poster starts moving, without
+  // changing anything about the idle/still behavior above that's what
+  // actually kills jitter when the poster is held steady.
+  const FAST_VELOCITY_THRESHOLD = 0.24;     // marker-space units/sec where "fast" kicks in fully
   // STILL-LOCK: below this velocity, the poster counts as "not actually
   // moving" and the smoothed pose is held bit-for-bit fixed instead of
   // continuing to ease toward raw tracking noise. Note this threshold is
@@ -1492,23 +1501,17 @@ async function beginMindAR(mindUrl) {
   const MAX_ROT_JUMP_RAD_PER_SEC = 10;   // was 14 (~800°/s) — tighter: 10 ≈ 573°/s, still above realistic hand speed but catches more noisy homography flips
   const REJECT_GRACE_FRAMES = 3;         // consecutive rejects before we just accept (sensor genuinely changed)
 
-  // ── LOST-TARGET RECOVERY (Phase 9) ───────────────────────────────────
-  // Replaces instant hide with: freeze last good pose → fade FAST → hide.
-  // ── RETUNED FOR "LIVE" BEHAVIOR ──────────────────────────────────────
-  // Previously this held the video floating in place for up to 4 FULL
-  // SECONDS after the poster left frame (fading only down to 15% opacity,
-  // never fully gone, the whole time) — meant for brief occlusion/hand-
-  // wobble, but the visible result on a moving camera is exactly what was
-  // reported: video still playing, glued to thin air, well after the poster
-  // is out of shot or the camera's pointed at a wall. The new values fade
-  // the video out almost immediately (full disappear in well under 150ms
-  // of actually losing tracking) while still surviving true single-frame
-  // blips (a hand flicker, one bad homography frame) via the brief grace
-  // period below — so it reads as "instant live tracking" rather than a
-  // lingering ghost overlay.
-  const LOST_FADE_START_MS = 40;    // near-zero grace — only absorbs a true single dropped frame
-  const LOST_FADE_DURATION_MS = 90; // fast fade to fully gone
-  const LOST_HOLD_MAX_MS = 130;     // hard cutoff — fully hidden well under ~0.13s after loss
+  // ── LOST-TARGET BEHAVIOR ──────────────────────────────────────────────
+  // No JS-side hold, fade, or freeze of any kind — the moment MindAR's own
+  // anchor.visible flips false, the else-branch below hides the wrapper on
+  // that exact same frame. An earlier version of this held the video in
+  // place for up to 4 full seconds (then later, briefly, ~130ms) after a
+  // poster left frame, which on a moving camera read as exactly what it
+  // was: a ghost video glued to thin air. That hold no longer exists at
+  // all — the entire "how fast does sudden removal register" budget now
+  // lives upstream, in missTolerance on the MindARThree constructor above
+  // (currently 5), since that's the only thing left deciding when
+  // anchor.visible actually goes false. Nothing here adds any further delay.
 
   let _lastFrameTime = performance.now();
   let _frameCount = 0, _fpsAccum = 0, _fps = 0, _lastFpsUpdate = performance.now();
@@ -1531,7 +1534,7 @@ async function beginMindAR(mindUrl) {
   // to cancel one frame's worth of latency, not a full prediction model —
   // because over-leading on a sudden direction change (hand reverses
   // mid-pan) would overshoot and look worse than the lag it's fixing.
-  const LEAD_MS = 22; // was 18 — one extra frame's worth of prediction for steep-angle pans
+  const LEAD_MS = 26; // was 22 — a bit more lead so corners stay matched edge-to-edge a beat further into a fast pan, still well inside the MAX_LEAD_DIST/MAX_LEAD_ANGLE_RAD clamps below that stop it overshooting on a sudden reversal
 
   mindarThree.renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -1814,15 +1817,17 @@ async function beginMindAR(mindUrl) {
       } else {
         // ── TARGET NOT VISIBLE THIS FRAME — INSTANT HIDE ──
         // Previously this held the video floating at its last pose for up
-        // to LOST_HOLD_MAX_MS (130ms) with a fading opacity + gyro-corrected
-        // pose — meant to smooth over single-frame blips, but what it
-        // actually produced on a real sudden camera-off-photo move was a
-        // visible empty/frozen black box hanging in place for that window
-        // before it actually vanished. Per explicit instruction: the moment
-        // the scanner doesn't see the poster, NOTHING should be visible —
-        // no box, no frozen frame, no fade — and it should only reappear
-        // the instant a fresh onTargetFound fires. So: hide immediately,
-        // no hold, no fade, no gyro correction.
+        // to ~130ms with a fading opacity + gyro-corrected pose — meant to
+        // smooth over single-frame blips, but what it actually produced on
+        // a real sudden camera-off-photo move was a visible empty/frozen
+        // black box hanging in place for that window before it actually
+        // vanished. Per explicit instruction: the moment the scanner
+        // doesn't see the poster, NOTHING should be visible — no box, no
+        // frozen frame, no fade — and it should only reappear the instant
+        // a fresh onTargetFound fires. So: hide immediately, no hold, no
+        // fade, no gyro correction. The only knob left governing "how fast
+        // does a sudden removal get noticed at all" is missTolerance on
+        // the constructor above — this branch fires the instant that flips.
         entry.cssObject.element.style.visibility = 'hidden';
         smoothed.userData.wasVisible = false;
         entry._lostSince = null;
