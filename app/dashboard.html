@@ -424,8 +424,18 @@ async function checkAndRebuildMerge() {
   }
 
   console.log(`[Dashboard] Rebuilding merged .mind for ${photos.length} targets…`);
-  await rebuildMergedMindInBrowser(photos);
-  console.log('[Dashboard] Merged .mind rebuild complete');
+  try {
+    await rebuildMergedMindInBrowser(photos);
+    console.log('[Dashboard] Merged .mind rebuild complete');
+  } catch (err) {
+    // Release the lock right away instead of blocking every future merge
+    // attempt for BUILD_LOCK_TIMEOUT_MS (3 min) just because one photo in
+    // the batch failed to load. Without this, a single bad photo silently
+    // freezes ALL new uploads out of Final forever, not just that one.
+    console.error('[Dashboard] Merge rebuild failed — releasing lock:', err.message);
+    fetch(`${API}/api/memories/merge-release`, { method: 'POST' }).catch(() => {});
+    throw err;
+  }
 }
 
 // ── Compile the given photos together in-browser and upload the result ──
@@ -447,13 +457,32 @@ async function rebuildMergedMindInBrowser(photos) {
     });
   }
 
-  const imgs = await Promise.all(photos.map(p => new Promise((resolve, reject) => {
+  // Load every photo, but a single broken/CORS-blocked/deleted photo must
+  // not take down the whole merge — that was the bug causing new uploads
+  // to be permanently locked out of Final. Bad ones are dropped and logged;
+  // everything else still gets merged and included.
+  const loadResults = await Promise.allSettled(photos.map(p => new Promise((resolve, reject) => {
     const el = new Image();
     el.crossOrigin = 'anonymous';
     el.onload = () => resolve(el);
     el.onerror = () => reject(new Error(`Failed to load photo ${p.id}`));
     el.src = p.photoUrl;
   })));
+
+  const imgs = [];
+  const okPhotos = [];
+  loadResults.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      imgs.push(r.value);
+      okPhotos.push(photos[i]);
+    } else {
+      console.error(`[Dashboard] Skipping broken photo in merge — ${photos[i].id}:`, r.reason?.message);
+    }
+  });
+
+  if (imgs.length === 0) {
+    throw new Error('All photos failed to load — nothing to merge');
+  }
 
   const compiler = new window.MINDAR.IMAGE.Compiler();
   await compiler.compileImageTargets(imgs, () => {});
@@ -462,7 +491,7 @@ async function rebuildMergedMindInBrowser(photos) {
 
   const fd = new FormData();
   fd.append('mindFile', mergedBlob, 'merged.mind');
-  fd.append('includedIds', JSON.stringify(photos.map(p => p.id)));
+  fd.append('includedIds', JSON.stringify(okPhotos.map(p => p.id)));
 
   let uploadRes;
   try {
