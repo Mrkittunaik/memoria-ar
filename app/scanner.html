@@ -1112,7 +1112,13 @@ function showCameraErrorScreen(err) {
             for this site and try again.`;
   }
 
-  document.getElementById('loading').innerHTML = `
+  const loadingEl = document.getElementById('loading');
+  loadingEl.classList.remove('hidden'); // undo the opacity:0 from initScanner's
+                                         // success path — without this the error
+                                         // card renders but stays fully transparent,
+                                         // producing a solid black screen with no
+                                         // visible message (the actual bug).
+  loadingEl.innerHTML = `
     <div style="text-align:center;padding:40px;max-width:360px">
       <div style="font-size:32px;margin-bottom:16px">📷</div>
       <h3 style="color:#fff;margin-bottom:8px">${title}</h3>
@@ -1377,7 +1383,17 @@ async function fetchAndCompileTargets() {
   if (pendingTargets.length > 0) {
     statusText.textContent = `Including ${pendingTargets.length} new photo${pendingTargets.length > 1 ? 's' : ''}…`;
     try {
-      const combined = await buildCombinedMindWithPending(mergedMindUrl, pendingTargets, data.data.targets);
+      // IMPORTANT: data.data.targets is the FULL ready-memories list, which
+      // already contains every pendingTarget too (pendingTargets is just a
+      // filtered subset of it, not a separate group). Passing it through
+      // unfiltered here used to double-count every pending memory — once
+      // from this list, once again from pendingTargets — so e.g. 3 fresh
+      // uploads became 6 compiled targets, and the in-browser compile ran
+      // over 2x the images it needed to (part of why camera open was slow).
+      // Only pass the targets ALREADY folded into Final; buildCombinedMindWithPending
+      // adds pendingTargets on top of that, giving each memory exactly one entry.
+      const alreadyMergedTargets = data.data.targets.filter(t => t.inMergedFile);
+      const combined = await buildCombinedMindWithPending(mergedMindUrl, pendingTargets, alreadyMergedTargets);
       if (combined) {
         _targets = combined.targets;
         statusText.textContent = 'AR ready';
