@@ -1264,6 +1264,67 @@ function _primeVideoCache(id, target, priority, tier) {
   }
 }
 
+/* ── FRESH-UPLOAD FALLBACK COMPILE ────────────────────────────────────────
+   Only runs when fetchAndCompileTargets() found pendingTargets (memories
+   whose own .mind exists but haven't made it into the merged Final file
+   yet — see the "three-tier merge" comment in dashboard.html). Compiles
+   ALL currently-ready targets (mergedTargets + pendingTargets) together
+   in-browser, right here in the scanner, so newly uploaded cards are
+   scannable immediately instead of waiting on the dashboard-driven merge
+   cycle. Returns { blobUrl, targets } in the same order the compiler was
+   given the images (order MUST match _targets for MindAR's targetIndex to
+   line up), or null if MindAR isn't available for some reason. */
+async function buildCombinedMindWithPending(mergedMindUrl, pendingTargets, mergedTargets) {
+  if (!window.MINDAR?.IMAGE?.Compiler) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.type = 'module';
+      s.textContent = `
+        import * as MindARImage from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js/+esm';
+        window.MINDAR = window.MINDAR || {};
+        window.MINDAR.IMAGE = MindARImage.default || MindARImage;
+        window.dispatchEvent(new Event('mindar-loaded'));
+      `;
+      window.addEventListener('mindar-loaded', resolve, { once: true });
+      s.onerror = () => reject(new Error('Failed to load MindAR compiler'));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Need photoUrl for the compile — mergedTargets from /targets don't
+  // include it (only videoUrl/posterUrl), so fetch that missing piece.
+  const detailRes = await fetch(`${BACKEND_URL}/api/memories`);
+  const detailJson = await detailRes.json();
+  const byId = new Map((detailJson?.data || []).map(m => [String(m._id || m.id), m]));
+
+  const allTargets = [...mergedTargets, ...pendingTargets];
+  const loadResults = await Promise.allSettled(allTargets.map(t => new Promise((resolve, reject) => {
+    const detail = byId.get(String(t.id));
+    const photoUrl = detail?.photoUrl;
+    if (!photoUrl) { reject(new Error(`No photoUrl for ${t.id}`)); return; }
+    const el = new Image();
+    el.crossOrigin = 'anonymous';
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error(`Failed to load photo ${t.id}`));
+    el.src = photoUrl;
+  })));
+
+  const imgs = [];
+  const okTargets = [];
+  loadResults.forEach((r, i) => {
+    if (r.status === 'fulfilled') { imgs.push(r.value); okTargets.push(allTargets[i]); }
+    else console.error('[Memoria] Skipping unloadable target in scanner compile:', allTargets[i].id, r.reason?.message);
+  });
+  if (imgs.length === 0) return null;
+
+  const compiler = new window.MINDAR.IMAGE.Compiler();
+  await compiler.compileImageTargets(imgs, () => {});
+  const buffer = compiler.exportData();
+  const blob = new Blob([buffer], { type: 'application/octet-stream' });
+  const blobUrl = URL.createObjectURL(blob);
+  return { blobUrl, targets: okTargets };
+}
+
 /* ============================================================
    DATA PREP ONLY — no camera involved at all here, so this can run fully in
    parallel with the user just looking at their instant preview. Fetches
@@ -1292,19 +1353,46 @@ async function fetchAndCompileTargets() {
     return null;
   }
 
-  _targets = data.data.targets;
   const mergedMindUrl = data.data.mergedMindUrl;
+  const pendingTargets = data.data.pendingTargets || [];
 
   // ── SINGLE MERGED .mind FETCH ──────────────────────────────────────────────
   // The backend pre-merged all targets into one .mind file at upload time
   // and stored it on Cloudinary CDN. One HTTP request regardless of how many
   // memories exist. No on-device compile, no per-photo download, no CPU work.
-  statusText.textContent = `Loading AR tracking for ${_targets.length} photo${_targets.length > 1 ? 's' : ''}…`;
+  statusText.textContent = `Loading AR tracking for ${data.data.targets.length} photo${data.data.targets.length > 1 ? 's' : ''}…`;
 
   const mindRes = await fetch(mergedMindUrl);
   if (!mindRes.ok) throw new Error(`Failed to fetch merged .mind: ${mindRes.status}`);
   await mindRes.arrayBuffer(); // consume — MindARThree will re-fetch via imageTargetSrc URL
 
+  // ── FRESH-UPLOAD FALLBACK ────────────────────────────────────────────────
+  // Anything uploaded after the last Final rebuild has its own instant
+  // .mind file already (tracking.mindFileUrl) but isn't inside mergedMindUrl
+  // yet — that gap is exactly why "just uploaded, doesn't scan" happens.
+  // If there's anything pending, compile it together with the merged set
+  // right here in the scanner, once, on load — so a brand-new card works
+  // immediately instead of waiting for someone to open the dashboard and
+  // for the ~2 minute merge window to pass.
+  if (pendingTargets.length > 0) {
+    statusText.textContent = `Including ${pendingTargets.length} new photo${pendingTargets.length > 1 ? 's' : ''}…`;
+    try {
+      const combined = await buildCombinedMindWithPending(mergedMindUrl, pendingTargets, data.data.targets);
+      if (combined) {
+        _targets = combined.targets;
+        statusText.textContent = 'AR ready';
+        _targets.forEach((t, idx) => _primeVideoCache(String(t.id), t, idx, 'lazy'));
+        _lastMindUrl = combined.blobUrl;
+        return _lastMindUrl;
+      }
+    } catch (err) {
+      console.error('[Memoria] Failed to include pending (new) targets — falling back to merged-only:', err.message);
+      // fall through to merged-only below so scanning still works for
+      // everything already in Final, even if the new-photo compile failed
+    }
+  }
+
+  _targets = data.data.targets;
   statusText.textContent = 'AR ready';
 
   // ── LAZY VIDEO CACHE ────────────────────────────────────────────────────────────
